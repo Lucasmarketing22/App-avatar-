@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/server';
@@ -42,10 +43,21 @@ export default async function DashboardPage() {
         <Stat label="API keys conectadas" value={keysCount ?? 0} />
       </section>
 
-      <p className="mt-10 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
-        Setup base listo: autenticación, base de datos y cifrado BYOK. Los
-        siguientes módulos a construir son el Prompt Builder, la gestión de
-        avatares y la conexión de API keys.
+      <section className="mt-8 grid gap-4 sm:grid-cols-2">
+        <Link
+          href="/dashboard/api-keys"
+          className="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+        >
+          <p className="font-semibold">Conectar API keys (BYOK) →</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Añade tu key de fal, Higgsfield o Replicate para poder generar.
+          </p>
+        </Link>
+      </section>
+
+      <p className="mt-8 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
+        Siguientes módulos: Prompt Builder (sobre <code>prompt_blocks</code>) y
+        gestión de avatares con Supabase Storage.
       </p>
     </main>
   );
