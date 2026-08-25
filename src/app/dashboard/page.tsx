@@ -54,6 +54,15 @@ export default async function DashboardPage() {
           </p>
         </Link>
         <Link
+          href="/dashboard/avatars"
+          className="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
+        >
+          <p className="font-semibold">Avatares →</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Sube imágenes de referencia de tus avatares.
+          </p>
+        </Link>
+        <Link
           href="/dashboard/api-keys"
           className="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"
         >
@@ -63,10 +72,6 @@ export default async function DashboardPage() {
           </p>
         </Link>
       </section>
-
-      <p className="mt-8 rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-400">
-        Siguiente módulo: gestión de avatares con Supabase Storage.
-      </p>
     </main>
   );
 }

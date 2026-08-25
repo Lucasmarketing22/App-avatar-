@@ -59,8 +59,12 @@ supabase db push          # aplica supabase/migrations
 supabase db reset         # (local) aplica migraciones + seed.sql
 ```
 
-O pega el contenido de `supabase/migrations/0001_init.sql` y luego
-`supabase/seed.sql` en el **SQL Editor** del dashboard.
+O pega en el **SQL Editor** del dashboard, en orden:
+`supabase/migrations/0001_init.sql`, `supabase/migrations/0002_storage_avatars.sql`
+y luego `supabase/seed.sql`.
+
+> `0002_storage_avatars.sql` crea el bucket privado `avatar-references` (imágenes
+> de referencia de avatares) con policies por usuario.
 
 ### 4. Ejecutar en desarrollo
 
@@ -112,7 +116,16 @@ catálogo global de `prompt_blocks` es de solo lectura para todos).
 - La clave en claro **nunca** se envía al cliente ni se registra en logs.
 - El descifrado ocurre solo en el servidor, justo antes de llamar al proveedor.
 
+## Módulos construidos
+
+- **Prompt Builder** (`/dashboard/prompt-builder`): selección de bloques por
+  categoría, prompt maestro en vivo, bloques custom y presets.
+- **API keys BYOK** (`/dashboard/api-keys`): conectar/validar/eliminar keys
+  cifradas por proveedor.
+- **Avatares** (`/dashboard/avatars`): subida de imagen de referencia a un
+  bucket privado de Storage y galería con URLs firmadas.
+
 ## Próximos módulos
 
-Prompt Builder (UI sobre `prompt_blocks`/`saved_presets`), gestión de avatares
-con Supabase Storage, y conexión/validación de API keys por proveedor.
+Generación de imágenes: combinar *avatar + prompt + API key BYOK* llamando al
+proveedor externo desde el servidor.
