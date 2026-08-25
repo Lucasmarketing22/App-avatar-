@@ -126,10 +126,13 @@ catálogo global de `prompt_blocks` es de solo lectura para todos).
 - **Avatares** (`/dashboard/avatars`): subida de imagen de referencia a un
   bucket privado de Storage y galería con URLs firmadas.
 - **Generación** (`/dashboard/generate`): combina *avatar + prompt + API key
-  BYOK*. Llama al proveedor desde el servidor (Replicate implementado con
-  Flux), guarda el resultado en un bucket privado y lo muestra en el historial.
+  BYOK*. Llama al proveedor desde el servidor, guarda el resultado en un bucket
+  privado y lo muestra en el historial.
+  - **Sin avatar** → texto→imagen (Flux Schnell).
+  - **Con avatar** → usa su imagen de referencia (URL firmada temporal) para
+    mantener la **identidad** con Flux Kontext.
 
 ## Próximos módulos
 
-Adaptadores de generación para fal y Higgsfield, y conditioning con la imagen
-de referencia del avatar (identidad consistente).
+Adaptadores de generación para fal y Higgsfield, y generación asíncrona
+(background + polling) para modelos lentos.

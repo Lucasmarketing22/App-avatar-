@@ -117,7 +117,8 @@ function GenerateForm({
 
         <div>
           <label className="mb-1 block text-sm font-medium">
-            Avatar <span className="text-slate-400">(opcional)</span>
+            Avatar{' '}
+            <span className="text-slate-400">(opcional · mantiene su identidad)</span>
           </label>
           <select
             name="avatar_id"

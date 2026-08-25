@@ -43,8 +43,9 @@ export default async function GeneratePage() {
         </Link>
         <h1 className="mt-2 text-2xl font-bold">Generar</h1>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-          Elige un avatar y un prompt (o carga un preset) y genera con tu propia
-          API key. Los resultados se guardan en tu historial privado.
+          Elige un avatar (su imagen de referencia mantiene la identidad) y un
+          prompt, o carga un preset, y genera con tu propia API key. Los
+          resultados se guardan en tu historial privado.
         </p>
       </header>
 

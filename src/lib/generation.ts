@@ -14,6 +14,7 @@ import type { ApiKeyProvider, GenerationStatus } from '@/lib/database.types';
  */
 
 const BUCKET = 'generations';
+const AVATAR_BUCKET = 'avatar-references';
 const SIGNED_URL_TTL = 60 * 60; // 1 hora
 
 /** Proveedores con generacion implementada (los demas se ofrecen "proximamente"). */
@@ -23,10 +24,14 @@ export const GENERATION_READY: Record<ApiKeyProvider, boolean> = {
   higgsfield: false,
 };
 
-/** Modelo por defecto por proveedor. */
-const DEFAULT_MODEL: Partial<Record<ApiKeyProvider, string>> = {
-  replicate: 'black-forest-labs/flux-schnell',
-};
+/**
+ * Modelos de Replicate:
+ * - TEXT: texto -> imagen (sin avatar).
+ * - IMAGE: imagen de referencia + prompt -> imagen manteniendo la identidad
+ *   del avatar (Flux Kontext).
+ */
+const REPLICATE_TEXT_MODEL = 'black-forest-labs/flux-schnell';
+const REPLICATE_IMAGE_MODEL = 'black-forest-labs/flux-kontext-pro';
 
 type ProviderResult =
   | { ok: true; imageUrl: string; jobId: string | null; model: string }
@@ -39,8 +44,24 @@ type ProviderResult =
 async function generateWithReplicate(
   apiKey: string,
   prompt: string,
+  referenceImageUrl?: string | null,
 ): Promise<ProviderResult> {
-  const model = DEFAULT_MODEL.replicate!;
+  // Con imagen de referencia usamos Flux Kontext (mantiene la identidad del
+  // avatar); sin ella, texto -> imagen con Flux Schnell.
+  const model = referenceImageUrl ? REPLICATE_IMAGE_MODEL : REPLICATE_TEXT_MODEL;
+  const input = referenceImageUrl
+    ? {
+        prompt,
+        input_image: referenceImageUrl,
+        aspect_ratio: 'match_input_image',
+        output_format: 'png',
+      }
+    : {
+        prompt,
+        num_outputs: 1,
+        aspect_ratio: '1:1',
+        output_format: 'png',
+      };
   try {
     const res = await fetch(
       `https://api.replicate.com/v1/models/${model}/predictions`,
@@ -52,14 +73,7 @@ async function generateWithReplicate(
           Prefer: 'wait',
         },
         cache: 'no-store',
-        body: JSON.stringify({
-          input: {
-            prompt,
-            num_outputs: 1,
-            aspect_ratio: '1:1',
-            output_format: 'png',
-          },
-        }),
+        body: JSON.stringify({ input }),
       },
     );
 
@@ -103,10 +117,11 @@ async function callProvider(
   provider: ApiKeyProvider,
   apiKey: string,
   prompt: string,
+  referenceImageUrl?: string | null,
 ): Promise<ProviderResult> {
   switch (provider) {
     case 'replicate':
-      return generateWithReplicate(apiKey, prompt);
+      return generateWithReplicate(apiKey, prompt, referenceImageUrl);
     default:
       return {
         ok: false,
@@ -154,6 +169,25 @@ export async function runGeneration(params: {
 
   const avatarId = params.avatarId || null;
 
+  // Si hay avatar, generamos una URL firmada temporal de su imagen de
+  // referencia para que el proveedor pueda descargarla (bucket privado).
+  let referenceImageUrl: string | null = null;
+  if (avatarId) {
+    const { data: avatar } = await supabase
+      .from('avatars')
+      .select('reference_image_url')
+      .eq('id', avatarId)
+      .single();
+    if (avatar?.reference_image_url) {
+      const { data: signed } = await supabase.storage
+        .from(AVATAR_BUCKET)
+        .createSignedUrl(avatar.reference_image_url, SIGNED_URL_TTL);
+      referenceImageUrl = signed?.signedUrl ?? null;
+    }
+  }
+
+  const model = referenceImageUrl ? REPLICATE_IMAGE_MODEL : REPLICATE_TEXT_MODEL;
+
   // Registro inicial en estado "processing".
   const { data: inserted, error: insertError } = await supabase
     .from('generations')
@@ -163,7 +197,7 @@ export async function runGeneration(params: {
       provider,
       prompt,
       status: 'processing',
-      model: DEFAULT_MODEL[provider] ?? null,
+      model,
     })
     .select('id')
     .single();
@@ -172,7 +206,7 @@ export async function runGeneration(params: {
     return { status: 'failed', error: insertError?.message ?? 'No se pudo registrar.' };
   }
 
-  const result = await callProvider(provider, apiKey, prompt);
+  const result = await callProvider(provider, apiKey, prompt, referenceImageUrl);
 
   if (!result.ok) {
     await supabase
