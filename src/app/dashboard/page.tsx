@@ -43,7 +43,17 @@ export default async function DashboardPage() {
         <Stat label="API keys conectadas" value={keysCount ?? 0} />
       </section>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2">
+      <Link
+        href="/dashboard/generate"
+        className="mt-8 block rounded-xl bg-brand-600 p-5 text-white transition hover:bg-brand-700"
+      >
+        <p className="text-lg font-semibold">Generar imagen →</p>
+        <p className="mt-1 text-sm text-brand-100">
+          Combina avatar + prompt + tu API key BYOK.
+        </p>
+      </Link>
+
+      <section className="mt-4 grid gap-4 sm:grid-cols-2">
         <Link
           href="/dashboard/prompt-builder"
           className="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-brand-500 dark:border-slate-800 dark:bg-slate-900"

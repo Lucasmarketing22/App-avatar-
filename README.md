@@ -60,11 +60,12 @@ supabase db reset         # (local) aplica migraciones + seed.sql
 ```
 
 O pega en el **SQL Editor** del dashboard, en orden:
-`supabase/migrations/0001_init.sql`, `supabase/migrations/0002_storage_avatars.sql`
+`0001_init.sql` → `0002_storage_avatars.sql` → `0003_generations.sql`
 y luego `supabase/seed.sql`.
 
-> `0002_storage_avatars.sql` crea el bucket privado `avatar-references` (imágenes
-> de referencia de avatares) con policies por usuario.
+> `0002` crea el bucket privado `avatar-references`; `0003` crea la tabla
+> `generations` (historial) y el bucket privado `generations` para los
+> resultados. Ambos con policies por usuario.
 
 ### 4. Ejecutar en desarrollo
 
@@ -124,8 +125,11 @@ catálogo global de `prompt_blocks` es de solo lectura para todos).
   cifradas por proveedor.
 - **Avatares** (`/dashboard/avatars`): subida de imagen de referencia a un
   bucket privado de Storage y galería con URLs firmadas.
+- **Generación** (`/dashboard/generate`): combina *avatar + prompt + API key
+  BYOK*. Llama al proveedor desde el servidor (Replicate implementado con
+  Flux), guarda el resultado en un bucket privado y lo muestra en el historial.
 
 ## Próximos módulos
 
-Generación de imágenes: combinar *avatar + prompt + API key BYOK* llamando al
-proveedor externo desde el servidor.
+Adaptadores de generación para fal y Higgsfield, y conditioning con la imagen
+de referencia del avatar (identidad consistente).

@@ -15,6 +15,8 @@ export type PromptBlockCategory =
 
 export type ApiKeyProvider = 'fal' | 'higgsfield' | 'replicate';
 
+export type GenerationStatus = 'pending' | 'processing' | 'succeeded' | 'failed';
+
 export interface Database {
   public: {
     Tables: {
@@ -132,12 +134,55 @@ export interface Database {
         };
         Relationships: [];
       };
+      generations: {
+        Row: {
+          id: string;
+          user_id: string;
+          avatar_id: string | null;
+          provider: ApiKeyProvider;
+          model: string | null;
+          prompt: string;
+          status: GenerationStatus;
+          output_path: string | null;
+          provider_job_id: string | null;
+          error: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          avatar_id?: string | null;
+          provider: ApiKeyProvider;
+          model?: string | null;
+          prompt: string;
+          status?: GenerationStatus;
+          output_path?: string | null;
+          provider_job_id?: string | null;
+          error?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          avatar_id?: string | null;
+          provider?: ApiKeyProvider;
+          model?: string | null;
+          prompt?: string;
+          status?: GenerationStatus;
+          output_path?: string | null;
+          provider_job_id?: string | null;
+          error?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: {
       prompt_block_category: PromptBlockCategory;
       api_key_provider: ApiKeyProvider;
+      generation_status: GenerationStatus;
     };
     CompositeTypes: Record<string, never>;
   };
