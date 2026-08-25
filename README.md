@@ -75,6 +75,27 @@ npm run dev
 
 Abre <http://localhost:3000>.
 
+## Deploy en Vercel
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FLucasmarketing22%2FApp-avatar-&env=NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,SUPABASE_SERVICE_ROLE_KEY,ENCRYPTION_KEY,NEXT_PUBLIC_SITE_URL&envDescription=Claves%20de%20Supabase%20y%20clave%20de%20cifrado%20BYOK&project-name=app-avatar&repository-name=app-avatar)
+
+Pasos (todo desde el navegador, sin terminal):
+
+1. Pulsa el botón **Deploy** de arriba (o en Vercel: **Add New → Project → Import**
+   este repositorio).
+2. Cuando Vercel pida las **Environment Variables**, completa:
+   - `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Supabase → *Project Settings → API*)
+   - `SUPABASE_SERVICE_ROLE_KEY` (misma pantalla)
+   - `ENCRYPTION_KEY` (32 bytes hex: `openssl rand -hex 32`)
+   - `NEXT_PUBLIC_SITE_URL` → la URL que te dará Vercel (p.ej. `https://app-avatar.vercel.app`)
+3. **Deploy**. Vercel detecta Next.js automáticamente (sin configuración extra).
+4. En **Supabase → Authentication → URL Configuration**, agrega tu dominio de
+   Vercel como *Site URL* y en *Redirect URLs* añade
+   `https://TU-DOMINIO.vercel.app/auth/callback` (para el email de confirmación).
+
+> Recuerda haber aplicado antes las migraciones y el seed en Supabase
+> (ver «Aplicar el esquema»).
+
 ## Estructura
 
 ```
