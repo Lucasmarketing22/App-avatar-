@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
@@ -132,12 +131,11 @@ function Gallery({ avatars }: { avatars: AvatarView[] }) {
         >
           <div className="relative aspect-square bg-slate-100 dark:bg-slate-950">
             {avatar.imageUrl ? (
-              <Image
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
                 src={avatar.imageUrl}
                 alt={avatar.name}
-                fill
-                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                className="object-cover"
+                className="absolute inset-0 h-full w-full object-cover"
               />
             ) : (
               <div className="flex h-full items-center justify-center text-xs text-slate-400">
