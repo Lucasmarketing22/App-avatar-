@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 
@@ -202,12 +201,11 @@ function History({ generations }: { generations: GenerationView[] }) {
             >
               <div className="relative aspect-square bg-slate-100 dark:bg-slate-950">
                 {g.imageUrl ? (
-                  <Image
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
                     src={g.imageUrl}
                     alt={g.prompt}
-                    fill
-                    sizes="(max-width: 640px) 50vw, 33vw"
-                    className="object-cover"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center px-2 text-center text-xs text-slate-400">
