@@ -70,20 +70,14 @@ async function generateWithReplicate(
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          Prefer: 'wait',
+          Prefer: 'wait=55',
         },
         cache: 'no-store',
         body: JSON.stringify({ input }),
       },
     );
 
-    const data = (await res.json()) as {
-      id?: string;
-      status?: string;
-      output?: string | string[];
-      error?: string;
-      detail?: string;
-    };
+    let data = (await res.json()) as ReplicatePrediction;
     const jobId = data.id ?? null;
 
     if (!res.ok) {
@@ -94,13 +88,30 @@ async function generateWithReplicate(
         model,
       };
     }
-    if (data.status === 'failed' || data.error) {
-      return { ok: false, error: data.error || 'La generación falló.', jobId, model };
+
+    // Si la prediccion aun no termino, la consultamos hasta que resuelva.
+    data = await pollUntilDone(apiKey, data);
+
+    if (data.status === 'failed' || data.status === 'canceled' || data.error) {
+      return {
+        ok: false,
+        error: data.error || `La generación terminó en estado "${data.status}".`,
+        jobId,
+        model,
+      };
     }
 
     const imageUrl = Array.isArray(data.output) ? data.output[0] : data.output;
     if (!imageUrl) {
-      return { ok: false, error: 'El proveedor no devolvió imagen.', jobId, model };
+      return {
+        ok: false,
+        error:
+          data.status === 'succeeded'
+            ? 'El proveedor no devolvió imagen.'
+            : 'La generación tardó demasiado. Revisá el saldo/límite de tu cuenta de Replicate y volvé a intentar.',
+        jobId,
+        model,
+      };
     }
     return { ok: true, imageUrl, jobId, model };
   } catch (e) {
@@ -111,6 +122,41 @@ async function generateWithReplicate(
       model,
     };
   }
+}
+
+type ReplicatePrediction = {
+  id?: string;
+  status?: string;
+  output?: string | string[] | null;
+  error?: string;
+  detail?: string;
+  urls?: { get?: string };
+};
+
+const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
+
+/** Consulta el estado de la predicción hasta que termine o se agote el tiempo. */
+async function pollUntilDone(
+  apiKey: string,
+  initial: ReplicatePrediction,
+): Promise<ReplicatePrediction> {
+  let current = initial;
+  const getUrl =
+    current.urls?.get ??
+    (current.id ? `https://api.replicate.com/v1/predictions/${current.id}` : null);
+  if (!getUrl) return current;
+
+  const deadline = Date.now() + 45_000; // margen dentro del límite de la función
+  while (!TERMINAL_STATUSES.has(current.status ?? '') && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const res = await fetch(getUrl, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      cache: 'no-store',
+    });
+    if (!res.ok) break;
+    current = (await res.json()) as ReplicatePrediction;
+  }
+  return current;
 }
 
 async function callProvider(

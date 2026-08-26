@@ -7,6 +7,9 @@ import { listGenerations, GENERATION_READY } from '@/lib/generation';
 import { PROVIDERS } from '@/lib/providers';
 import { GenerateStudio, type ProviderOption } from '@/components/GenerateStudio';
 
+// La generación puede tardar; damos hasta 60s a la función serverless.
+export const maxDuration = 60;
+
 export default async function GeneratePage() {
   const supabase = createClient();
   const {
