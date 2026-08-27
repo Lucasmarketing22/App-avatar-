@@ -324,10 +324,16 @@ export async function listGenerations(limit = 24): Promise<GenerationView[]> {
     data.map(async (row) => {
       let imageUrl: string | null = null;
       if (row.output_path) {
-        const { data: signed } = await supabase.storage
-          .from(BUCKET)
-          .createSignedUrl(row.output_path, SIGNED_URL_TTL);
-        imageUrl = signed?.signedUrl ?? null;
+        // Nunca dejamos que un problema al firmar una URL rompa (o cuelgue)
+        // el render de la página: capturamos el error por fila.
+        try {
+          const { data: signed } = await supabase.storage
+            .from(BUCKET)
+            .createSignedUrl(row.output_path, SIGNED_URL_TTL);
+          imageUrl = signed?.signedUrl ?? null;
+        } catch {
+          imageUrl = null;
+        }
       }
       return {
         id: row.id,
