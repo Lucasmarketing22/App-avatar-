@@ -43,6 +43,13 @@ export default function DashboardError({
           Reintentar
         </button>
       </div>
+
+      {/* Detalle técnico temporal para diagnosticar la causa exacta. */}
+      <pre className="mt-4 max-h-64 w-full overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900 p-3 text-left text-xs text-red-300">
+        {error?.name}: {error?.message}
+        {error?.digest ? `\n\ndigest: ${error.digest}` : ''}
+        {error?.stack ? `\n\n${error.stack.split('\n').slice(0, 8).join('\n')}` : ''}
+      </pre>
     </main>
   );
 }
