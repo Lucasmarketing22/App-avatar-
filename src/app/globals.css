@@ -2,10 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: light dark;
-}
-
 body {
-  @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  margin: 0;
+  background: #ede9e3;
+  color: #19181d;
+  font-family: 'DM Sans', system-ui, sans-serif;
 }

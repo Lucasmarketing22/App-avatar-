@@ -13,8 +13,7 @@ export async function middleware(request: NextRequest) {
   if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
 
   const password = process.env.APP_PASSWORD;
-  // Si todavía no se configuró la contraseña, no bloqueamos (para el primer
-  // arranque); la app avisa por otro lado que falta configurarla.
+  // Si todavía no se configuró la contraseña, no bloqueamos (primer arranque).
   if (!password) return NextResponse.next();
 
   const expected = await sessionToken(password);
