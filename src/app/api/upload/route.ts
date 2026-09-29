@@ -25,8 +25,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Formato no soportado (usá PNG, JPG o WEBP).' }, { status: 400 });
   }
 
+  // Carpeta destino: personaje | vestidos | refs (por defecto).
+  const rawFolder = String(form?.get('folder') ?? 'refs');
+  const folder = ['personaje', 'vestidos', 'refs'].includes(rawFolder) ? rawFolder : 'refs';
+
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const { url, error } = await uploadPublic(`refs/${crypto.randomUUID()}.${ext}`, bytes, file.type);
+  const { url, error } = await uploadPublic(`${folder}/${crypto.randomUUID()}.${ext}`, bytes, file.type);
   if (error || !url) {
     return NextResponse.json({ error: `No se pudo guardar la imagen: ${error ?? 'desconocido'}` }, { status: 500 });
   }
