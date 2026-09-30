@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { componerPrompt } from '@/lib/estudio/prompt';
+import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 
 type Personaje = { nombre: string; refs: string[] };
 type Vestido = { id: string; url: string; nombre: string };
@@ -40,6 +41,9 @@ export default function Estudio() {
   const [vestidoSel, setVestidoSel] = useState<string | null>(null);
   const [creaciones, setCreaciones] = useState<Creacion[]>([]);
 
+  const [sel, setSel] = useState<Selecciones>({});
+  const [extra, setExtra] = useState('');
+
   const [aspect, setAspect] = useState('3:4');
   const [phase, setPhase] = useState<Phase>('idle');
   const [statusMsg, setStatusMsg] = useState('');
@@ -75,7 +79,11 @@ export default function Estudio() {
 
   const busy = phase === 'creating' || phase === 'polling';
   const vestidoActual = vestidos.find((v) => v.id === vestidoSel) ?? null;
-  const puedeGenerar = personaje.refs.length > 0 && !!vestidoActual && !busy;
+  const puedeGenerar = personaje.refs.length > 0 && !busy;
+
+  function elegirPieza(catKey: string, id: string) {
+    setSel((s) => ({ ...s, [catKey]: s[catKey] === id ? undefined : id }));
+  }
 
   async function guardarPersonaje(next: Personaje) {
     setPersonaje(next);
@@ -145,14 +153,14 @@ export default function Estudio() {
   }
 
   async function generar() {
-    if (!puedeGenerar || !vestidoActual) return;
+    if (!puedeGenerar) return;
     setError('');
     setResultUrl(null);
     setPhase('creating');
     setStatusMsg('Enviando el pedido a la IA…');
 
-    const prompt = componerPrompt({ conVestido: true, nombre: personaje.nombre });
-    const imageUrls = [...personaje.refs, vestidoActual.url];
+    const prompt = componerPrompt({ conVestido: !!vestidoActual, selecciones: sel, extra });
+    const imageUrls = vestidoActual ? [...personaje.refs, vestidoActual.url] : [...personaje.refs];
 
     try {
       const res = await fetch('/api/generate', {
@@ -328,6 +336,59 @@ export default function Estudio() {
               ) : null}
             </section>
 
+            {/* PIEZAS */}
+            <section style={panel}>
+              <div style={rowTitle}>
+                <h2 style={h2}>Armá tu foto</h2>
+                <span style={{ color: C.muted, fontSize: 13 }}>Elegí las piezas que quieras (todo opcional). La app arma la instrucción sola.</span>
+              </div>
+
+              <div style={{ display: 'grid', gap: 14 }}>
+                {CATEGORIAS.map((cat) => (
+                  <div key={cat.key}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+                      {cat.emoji} {cat.titulo}
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {cat.opciones.map((op) => {
+                        const activo = sel[cat.key] === op.id;
+                        return (
+                          <button
+                            key={op.id}
+                            type="button"
+                            onClick={() => elegirPieza(cat.key, op.id)}
+                            style={{
+                              padding: '8px 14px',
+                              borderRadius: 999,
+                              fontSize: 13,
+                              fontWeight: 600,
+                              fontFamily: 'inherit',
+                              cursor: 'pointer',
+                              border: activo ? `1.5px solid ${C.rose}` : `1px solid ${C.line}`,
+                              background: activo ? C.roseSoft : '#fff',
+                              color: activo ? '#a01458' : C.ink,
+                            }}
+                          >
+                            {op.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                <label style={{ fontSize: 13, fontWeight: 700 }}>
+                  ✍️ Detalle extra (opcional)
+                  <textarea
+                    value={extra}
+                    onChange={(e) => setExtra(e.target.value)}
+                    placeholder="Ej: con un café en la mano, aros dorados, sonriendo…"
+                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', height: 64, marginTop: 6, borderRadius: 10, border: `1px solid ${C.line}`, padding: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', background: '#fff' }}
+                  />
+                </label>
+              </div>
+            </section>
+
             {/* GENERAR */}
             <section style={panel}>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -345,7 +406,7 @@ export default function Estudio() {
                 {!busy && personaje.refs.length === 0 ? (
                   <span style={{ color: C.muted, fontSize: 13 }}>Primero subí la cara de tu personaje.</span>
                 ) : !busy && !vestidoActual ? (
-                  <span style={{ color: C.muted, fontSize: 13 }}>Elegí un vestido de la galería.</span>
+                  <span style={{ color: C.muted, fontSize: 13 }}>Tip: elegí un vestido para vestirla (o generá con las piezas nomás).</span>
                 ) : null}
               </div>
 
