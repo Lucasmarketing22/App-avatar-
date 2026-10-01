@@ -25,18 +25,24 @@ export async function GET(request: Request) {
 
   // Éxito: copiamos la imagen a nuestro almacenamiento (las de Kie vencen ~14
   // días). Si algo falla al guardar, igual mostramos la de Kie.
+  // Detectamos si el resultado es video (mp4) o imagen, por la URL o el
+  // content-type, y lo guardamos en la carpeta correcta.
+  const esVideoUrl = /\.(mp4|webm|mov)(\?|$)/i.test(task.imageUrl);
   try {
-    const imgRes = await fetch(task.imageUrl, { cache: 'no-store' });
-    if (!imgRes.ok) throw new Error(`HTTP ${imgRes.status}`);
-    const bytes = new Uint8Array(await imgRes.arrayBuffer());
-    const ct = imgRes.headers.get('content-type') ?? 'image/png';
-    const ext = ct.includes('webp') ? 'webp' : ct.includes('jpeg') || ct.includes('jpg') ? 'jpg' : 'png';
-    const { url, error } = await uploadPublic(`results/${taskId}.${ext}`, bytes, ct);
+    const r = await fetch(task.imageUrl, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    const ct = r.headers.get('content-type') ?? (esVideoUrl ? 'video/mp4' : 'image/png');
+    const esVideo = esVideoUrl || ct.includes('video');
+    const kind = esVideo ? 'video' : 'image';
+    const folder = esVideo ? 'videos' : 'results';
+    const ext = esVideo ? 'mp4' : ct.includes('webp') ? 'webp' : ct.includes('jpeg') || ct.includes('jpg') ? 'jpg' : 'png';
+    const { url, error } = await uploadPublic(`${folder}/${taskId}.${ext}`, bytes, ct);
     if (error || !url) {
-      return NextResponse.json({ state: 'success', url: task.imageUrl, credits: task.credits, stored: false });
+      return NextResponse.json({ state: 'success', url: task.imageUrl, kind, credits: task.credits, stored: false });
     }
-    return NextResponse.json({ state: 'success', url, credits: task.credits, stored: true });
+    return NextResponse.json({ state: 'success', url, kind, credits: task.credits, stored: true });
   } catch {
-    return NextResponse.json({ state: 'success', url: task.imageUrl, credits: task.credits, stored: false });
+    return NextResponse.json({ state: 'success', url: task.imageUrl, kind: esVideoUrl ? 'video' : 'image', credits: task.credits, stored: false });
   }
 }
