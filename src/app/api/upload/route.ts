@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 
 import { uploadPublic } from '@/lib/storage';
+import { GALERIA_KEYS } from '@/lib/estudio/galerias';
 
 export const runtime = 'nodejs';
+
+const CARPETAS = ['personaje', 'vestidos', 'refs', ...GALERIA_KEYS];
 
 const TYPES: Record<string, string> = {
   'image/png': 'png',
@@ -25,9 +28,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Formato no soportado (usá PNG, JPG o WEBP).' }, { status: 400 });
   }
 
-  // Carpeta destino: personaje | vestidos | refs (por defecto).
+  // Carpeta destino permitida.
   const rawFolder = String(form?.get('folder') ?? 'refs');
-  const folder = ['personaje', 'vestidos', 'refs'].includes(rawFolder) ? rawFolder : 'refs';
+  const folder = CARPETAS.includes(rawFolder) ? rawFolder : 'refs';
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const { url, error } = await uploadPublic(`${folder}/${crypto.randomUUID()}.${ext}`, bytes, file.type);
