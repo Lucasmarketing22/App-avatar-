@@ -56,8 +56,12 @@ export default function Estudio() {
 
   const [abierto, setAbierto] = useState<string | null>(null);
 
+  const [mejorando, setMejorando] = useState<string | null>(null); // id de la creación en proceso
+  const [upMsg, setUpMsg] = useState('');
+
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); if (upTimer.current) clearTimeout(upTimer.current); }, []);
 
   useEffect(() => {
     (async () => {
@@ -215,6 +219,34 @@ export default function Estudio() {
     }, 3000);
   }
 
+  async function mejorar(c: Creacion) {
+    if (mejorando) return;
+    setError(''); setMejorando(c.id); setUpMsg('Mejorando calidad… (puede tardar ~1 min)');
+    try {
+      const res = await fetch('/api/upscale', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: c.url, factor: '2' }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.taskId) { setError(data.error ?? 'No se pudo mejorar.'); setMejorando(null); setUpMsg(''); return; }
+      pollUpscale(data.taskId, 0);
+    } catch { setError('No se pudo conectar.'); setMejorando(null); setUpMsg(''); }
+  }
+
+  function pollUpscale(taskId: string, tries: number) {
+    if (tries > 40) { setError('La mejora tardó demasiado. Probá de nuevo.'); setMejorando(null); setUpMsg(''); return; }
+    upTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
+        const data = await res.json().catch(() => ({}));
+        if (data.state === 'success') {
+          if (data.url) setCreaciones((prev) => [{ id: data.url as string, url: data.url as string, ts: Date.now() }, ...prev.filter((x) => x.url !== data.url)]);
+          setMejorando(null); setUpMsg('');
+          return;
+        }
+        if (data.state === 'fail' || (!res.ok && data.error)) { setError(data.error ?? 'La mejora falló.'); setMejorando(null); setUpMsg(''); return; }
+        pollUpscale(taskId, tries + 1);
+      } catch { pollUpscale(taskId, tries + 1); }
+    }, 3000);
+  }
+
   function resumenCategoria(key: string): string {
     const cat = CATEGORIAS.find((c) => c.key === key);
     const op = cat?.opciones.find((o) => o.id === sel[key]);
@@ -295,12 +327,18 @@ export default function Estudio() {
             {creaciones.length > 0 ? (
               <section style={{ ...panel, marginTop: 20 }}>
                 <div style={rowTitle}><h2 style={h2}>Mis creaciones</h2></div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
+                {upMsg ? <p style={{ margin: '0 0 10px', fontSize: 13, color: C.purple }}>{upMsg}</p> : null}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 12 }}>
                   {creaciones.map((c) => (
-                    <a key={c.id} href={c.url} target="_blank" rel="noreferrer" style={{ display: 'block', aspectRatio: '3 / 4', borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.line}` }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={c.url} alt="creación" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    </a>
+                    <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <a href={c.url} target="_blank" rel="noreferrer" style={{ display: 'block', aspectRatio: '3 / 4', borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.line}` }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={c.url} alt="creación" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      </a>
+                      <button type="button" onClick={() => mejorar(c)} disabled={!!mejorando} style={{ border: `1px solid ${C.line}`, background: '#fff', borderRadius: 10, padding: '7px 8px', fontSize: 12, fontWeight: 700, cursor: mejorando ? 'default' : 'pointer', fontFamily: 'inherit', color: mejorando === c.id ? C.purple : C.ink, opacity: mejorando && mejorando !== c.id ? 0.5 : 1 }}>
+                        {mejorando === c.id ? 'Mejorando…' : '🔎 Mejorar calidad'}
+                      </button>
+                    </div>
                   ))}
                 </div>
               </section>
