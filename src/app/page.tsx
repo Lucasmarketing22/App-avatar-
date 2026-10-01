@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { componerPrompt } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
+import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
 type Personaje = { nombre: string; refs: string[] };
 type Vestido = { id: string; url: string; nombre: string };
@@ -44,6 +45,7 @@ export default function Estudio() {
 
   const [sel, setSel] = useState<Selecciones>({});
   const [extra, setExtra] = useState('');
+  const [modelo, setModelo] = useState<ModeloId>('nano');
 
   const [aspect, setAspect] = useState('3:4');
   const [phase, setPhase] = useState<Phase>('idle');
@@ -168,7 +170,7 @@ export default function Estudio() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, imageUrls, aspect }),
+        body: JSON.stringify({ prompt, imageUrls, aspect, modelo }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) {
@@ -199,16 +201,12 @@ export default function Estudio() {
           setResultUrl(data.url);
           setPhase('done');
           setStatusMsg('');
-          try {
-            const r = await fetch('/api/creaciones', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ url: data.url }),
-            });
-            const nueva = (await r.json()) as Creacion;
-            if (r.ok && nueva?.id) setCreaciones((prev) => [nueva, ...prev]);
-          } catch {
-            /* la imagen ya se ve */
+          // Se guarda solo en la carpeta de resultados; la sumamos a la vista.
+          if (data.url) {
+            setCreaciones((prev) => [
+              { id: data.url as string, url: data.url as string, ts: Date.now() },
+              ...prev.filter((c) => c.url !== data.url),
+            ]);
           }
           return;
         }
@@ -284,6 +282,12 @@ export default function Estudio() {
                 titulo="Detalle extra"
                 resumen={extra.trim() ? 'Escrito' : 'Opcional'}
                 onClick={() => setAbierto('extra')}
+              />
+              <SectionCard
+                emoji="🧠"
+                titulo="Modelo (motor)"
+                resumen={MODELOS.find((m) => m.id === modelo)?.label ?? 'Nano Banana'}
+                onClick={() => setAbierto('modelo')}
               />
             </div>
 
@@ -395,6 +399,28 @@ export default function Estudio() {
         <Modal title="Detalle extra" onClose={() => setAbierto(null)}>
           <p style={modalHint}>Escribí cualquier detalle puntual que quieras sumar.</p>
           <textarea value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Ej: con un café en la mano, aros dorados, sonriendo…" style={{ width: '100%', boxSizing: 'border-box', height: 110, borderRadius: 10, border: `1px solid ${C.line}`, padding: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', background: '#fff' }} />
+        </Modal>
+      ) : null}
+
+      {abierto === 'modelo' ? (
+        <Modal title="Modelo (motor de imagen)" onClose={() => setAbierto(null)}>
+          <p style={modalHint}>Elegí qué IA genera la imagen. Si una no te convence, probá otra.</p>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {MODELOS.map((m) => {
+              const activo = m.id === modelo;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setModelo(m.id)}
+                  style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', border: activo ? `2px solid ${C.rose}` : `1px solid ${C.line}`, background: activo ? C.roseSoft : '#fff', color: C.ink }}
+                >
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{m.label}{activo ? ' ✓' : ''}</div>
+                  <div style={{ fontSize: 13, color: C.muted }}>{m.desc}</div>
+                </button>
+              );
+            })}
+          </div>
         </Modal>
       ) : null}
 

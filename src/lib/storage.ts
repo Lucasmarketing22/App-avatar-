@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { del, get, put } from '@vercel/blob';
+import { del, get, list, put } from '@vercel/blob';
 
 /**
  * Almacenamiento en Vercel Blob (vive dentro de Vercel, con URLs públicas).
@@ -32,6 +32,23 @@ export async function uploadPublic(
     return { url };
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'No se pudo guardar la imagen.' };
+  }
+}
+
+/** Lista los objetos cuyo nombre empieza con un prefijo (ej: "results/"). */
+export async function listPublic(
+  prefix: string,
+): Promise<{ url: string; pathname: string; uploadedAt: number }[]> {
+  if (!configured()) return [];
+  try {
+    const { blobs } = await list({ prefix });
+    return blobs.map((b) => ({
+      url: b.url,
+      pathname: b.pathname,
+      uploadedAt: new Date(b.uploadedAt).getTime(),
+    }));
+  } catch {
+    return [];
   }
 }
 
