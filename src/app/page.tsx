@@ -50,14 +50,21 @@ export default function Estudio() {
   const [subiendoGal, setSubiendoGal] = useState<Record<string, boolean>>({});
   const [cargando, setCargando] = useState(true);
 
+  const [videos, setVideos] = useState<Creacion[]>([]);
+  const [galTab, setGalTab] = useState<'fotos' | 'videos'>('fotos');
+
   const [abierto, setAbierto] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<Creacion | null>(null);
   const [mejorando, setMejorando] = useState<string | null>(null);
   const [upMsg, setUpMsg] = useState('');
+  const [motion, setMotion] = useState('');
+  const [haciendoVideo, setHaciendoVideo] = useState<string | null>(null);
+  const [vidMsg, setVidMsg] = useState('');
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); if (upTimer.current) clearTimeout(upTimer.current); }, []);
+  const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); if (upTimer.current) clearTimeout(upTimer.current); if (vidTimer.current) clearTimeout(vidTimer.current); }, []);
 
   useEffect(() => {
     (async () => {
@@ -70,6 +77,7 @@ export default function Estudio() {
         if (p && Array.isArray(p.refs)) setPersonaje({ nombre: p.nombre ?? '', refs: p.refs });
         if (v && Array.isArray(v.items)) setVestidos(v.items);
         if (c && Array.isArray(c.items)) setCreaciones(c.items);
+        try { const vd = await fetch('/api/videos').then((r) => r.json()); if (Array.isArray(vd.items)) setVideos(vd.items); } catch { /* */ }
         const gals: Record<string, Item[]> = {};
         await Promise.all(GALERIAS.map(async (g) => {
           try { const d = await fetch(`/api/galeria?tipo=${g.key}`).then((r) => r.json()); gals[g.key] = Array.isArray(d.items) ? d.items : []; }
@@ -210,6 +218,33 @@ export default function Estudio() {
     }, 3000);
   }
 
+  async function crearVideo(c: Creacion) {
+    if (haciendoVideo) return;
+    setError(''); setHaciendoVideo(c.id); setVidMsg('Creando el video… (Veo tarda 1 a 4 minutos, no cierres)');
+    try {
+      const res = await fetch('/api/video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrls: [c.url], prompt: motion.trim() || undefined, aspect: '9:16' }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.taskId) { setError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
+      pollVideo(data.taskId, 0);
+    } catch { setError('No se pudo conectar.'); setHaciendoVideo(null); setVidMsg(''); }
+  }
+  function pollVideo(taskId: string, tries: number) {
+    if (tries > 90) { setError('El video tardó demasiado. Probá de nuevo.'); setHaciendoVideo(null); setVidMsg(''); return; }
+    vidTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
+        const data = await res.json().catch(() => ({}));
+        if (data.state === 'success') {
+          if (data.url) setVideos((prev) => [{ id: data.url as string, url: data.url as string, ts: Date.now() }, ...prev.filter((x) => x.url !== data.url)]);
+          setHaciendoVideo(null); setVidMsg(''); setVista('galeria'); setGalTab('videos');
+          return;
+        }
+        if (data.state === 'fail' || (!res.ok && data.error)) { setError(data.error ?? 'El video falló.'); setHaciendoVideo(null); setVidMsg(''); return; }
+        pollVideo(taskId, tries + 1);
+      } catch { pollVideo(taskId, tries + 1); }
+    }, 3000);
+  }
+
   function resumenCategoria(key: string): string {
     const cat = CATEGORIAS.find((c) => c.key === key);
     const op = cat?.opciones.find((o) => o.id === sel[key]);
@@ -296,21 +331,40 @@ export default function Estudio() {
         ) : (
           /* ----- GALERÍA ----- */
           <>
-            <h1 className="h1" style={{ marginBottom: 4 }}>Mis creaciones</h1>
-            <p className="sub" style={{ marginTop: 0, marginBottom: 14 }}>{creaciones.length} en total. Tocá una para verla en grande.</p>
+            <h1 className="h1" style={{ marginBottom: 10 }}>Mis creaciones</h1>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <button className={`opt ${galTab === 'fotos' ? 'on' : ''}`} onClick={() => setGalTab('fotos')}>🖼️ Fotos ({creaciones.length})</button>
+              <button className={`opt ${galTab === 'videos' ? 'on' : ''}`} onClick={() => setGalTab('videos')}>🎬 Videos ({videos.length})</button>
+            </div>
             {upMsg ? <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--violeta)' }}>{upMsg}</p> : null}
+            {vidMsg ? <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
             {error ? <p className="errbox" style={{ marginBottom: 12 }}>{error}</p> : null}
-            {creaciones.length === 0 ? (
-              <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no generaste nada. Andá a “Crear”.</p></div>
+
+            {galTab === 'fotos' ? (
+              creaciones.length === 0 ? (
+                <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no generaste fotos. Andá a “Crear”.</p></div>
+              ) : (
+                <div className="grid-cards">
+                  {creaciones.map((c) => (
+                    <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={c.url} alt="creación" />
+                    </div>
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="grid-cards">
-                {creaciones.map((c) => (
-                  <div key={c.id} className="tile" onClick={() => setLightbox(c)}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={c.url} alt="creación" />
-                  </div>
-                ))}
-              </div>
+              videos.length === 0 ? (
+                <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no hay videos. Abrí una foto y tocá “🎬 Crear video”.</p></div>
+              ) : (
+                <div className="grid-cards">
+                  {videos.map((v) => (
+                    <div key={v.id} className="tile" style={{ cursor: 'default' }}>
+                      <video src={v.url} controls playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    </div>
+                  ))}
+                </div>
+              )
             )}
           </>
         )}
@@ -415,9 +469,16 @@ export default function Estudio() {
             </div>
             <div className="lb-row">
               <a className="btn-ghost" href={lightbox.url} target="_blank" rel="noreferrer">⬇ Descargar</a>
-              <button className="btn-grad" disabled={!!mejorando} onClick={() => { const c = lightbox; setLightbox(null); setVista('galeria'); if (c) mejorar(c); }}>
-                {mejorando ? 'Mejorando…' : '🔎 Mejorar calidad'}
+              <button className="btn-ghost" disabled={!!mejorando} onClick={() => { const c = lightbox; setLightbox(null); setVista('galeria'); setGalTab('fotos'); if (c) mejorar(c); }}>
+                {mejorando ? 'Mejorando…' : '🔎 Mejorar'}
               </button>
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <input className="input" value={motion} onChange={(e) => setMotion(e.target.value)} placeholder="Movimiento (opcional): ej. camina y sonríe" style={{ width: '100%', boxSizing: 'border-box' }} />
+              <button className="btn-grad" disabled={!!haciendoVideo} style={{ width: '100%', marginTop: 8 }} onClick={() => { const c = lightbox; setLightbox(null); if (c) crearVideo(c); }}>
+                {haciendoVideo ? 'Creando video…' : '🎬 Crear video'}
+              </button>
+              <p className="sub" style={{ margin: '8px 0 0', fontSize: 12 }}>El video (Veo 3.1) tarda 1–4 min y gasta más crédito que una foto.</p>
             </div>
           </div>
         </div>
