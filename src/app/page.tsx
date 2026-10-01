@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import { componerPrompt } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
+import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
 type Personaje = { nombre: string; refs: string[] };
-type Vestido = { id: string; url: string; nombre: string };
+type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number };
 
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
@@ -15,19 +16,12 @@ type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
 const ASPECTS = ['3:4', '1:1', '4:5', '9:16', '16:9', '4:3'];
 const BRIC = "'Bricolage Grotesque', sans-serif";
 
-/* Paleta */
 const C = {
-  bg: '#faf8f3',
-  ink: '#211f26',
-  muted: '#6b6772',
-  panel: '#fbfaf7',
-  line: '#e7e2d8',
-  purple: '#4f35e8',
-  rose: '#e5397f',
-  roseSoft: '#fbe6ef',
+  bg: '#faf8f3', ink: '#211f26', muted: '#6b6772', panel: '#fbfaf7',
+  line: '#e7e2d8', purple: '#4f35e8', rose: '#e5397f', roseSoft: '#fbe6ef',
 };
 
-async function subir(file: File, folder: 'personaje' | 'vestidos'): Promise<string> {
+async function subir(file: File, folder: string): Promise<string> {
   const form = new FormData();
   form.append('file', file);
   form.append('folder', folder);
@@ -39,8 +33,10 @@ async function subir(file: File, folder: 'personaje' | 'vestidos'): Promise<stri
 
 export default function Estudio() {
   const [personaje, setPersonaje] = useState<Personaje>({ nombre: '', refs: [] });
-  const [vestidos, setVestidos] = useState<Vestido[]>([]);
+  const [vestidos, setVestidos] = useState<Item[]>([]);
   const [vestidoSel, setVestidoSel] = useState<string | null>(null);
+  const [galerias, setGalerias] = useState<Record<string, Item[]>>({});
+  const [galSel, setGalSel] = useState<Record<string, string | null>>({});
   const [creaciones, setCreaciones] = useState<Creacion[]>([]);
 
   const [sel, setSel] = useState<Selecciones>({});
@@ -55,9 +51,9 @@ export default function Estudio() {
 
   const [subiendoCara, setSubiendoCara] = useState(false);
   const [subiendoVestido, setSubiendoVestido] = useState(false);
+  const [subiendoGal, setSubiendoGal] = useState<Record<string, boolean>>({});
   const [cargando, setCargando] = useState(true);
 
-  // Qué ventana emergente está abierta: 'personaje' | 'vestidos' | <clave de categoría> | null
   const [abierto, setAbierto] = useState<string | null>(null);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,6 +70,18 @@ export default function Estudio() {
         if (p && Array.isArray(p.refs)) setPersonaje({ nombre: p.nombre ?? '', refs: p.refs });
         if (v && Array.isArray(v.items)) setVestidos(v.items);
         if (c && Array.isArray(c.items)) setCreaciones(c.items);
+        const gals: Record<string, Item[]> = {};
+        await Promise.all(
+          GALERIAS.map(async (g) => {
+            try {
+              const d = await fetch(`/api/galeria?tipo=${g.key}`).then((r) => r.json());
+              gals[g.key] = Array.isArray(d.items) ? d.items : [];
+            } catch {
+              gals[g.key] = [];
+            }
+          }),
+        );
+        setGalerias(gals);
       } catch {
         /* arranca vacío */
       } finally {
@@ -93,22 +101,15 @@ export default function Estudio() {
   async function guardarPersonaje(next: Personaje) {
     setPersonaje(next);
     try {
-      await fetch('/api/personaje', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(next),
-      });
-    } catch {
-      /* no bloqueamos la UI */
-    }
+      await fetch('/api/personaje', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+    } catch { /* no bloquea */ }
   }
 
   async function onSubirCara(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
     if (!files.length) return;
-    setError('');
-    setSubiendoCara(true);
+    setError(''); setSubiendoCara(true);
     try {
       const libres = Math.max(0, 3 - personaje.refs.length);
       const nuevos: string[] = [];
@@ -116,9 +117,7 @@ export default function Estudio() {
       await guardarPersonaje({ ...personaje, refs: [...personaje.refs, ...nuevos].slice(0, 3) });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo subir la foto.');
-    } finally {
-      setSubiendoCara(false);
-    }
+    } finally { setSubiendoCara(false); }
   }
 
   async function quitarCara(url: string) {
@@ -129,24 +128,17 @@ export default function Estudio() {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
     if (!files.length) return;
-    setError('');
-    setSubiendoVestido(true);
+    setError(''); setSubiendoVestido(true);
     try {
       for (const f of files) {
         const url = await subir(f, 'vestidos');
-        const res = await fetch('/api/vestidos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url }),
-        });
-        const nuevo = (await res.json()) as Vestido;
+        const res = await fetch('/api/vestidos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+        const nuevo = (await res.json()) as Item;
         if (res.ok && nuevo?.id) setVestidos((prev) => [nuevo, ...prev]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo subir el vestido.');
-    } finally {
-      setSubiendoVestido(false);
-    }
+    } finally { setSubiendoVestido(false); }
   }
 
   async function borrarVestido(id: string) {
@@ -155,79 +147,88 @@ export default function Estudio() {
     await fetch(`/api/vestidos?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => undefined);
   }
 
+  async function onSubirGaleria(tipo: string, e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (!files.length) return;
+    setError(''); setSubiendoGal((s) => ({ ...s, [tipo]: true }));
+    try {
+      for (const f of files) {
+        const url = await subir(f, tipo);
+        const res = await fetch('/api/galeria', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipo, url }) });
+        const nuevo = (await res.json()) as Item;
+        if (res.ok && nuevo?.id) setGalerias((prev) => ({ ...prev, [tipo]: [nuevo, ...(prev[tipo] ?? [])] }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo subir la imagen.');
+    } finally { setSubiendoGal((s) => ({ ...s, [tipo]: false })); }
+  }
+
+  async function borrarItemGal(tipo: string, id: string) {
+    setGalerias((prev) => ({ ...prev, [tipo]: (prev[tipo] ?? []).filter((i) => i.id !== id) }));
+    setGalSel((prev) => (prev[tipo] === id ? { ...prev, [tipo]: null } : prev));
+    await fetch(`/api/galeria?tipo=${tipo}&id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => undefined);
+  }
+
   async function generar() {
     if (!puedeGenerar) return;
-    setAbierto(null);
-    setError('');
-    setResultUrl(null);
-    setPhase('creating');
-    setStatusMsg('Enviando el pedido a la IA…');
+    setAbierto(null); setError(''); setResultUrl(null);
+    setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
 
-    const prompt = componerPrompt({ conVestido: !!vestidoActual, selecciones: sel, extra });
-    const imageUrls = vestidoActual ? [...personaje.refs, vestidoActual.url] : [...personaje.refs];
+    const refs: { url: string; hint: string }[] = [];
+    if (vestidoActual) {
+      refs.push({ url: vestidoActual.url, hint: 'Replace her clothing completely with the outfit shown in the outfit reference image, keeping its shape, color, fabric and details faithful.' });
+    }
+    for (const g of GALERIAS) {
+      const id = galSel[g.key];
+      const item = (galerias[g.key] ?? []).find((i) => i.id === id);
+      if (item) refs.push({ url: item.url, hint: g.hint });
+    }
+    const imageUrls = [...personaje.refs, ...refs.map((r) => r.url)];
+    const prompt = componerPrompt({ hints: refs.map((r) => r.hint), selecciones: sel, extra });
 
     try {
-      const res = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, imageUrls, aspect, modelo }),
-      });
+      const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect, modelo }) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.taskId) {
-        setError(data.error ?? 'No se pudo crear la generación.');
-        setPhase('error');
-        return;
-      }
-      setPhase('polling');
-      setStatusMsg('Generando la imagen… (puede tardar hasta ~1 minuto)');
+      if (!res.ok || !data.taskId) { setError(data.error ?? 'No se pudo crear la generación.'); setPhase('error'); return; }
+      setPhase('polling'); setStatusMsg('Generando la imagen… (puede tardar hasta ~1 minuto)');
       poll(data.taskId, 0);
     } catch {
-      setError('No se pudo conectar. Probá de nuevo.');
-      setPhase('error');
+      setError('No se pudo conectar. Probá de nuevo.'); setPhase('error');
     }
   }
 
   function poll(taskId: string, tries: number) {
-    if (tries > 40) {
-      setError('Se tardó demasiado. Probá de nuevo.');
-      setPhase('error');
-      return;
-    }
+    if (tries > 40) { setError('Se tardó demasiado. Probá de nuevo.'); setPhase('error'); return; }
     timer.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
         const data = await res.json().catch(() => ({}));
         if (data.state === 'success') {
-          setResultUrl(data.url);
-          setPhase('done');
-          setStatusMsg('');
-          // Se guarda solo en la carpeta de resultados; la sumamos a la vista.
-          if (data.url) {
-            setCreaciones((prev) => [
-              { id: data.url as string, url: data.url as string, ts: Date.now() },
-              ...prev.filter((c) => c.url !== data.url),
-            ]);
-          }
+          setResultUrl(data.url); setPhase('done'); setStatusMsg('');
+          if (data.url) setCreaciones((prev) => [{ id: data.url as string, url: data.url as string, ts: Date.now() }, ...prev.filter((c) => c.url !== data.url)]);
           return;
         }
-        if (data.state === 'fail' || (!res.ok && data.error)) {
-          setError(data.error ?? 'La generación falló.');
-          setPhase('error');
-          return;
-        }
+        if (data.state === 'fail' || (!res.ok && data.error)) { setError(data.error ?? 'La generación falló.'); setPhase('error'); return; }
         poll(taskId, tries + 1);
-      } catch {
-        poll(taskId, tries + 1);
-      }
+      } catch { poll(taskId, tries + 1); }
     }, 3000);
   }
 
-  // Resúmenes para las tarjetas
   function resumenCategoria(key: string): string {
     const cat = CATEGORIAS.find((c) => c.key === key);
-    const id = sel[key];
-    const op = cat?.opciones.find((o) => o.id === id);
+    const op = cat?.opciones.find((o) => o.id === sel[key]);
     return op ? op.label : 'Opcional';
+  }
+  function resumenGaleria(key: string): string {
+    const items = galerias[key] ?? [];
+    if (galSel[key] && items.some((i) => i.id === galSel[key])) return 'Elegida ✓';
+    return items.length ? `${items.length} foto${items.length > 1 ? 's' : ''}` : 'Subí fotos';
+  }
+  function thumbGaleria(key: string): string | undefined {
+    const items = galerias[key] ?? [];
+    const selItem = items.find((i) => i.id === galSel[key]);
+    return (selItem ?? items[0])?.url;
   }
 
   return (
@@ -247,51 +248,21 @@ export default function Estudio() {
         ) : (
           <>
             <h2 style={{ ...h2, marginBottom: 6 }}>Armá tu creación</h2>
-            <p style={{ color: C.muted, fontSize: 13, marginTop: 0, marginBottom: 16 }}>
-              Tocá cada sección para abrirla y elegir. Todo es opcional menos el personaje.
-            </p>
+            <p style={{ color: C.muted, fontSize: 13, marginTop: 0, marginBottom: 16 }}>Tocá cada sección para abrirla y elegir. Todo es opcional menos el personaje.</p>
 
-            {/* Tarjetas de secciones */}
             <div style={{ display: 'grid', gap: 10 }}>
-              <SectionCard
-                emoji="📸"
-                titulo="Personaje"
-                resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'}
-                destacado={personaje.refs.length === 0}
-                thumb={personaje.refs[0]}
-                onClick={() => setAbierto('personaje')}
-              />
-              <SectionCard
-                emoji="👗"
-                titulo="Vestido"
-                resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'}
-                thumb={vestidoActual?.url}
-                onClick={() => setAbierto('vestidos')}
-              />
-              {CATEGORIAS.map((cat) => (
-                <SectionCard
-                  key={cat.key}
-                  emoji={cat.emoji}
-                  titulo={cat.titulo}
-                  resumen={resumenCategoria(cat.key)}
-                  onClick={() => setAbierto(cat.key)}
-                />
+              <SectionCard emoji="📸" titulo="Personaje" resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'} destacado={personaje.refs.length === 0} thumb={personaje.refs[0]} onClick={() => setAbierto('personaje')} />
+              <SectionCard emoji="👗" titulo="Vestido" resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido ✓') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
+              {GALERIAS.map((g) => (
+                <SectionCard key={g.key} emoji={g.emoji} titulo={g.titulo} resumen={resumenGaleria(g.key)} thumb={thumbGaleria(g.key)} onClick={() => setAbierto(`gal:${g.key}`)} />
               ))}
-              <SectionCard
-                emoji="✍️"
-                titulo="Detalle extra"
-                resumen={extra.trim() ? 'Escrito' : 'Opcional'}
-                onClick={() => setAbierto('extra')}
-              />
-              <SectionCard
-                emoji="🧠"
-                titulo="Modelo (motor)"
-                resumen={MODELOS.find((m) => m.id === modelo)?.label ?? 'Nano Banana'}
-                onClick={() => setAbierto('modelo')}
-              />
+              {CATEGORIAS.map((cat) => (
+                <SectionCard key={cat.key} emoji={cat.emoji} titulo={cat.titulo} resumen={resumenCategoria(cat.key)} onClick={() => setAbierto(cat.key)} />
+              ))}
+              <SectionCard emoji="✍️" titulo="Detalle extra" resumen={extra.trim() ? 'Escrito' : 'Opcional'} onClick={() => setAbierto('extra')} />
+              <SectionCard emoji="🧠" titulo="Modelo (motor)" resumen={MODELOS.find((m) => m.id === modelo)?.label ?? 'Nano Banana'} onClick={() => setAbierto('modelo')} />
             </div>
 
-            {/* Barra de generar */}
             <div style={{ ...panel, marginTop: 20, position: 'sticky', bottom: 12, boxShadow: '0 6px 24px rgba(0,0,0,0.06)' }}>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <label style={{ fontSize: 13, fontWeight: 700 }}>
@@ -304,12 +275,9 @@ export default function Estudio() {
                   {busy ? 'Generando…' : '✨ Generar imagen'}
                 </button>
               </div>
-              {!busy && personaje.refs.length === 0 ? (
-                <p style={{ margin: '10px 0 0', fontSize: 13, color: C.muted }}>Primero subí la cara de tu personaje (tocá “Personaje”).</p>
-              ) : null}
+              {!busy && personaje.refs.length === 0 ? <p style={{ margin: '10px 0 0', fontSize: 13, color: C.muted }}>Primero subí la cara de tu personaje (tocá “Personaje”).</p> : null}
               {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: C.purple }}>{statusMsg}</p> : null}
               {error ? <p style={{ margin: '10px 0 0', fontSize: 13, color: '#c0322b', background: '#fbeceb', border: '1px solid #f3cfcb', borderRadius: 10, padding: '8px 10px' }}>{error}</p> : null}
-
               {(busy || resultUrl) ? (
                 <div style={{ marginTop: 14 }}>
                   {busy ? <div style={{ color: C.muted, fontSize: 14 }}>Generando…</div> : null}
@@ -324,7 +292,6 @@ export default function Estudio() {
               ) : null}
             </div>
 
-            {/* Mis creaciones */}
             {creaciones.length > 0 ? (
               <section style={{ ...panel, marginTop: 20 }}>
                 <div style={rowTitle}><h2 style={h2}>Mis creaciones</h2></div>
@@ -342,7 +309,7 @@ export default function Estudio() {
         )}
       </div>
 
-      {/* ===== VENTANAS EMERGENTES ===== */}
+      {/* ===== VENTANAS ===== */}
 
       {abierto === 'personaje' ? (
         <Modal title="Tu personaje" onClose={() => setAbierto(null)}>
@@ -373,32 +340,37 @@ export default function Estudio() {
       {abierto === 'vestidos' ? (
         <Modal title="Tus vestidos" onClose={() => setAbierto(null)}>
           <p style={modalHint}>Tocá un vestido para elegirlo. Subí los tuyos con “＋”.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
-            <label style={{ ...uploadTile, aspectRatio: '3 / 4' }}>
-              <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={onSubirVestido} style={{ display: 'none' }} />
-              <span style={{ fontSize: 26, color: C.purple }}>＋</span>
-              <span style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{subiendoVestido ? 'Subiendo…' : 'Subir'}</span>
-            </label>
-            {vestidos.map((v) => {
-              const s = v.id === vestidoSel;
-              return (
-                <div key={v.id} onClick={() => setVestidoSel(s ? null : v.id)} style={{ position: 'relative', aspectRatio: '3 / 4', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', border: s ? `3px solid ${C.rose}` : `1px solid ${C.line}` }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={v.url} alt="vestido" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  {s ? <span style={selBadge}>Elegido</span> : null}
-                  <button type="button" onClick={(ev) => { ev.stopPropagation(); borrarVestido(v.id); }} title="Borrar" style={xBtn}>×</button>
-                </div>
-              );
-            })}
-          </div>
+          <GaleriaGrid
+            items={vestidos}
+            sel={vestidoSel}
+            subiendo={subiendoVestido}
+            onUpload={onSubirVestido}
+            onSelect={(id) => setVestidoSel(vestidoSel === id ? null : id)}
+            onDelete={borrarVestido}
+          />
           {vestidos.length === 0 ? <p style={{ color: C.muted, fontSize: 13, marginTop: 12 }}>Todavía no cargaste vestidos.</p> : null}
         </Modal>
       ) : null}
 
+      {GALERIAS.filter((g) => abierto === `gal:${g.key}`).map((g) => (
+        <Modal key={g.key} title={`${g.emoji} ${g.titulo}`} onClose={() => setAbierto(null)}>
+          <p style={modalHint}>Subí tus fotos de referencia y tocá una para elegirla. Esa imagen se le manda a la IA.</p>
+          <GaleriaGrid
+            items={galerias[g.key] ?? []}
+            sel={galSel[g.key] ?? null}
+            subiendo={!!subiendoGal[g.key]}
+            onUpload={(e) => onSubirGaleria(g.key, e)}
+            onSelect={(id) => setGalSel((prev) => ({ ...prev, [g.key]: prev[g.key] === id ? null : id }))}
+            onDelete={(id) => borrarItemGal(g.key, id)}
+          />
+          {(galerias[g.key] ?? []).length === 0 ? <p style={{ color: C.muted, fontSize: 13, marginTop: 12 }}>Todavía no cargaste fotos acá.</p> : null}
+        </Modal>
+      ))}
+
       {abierto === 'extra' ? (
         <Modal title="Detalle extra" onClose={() => setAbierto(null)}>
           <p style={modalHint}>Escribí cualquier detalle puntual que quieras sumar.</p>
-          <textarea value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Ej: con un café en la mano, aros dorados, sonriendo…" style={{ width: '100%', boxSizing: 'border-box', height: 110, borderRadius: 10, border: `1px solid ${C.line}`, padding: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', background: '#fff' }} />
+          <textarea value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="Ej: con un café en la mano, aros dorados…" style={{ width: '100%', boxSizing: 'border-box', height: 110, borderRadius: 10, border: `1px solid ${C.line}`, padding: 10, fontSize: 14, fontFamily: 'inherit', resize: 'vertical', background: '#fff' }} />
         </Modal>
       ) : null}
 
@@ -409,12 +381,7 @@ export default function Estudio() {
             {MODELOS.map((m) => {
               const activo = m.id === modelo;
               return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setModelo(m.id)}
-                  style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', border: activo ? `2px solid ${C.rose}` : `1px solid ${C.line}`, background: activo ? C.roseSoft : '#fff', color: C.ink }}
-                >
+                <button key={m.id} type="button" onClick={() => setModelo(m.id)} style={{ textAlign: 'left', padding: '12px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', border: activo ? `2px solid ${C.rose}` : `1px solid ${C.line}`, background: activo ? C.roseSoft : '#fff', color: C.ink }}>
                   <div style={{ fontSize: 15, fontWeight: 700 }}>{m.label}{activo ? ' ✓' : ''}</div>
                   <div style={{ fontSize: 13, color: C.muted }}>{m.desc}</div>
                 </button>
@@ -445,18 +412,38 @@ export default function Estudio() {
 
 /* ---------- Componentes ---------- */
 
+function GaleriaGrid(props: {
+  items: Item[]; sel: string | null; subiendo: boolean;
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onSelect: (id: string) => void; onDelete: (id: string) => void;
+}) {
+  const { items, sel, subiendo, onUpload, onSelect, onDelete } = props;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 10 }}>
+      <label style={{ ...uploadTile, aspectRatio: '3 / 4' }}>
+        <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={onUpload} style={{ display: 'none' }} />
+        <span style={{ fontSize: 26, color: C.purple }}>＋</span>
+        <span style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{subiendo ? 'Subiendo…' : 'Subir'}</span>
+      </label>
+      {items.map((it) => {
+        const s = it.id === sel;
+        return (
+          <div key={it.id} onClick={() => onSelect(it.id)} style={{ position: 'relative', aspectRatio: '3 / 4', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', border: s ? `3px solid ${C.rose}` : `1px solid ${C.line}` }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={it.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            {s ? <span style={selBadge}>Elegida</span> : null}
+            <button type="button" onClick={(ev) => { ev.stopPropagation(); onDelete(it.id); }} title="Borrar" style={xBtn}>×</button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SectionCard(props: { emoji: string; titulo: string; resumen: string; thumb?: string; destacado?: boolean; onClick: () => void }) {
   const { emoji, titulo, resumen, thumb, destacado, onClick } = props;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
-        background: C.panel, border: `1px solid ${destacado ? C.rose : C.line}`, borderRadius: 14,
-        padding: '12px 14px', cursor: 'pointer', fontFamily: 'inherit', color: C.ink,
-      }}
-    >
+    <button type="button" onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left', background: C.panel, border: `1px solid ${destacado ? C.rose : C.line}`, borderRadius: 14, padding: '12px 14px', cursor: 'pointer', fontFamily: 'inherit', color: C.ink }}>
       {thumb ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={thumb} alt="" style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }} />
@@ -475,14 +462,8 @@ function SectionCard(props: { emoji: string; titulo: string; resumen: string; th
 function Modal(props: { title: string; onClose: () => void; children: React.ReactNode }) {
   const { title, onClose, children } = props;
   return (
-    <div
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 560, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-      >
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 560, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: `1px solid ${C.line}` }}>
           <span style={{ fontFamily: BRIC, fontWeight: 800, fontSize: 17 }}>{title}</span>
           <button type="button" onClick={onClose} title="Cerrar" style={{ border: 'none', background: 'transparent', fontSize: 26, lineHeight: 1, cursor: 'pointer', color: C.muted, padding: 0 }}>×</button>

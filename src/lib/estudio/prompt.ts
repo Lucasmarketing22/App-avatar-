@@ -1,51 +1,46 @@
 import { fragmentosDe, type Selecciones } from './piezas';
 
 /**
- * Arma la instrucción (prompt) en inglés a partir de las piezas que elige la
- * usuaria. Mantiene la MISMA cara del personaje (imágenes de referencia) y,
- * si hay vestido elegido, REEMPLAZA la ropa por la del vestido.
- *
- * Objetivo clave: que salga REALISTA (no con aspecto "IA"/plástico). Por eso el
- * prompt insiste en textura de piel real, luz natural y look de foto de celular.
+ * Arma la instrucción (prompt) en inglés.
+ * - Mantiene la MISMA cara del personaje (imágenes de referencia de la cara).
+ * - `hints`: descripciones (en inglés) de qué representa cada imagen de
+ *   referencia extra adjuntada (vestido, peinado, pose, escena, look de cine).
+ * - Empuja fuerte al realismo para que no quede con aspecto "IA".
  */
 export function componerPrompt(opts: {
-  conVestido: boolean;
+  hints?: string[];
   selecciones?: Selecciones;
   extra?: string;
 }): string {
-  const { conVestido, selecciones = {}, extra } = opts;
+  const { hints = [], selecciones = {}, extra } = opts;
 
   const partes: string[] = [];
 
-  // Identidad (cara consistente).
   partes.push(
-    'A candid, photorealistic photograph of the exact same real woman shown in the reference face images. ' +
-      'Keep her face, identity, bone structure, skin tone, freckles, eye color and natural features perfectly consistent with the reference images.',
+    'A candid, photorealistic photograph of the exact same real woman shown in the person reference images. ' +
+      'Keep her face, identity, bone structure, skin tone, freckles, eye color and natural features perfectly consistent with the person reference images. Do not change her face.',
   );
 
-  // Vestido (reemplazo de ropa con la última imagen de referencia).
-  if (conVestido) {
-    partes.push(
-      'She is wearing exactly the outfit shown in the LAST reference image — replace her clothing completely with that garment, ' +
-        'keeping its shape, color, fabric and details faithful.',
-    );
+  // Pistas de las imágenes de referencia adjuntas (vestido, peinado, etc.).
+  for (const h of hints) {
+    const t = h.trim();
+    if (t) partes.push(t);
   }
 
-  // Piezas elegidas (peinado, expresión, luz, escena, estilo, encuadre).
+  // Piezas de texto (expresión, luz, estilo, encuadre).
   const frags = fragmentosDe(selecciones);
   if (frags.length) partes.push(frags.join(', ') + '.');
 
-  // Detalle libre de la usuaria.
+  // Detalle libre.
   const ex = (extra ?? '').trim();
   if (ex) partes.push(ex);
 
-  // Empuje de realismo (siempre).
+  // Realismo (siempre).
   partes.push(
     'Ultra realistic and natural, with real skin texture (visible pores and tiny natural imperfections), ' +
       'natural catchlights in the eyes, realistic lighting and soft shadows, natural depth of field. ' +
       'It should look like a genuine candid photo taken on a modern smartphone, not retouched. ' +
-      'Avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render or AI-generated look. ' +
-      'Do not change her face.',
+      'Avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render or AI-generated look.',
   );
 
   return partes.join(' ');
