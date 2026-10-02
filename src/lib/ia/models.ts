@@ -38,7 +38,7 @@ export const MODELOS: ModeloDef[] = [
     kieModel: 'nano-banana-pro',
     refsField: 'image_input',
     aspects: ['1:1', '3:4', '4:3', '9:16', '16:9', '4:5'],
-    extra: (a) => ({ aspect_ratio: a, resolution: '4K', output_format: 'png' }),
+    extra: (a) => ({ aspect_ratio: a, resolution: '2K', output_format: 'png' }),
   },
   {
     id: 'seedream',
