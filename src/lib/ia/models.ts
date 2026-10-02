@@ -7,19 +7,31 @@
  * referencia y parámetros propios. Por eso cada uno trae su "refsField" y su
  * "extra".
  */
-export type ModeloId = 'nano' | 'nanopro' | 'seedream' | 'flux';
+export type ModeloId = 'nano' | 'nanopro' | 'seedream' | 'flux' | 'qwen';
 
 export type ModeloDef = {
   id: ModeloId;
   label: string;
   desc: string;
   kieModel: string;
-  refsField: 'image_urls' | 'image_input' | 'input_urls';
+  refsField: 'image_urls' | 'image_input' | 'input_urls' | 'image_url';
+  /** Si true, el campo de referencia recibe UNA sola imagen (string), no un array. */
+  refsSingle?: boolean;
   aspects: string[]; // relaciones de aspecto soportadas
   extra: (aspect: string) => Record<string, unknown>;
 };
 
 const COMUNES = ['1:1', '3:4', '4:3', '9:16', '16:9'];
+
+// Qwen usa "image_size" (enum) en vez de aspect_ratio.
+const QWEN_SIZE: Record<string, string> = {
+  '1:1': 'square_hd',
+  '3:4': 'portrait_4_3',
+  '4:5': 'portrait_4_3',
+  '9:16': 'portrait_16_9',
+  '16:9': 'landscape_16_9',
+  '4:3': 'landscape_4_3',
+};
 
 export const MODELOS: ModeloDef[] = [
   {
@@ -57,6 +69,21 @@ export const MODELOS: ModeloDef[] = [
     refsField: 'input_urls',
     aspects: COMUNES,
     extra: (a) => ({ aspect_ratio: a, resolution: '2K' }),
+  },
+  {
+    id: 'qwen',
+    label: 'Libre 🔓 (sin censura)',
+    desc: 'Sin filtro de contenido. Toma 1 foto de tu modelo como base (la primera). Para contenido sensual o adulto (Fanvue). La cara puede variar un poco más.',
+    kieModel: 'qwen/image-edit',
+    refsField: 'image_url',
+    refsSingle: true,
+    aspects: ['1:1', '3:4', '4:3', '9:16', '16:9', '4:5'],
+    extra: (a) => ({
+      image_size: QWEN_SIZE[a] ?? 'portrait_4_3',
+      enable_safety_checker: false,
+      nsfw_checker: false,
+      output_format: 'png',
+    }),
   },
 ];
 
