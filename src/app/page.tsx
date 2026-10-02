@@ -354,12 +354,14 @@ export default function Estudio() {
 
                   <label style={{ display: 'block', marginTop: 16, fontSize: 13, fontWeight: 700 }}>
                     Qué querés hacer
-                    <textarea className="textarea" style={{ height: 120, marginTop: 6 }} value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} placeholder="Ej: Recreá la imagen 1 (misma escena, pose, luz y encuadre). La chica debe ser la de la imagen 2. Mantené el mismo vestuario y escenario de la imagen 1." />
+                    <textarea className="textarea" style={{ height: 120, marginTop: 6 }} value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} placeholder="Describí lo que querés CREAR. Ej: La misma mujer de las imágenes, en bikini rojo en la playa al atardecer, pose sensual natural, foto realista de celular. — O si querés clonar una foto y solo cambiar la cara, usá el botón de abajo." />
                   </label>
-                  <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setEditPrompt('Recreá la imagen 1 tal cual (misma escena, fondo, pose, luz y encuadre). La chica debe ser la de la imagen 2 (misma cara e identidad). Mantené el mismo vestuario y escenario de la imagen 1.')}>Usar plantilla</button>
+                  <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setEditPrompt('Recreá la imagen 1 tal cual (misma escena, fondo, pose, luz y encuadre). La chica debe ser la de la imagen 2 (misma cara e identidad). Mantené el mismo vestuario y escenario de la imagen 1.')}>📸 Clonar foto + cambiar cara</button>
 
                   <div style={{ marginTop: 14, background: 'var(--violeta-soft)', borderRadius: 'var(--r-md)', padding: '12px 14px', fontSize: 13 }}>
-                    💡 <b>Para que salga realista (como Flow):</b> poné una <b>foto real</b> como <b>imagen 1</b> (escena, pose, luz) y la <b>cara de tu personaje</b> como <b>imagen 2</b>. Pedí “mantené todo de la imagen 1, cambiá solo la cara por la de la imagen 2”. Al partir de una foto real, el resultado se ve real.
+                    💡 <b>Dos formas de usarlo:</b><br />
+                    <b>1) Crear algo nuevo:</b> describí la escena que querés (ej: “la misma mujer, en bikini en la playa”). La IA la crea y mantiene su cara. Para bikini/sensual usá <b>Seedream 4.5</b> o <b>Flux 2 Pro</b> (Nano bloquea bikini).<br />
+                    <b>2) Clonar foto (realista como Flow):</b> poné una <b>foto real</b> como <b>imagen 1</b> y la <b>cara</b> como <b>imagen 2</b>, y tocá “📸 Clonar foto + cambiar cara”.
                   </div>
                 </div>
 

@@ -53,11 +53,15 @@ export function componerPrompt(opts: {
  */
 export function componerEditor(texto: string, nImgs: number): string {
   const instrucciones = texto.trim() ||
-    'Recreate image 1 exactly (same scene, background, pose, lighting, framing and composition). The woman must be the woman shown in image 2 (same face and identity). Keep the same outfit and setting as image 1.';
+    'Create a new photorealistic photo of the same woman shown in the reference images, keeping her exact face and identity.';
   const lista = Array.from({ length: Math.max(nImgs, 1) }, (_, i) => `image ${i + 1}`).join(', ');
   return (
-    `Photorealistic photo edit. Use the provided reference images in order (${lista}). ` +
-    `Follow the instructions below exactly and change only what they ask, preserving everything else from the base image. ` +
+    `Photorealistic image generation. Use the provided reference images, in order (${lista}), ONLY as references. ` +
+    `Do EXACTLY what the instructions below say and generate the image they describe. ` +
+    `Use each reference image for whatever the instructions refer to (for example the person's face and identity, an outfit, or a pose). ` +
+    `IMPORTANT: if the instructions ask for a new scene, pose, outfit, background or action, actually CREATE that new image — do NOT just copy, reproduce or output one of the reference images. ` +
+    `Only reproduce a reference image when the instructions explicitly say to recreate it. ` +
+    `Always keep the woman's face and identity consistent with the person reference image (same face, bone structure, skin tone, freckles, eye color and natural features). Do not change her face. ` +
     `Keep the result fully photographic and realistic: real skin texture with clearly visible pores, fine lines and small natural imperfections (not uniform or perfect skin). ` +
     `Do NOT smooth, retouch, beautify, soften or over-light the skin. Imperfect, uneven natural lighting with real shadows — no glossy, waxy or glowing highlights. ` +
     `Make it look like a raw, candid amateur smartphone snapshot, slightly imperfect, NOT a polished studio shot or an AI/beauty-filter image. ` +
