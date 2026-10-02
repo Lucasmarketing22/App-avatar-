@@ -30,7 +30,10 @@ export async function POST(request: Request) {
   const aspect = modelo.aspects.includes(pedido) ? pedido : '3:4';
 
   const input: Record<string, unknown> = { prompt, ...modelo.extra(aspect) };
-  if (imageUrls.length) input[modelo.refsField] = imageUrls;
+  if (imageUrls.length) {
+    // Algunos modelos (Qwen) reciben UNA sola imagen (string); el resto, un array.
+    input[modelo.refsField] = modelo.refsSingle ? imageUrls[0] : imageUrls;
+  }
 
   const result = await createTask(modelo.kieModel, input);
   if (!result.ok) {
