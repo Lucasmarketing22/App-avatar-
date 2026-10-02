@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { componerPrompt } from '@/lib/estudio/prompt';
+import { componerPrompt, componerEditor } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
@@ -37,7 +37,11 @@ export default function Estudio() {
 
   const [sel, setSel] = useState<Selecciones>({});
   const [extra, setExtra] = useState('');
-  const [modelo, setModelo] = useState<ModeloId>('nano');
+  const [modelo, setModelo] = useState<ModeloId>('nanopro');
+  const [crearTab, setCrearTab] = useState<'editor' | 'guiado'>('editor');
+  const [editImgs, setEditImgs] = useState<string[]>([]);
+  const [editPrompt, setEditPrompt] = useState('');
+  const [subiendoEdit, setSubiendoEdit] = useState(false);
 
   const [aspect, setAspect] = useState('3:4');
   const [phase, setPhase] = useState<Phase>('idle');
@@ -218,6 +222,33 @@ export default function Estudio() {
     }, 3000);
   }
 
+  async function onSubirEdit(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []); e.target.value = '';
+    if (!files.length) return;
+    setError(''); setSubiendoEdit(true);
+    try {
+      const libres = Math.max(0, 6 - editImgs.length);
+      const nuevos: string[] = [];
+      for (const f of files.slice(0, libres)) nuevos.push(await subir(f, 'refs'));
+      setEditImgs((prev) => [...prev, ...nuevos].slice(0, 6));
+    } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo subir la imagen.'); } finally { setSubiendoEdit(false); }
+  }
+  function quitarEdit(url: string) { setEditImgs((prev) => prev.filter((u) => u !== url)); }
+
+  async function generarEditor() {
+    if (!editImgs.length || busy) return;
+    setAbierto(null); setError(''); setResultUrl(null);
+    setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
+    const prompt = componerEditor(editPrompt, editImgs.length);
+    try {
+      const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls: editImgs, aspect, modelo }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.taskId) { setError(data.error ?? 'No se pudo crear la generación.'); setPhase('error'); return; }
+      setPhase('polling'); setStatusMsg('Generando la imagen… (puede tardar hasta ~1 minuto)');
+      poll(data.taskId, 0);
+    } catch { setError('No se pudo conectar. Probá de nuevo.'); setPhase('error'); }
+  }
+
   async function crearVideo(c: Creacion) {
     if (haciendoVideo) return;
     setError(''); setHaciendoVideo(c.id); setVidMsg('Creando el video… (Veo tarda 1 a 4 minutos, no cierres)');
@@ -283,50 +314,123 @@ export default function Estudio() {
           <p className="sub">Cargando tu estudio…</p>
         ) : vista === 'crear' ? (
           <>
-            <h1 className="h1" style={{ marginBottom: 4 }}>Armá tu creación</h1>
-            <p className="sub" style={{ marginTop: 0, marginBottom: 16 }}>Tocá cada sección para elegir. Todo es opcional menos el personaje.</p>
-
-            <div style={{ display: 'grid', gap: 10 }}>
-              <SectionCard emoji="📸" titulo="Personaje" resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'} dest={personaje.refs.length === 0} thumb={personaje.refs[0]} onClick={() => setAbierto('personaje')} />
-              <SectionCard emoji="👗" titulo="Vestido" resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido ✓') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
-              {GALERIAS.map((g) => (
-                <SectionCard key={g.key} emoji={g.emoji} titulo={g.titulo} resumen={resumenGaleria(g.key)} thumb={thumbGaleria(g.key)} onClick={() => setAbierto(`gal:${g.key}`)} />
-              ))}
-              {CATEGORIAS.map((cat) => (
-                <SectionCard key={cat.key} emoji={cat.emoji} titulo={cat.titulo} resumen={resumenCategoria(cat.key)} onClick={() => setAbierto(cat.key)} />
-              ))}
-              <SectionCard emoji="✍️" titulo="Detalle extra" resumen={extra.trim() ? 'Escrito' : 'Opcional'} onClick={() => setAbierto('extra')} />
-              <SectionCard emoji="🧠" titulo="Modelo (motor)" resumen={modeloLabel} onClick={() => setAbierto('modelo')} />
+            <h1 className="h1" style={{ marginBottom: 10 }}>Armá tu creación</h1>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <button className={`opt ${crearTab === 'editor' ? 'on' : ''}`} onClick={() => setCrearTab('editor')}>🧩 Editor (imágenes + texto)</button>
+              <button className={`opt ${crearTab === 'guiado' ? 'on' : ''}`} onClick={() => setCrearTab('guiado')}>🎛️ Guiado (por piezas)</button>
             </div>
 
-            <div className="panel" style={{ marginTop: 20, position: 'sticky', bottom: 12, boxShadow: 'var(--sh-md)' }}>
-              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <label style={{ fontSize: 13, fontWeight: 700 }}>
-                  Formato
-                  <select className="select" value={aspect} onChange={(e) => setAspect(e.target.value)} style={{ display: 'block', marginTop: 6 }}>
-                    {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                </label>
-                <button className="btn-grad" onClick={generar} disabled={!puedeGenerar} style={{ flexGrow: 1, minWidth: 180 }}>
-                  {busy ? 'Generando…' : '✨ Generar imagen'}
-                </button>
-              </div>
-              {!busy && personaje.refs.length === 0 ? <p className="sub" style={{ margin: '10px 0 0' }}>Primero subí la cara de tu personaje.</p> : null}
-              {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
-              {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
-              {(busy || resultUrl) ? (
-                <div style={{ marginTop: 14 }}>
-                  {busy ? <div className="sub">Generando…</div> : null}
-                  {resultUrl ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
-                      <div style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600, marginTop: 8 }}>✓ Lista y guardada en la Galería.</div>
-                    </>
+            {crearTab === 'editor' ? (
+              <>
+                <div className="panel" style={{ marginBottom: 16 }}>
+                  <div className="h2" style={{ marginBottom: 6 }}>Imágenes de referencia</div>
+                  <p className="sub" style={{ marginTop: 0, marginBottom: 12 }}>Subí tus imágenes. En el texto las nombrás como <b>imagen 1</b>, <b>imagen 2</b>…</p>
+                  <div className="grid-cards">
+                    {editImgs.map((u, i) => (
+                      <div key={u} className="tile" style={{ cursor: 'default' }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={u} alt="" />
+                        <span className="badge">imagen {i + 1}</span>
+                        <button className="xbtn" onClick={() => quitarEdit(u)}>×</button>
+                      </div>
+                    ))}
+                    {editImgs.length < 6 ? (
+                      <label className="upload-tile" style={{ aspectRatio: '3 / 4' }}>
+                        <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={onSubirEdit} style={{ display: 'none' }} />
+                        <span style={{ fontSize: 26, color: 'var(--rosa)' }}>＋</span>
+                        <span className="sub" style={{ fontSize: 12, marginTop: 4 }}>{subiendoEdit ? 'Subiendo…' : 'Subir'}</span>
+                      </label>
+                    ) : null}
+                  </div>
+
+                  <label style={{ display: 'block', marginTop: 16, fontSize: 13, fontWeight: 700 }}>
+                    Qué querés hacer
+                    <textarea className="textarea" style={{ height: 120, marginTop: 6 }} value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} placeholder="Ej: Recreá la imagen 1 (misma escena, pose, luz y encuadre). La chica debe ser la de la imagen 2. Mantené el mismo vestuario y escenario de la imagen 1." />
+                  </label>
+                  <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setEditPrompt('Recreá la imagen 1 tal cual (misma escena, fondo, pose, luz y encuadre). La chica debe ser la de la imagen 2 (misma cara e identidad). Mantené el mismo vestuario y escenario de la imagen 1.')}>Usar plantilla</button>
+
+                  <div style={{ marginTop: 14, background: 'var(--violeta-soft)', borderRadius: 'var(--r-md)', padding: '12px 14px', fontSize: 13 }}>
+                    💡 <b>Para que salga realista (como Flow):</b> poné una <b>foto real</b> como <b>imagen 1</b> (escena, pose, luz) y la <b>cara de tu personaje</b> como <b>imagen 2</b>. Pedí “mantené todo de la imagen 1, cambiá solo la cara por la de la imagen 2”. Al partir de una foto real, el resultado se ve real.
+                  </div>
+                </div>
+
+                <div className="panel" style={{ position: 'sticky', bottom: 12, boxShadow: 'var(--sh-md)' }}>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <label style={{ fontSize: 13, fontWeight: 700 }}>Formato
+                      <select className="select" value={aspect} onChange={(e) => setAspect(e.target.value)} style={{ display: 'block', marginTop: 6 }}>
+                        {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </label>
+                    <label style={{ fontSize: 13, fontWeight: 700 }}>Modelo
+                      <select className="select" value={modelo} onChange={(e) => setModelo(e.target.value as ModeloId)} style={{ display: 'block', marginTop: 6 }}>
+                        {MODELOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                      </select>
+                    </label>
+                    <button className="btn-grad" onClick={generarEditor} disabled={!editImgs.length || busy} style={{ flexGrow: 1, minWidth: 160 }}>
+                      {busy ? 'Generando…' : '✨ Generar'}
+                    </button>
+                  </div>
+                  {!busy && !editImgs.length ? <p className="sub" style={{ margin: '10px 0 0' }}>Subí al menos una imagen de referencia.</p> : null}
+                  {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
+                  {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
+                  {(busy || resultUrl) ? (
+                    <div style={{ marginTop: 14 }}>
+                      {busy ? <div className="sub">Generando…</div> : null}
+                      {resultUrl ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
+                          <div style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600, marginTop: 8 }}>✓ Lista y guardada en la Galería.</div>
+                        </>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
-              ) : null}
-            </div>
+              </>
+            ) : (
+              <>
+                <p className="sub" style={{ marginTop: 0, marginBottom: 16 }}>Elegí por secciones. Todo es opcional menos el personaje.</p>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <SectionCard emoji="📸" titulo="Personaje" resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'} dest={personaje.refs.length === 0} thumb={personaje.refs[0]} onClick={() => setAbierto('personaje')} />
+                  <SectionCard emoji="👗" titulo="Vestido" resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido ✓') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
+                  {GALERIAS.map((g) => (
+                    <SectionCard key={g.key} emoji={g.emoji} titulo={g.titulo} resumen={resumenGaleria(g.key)} thumb={thumbGaleria(g.key)} onClick={() => setAbierto(`gal:${g.key}`)} />
+                  ))}
+                  {CATEGORIAS.map((cat) => (
+                    <SectionCard key={cat.key} emoji={cat.emoji} titulo={cat.titulo} resumen={resumenCategoria(cat.key)} onClick={() => setAbierto(cat.key)} />
+                  ))}
+                  <SectionCard emoji="✍️" titulo="Detalle extra" resumen={extra.trim() ? 'Escrito' : 'Opcional'} onClick={() => setAbierto('extra')} />
+                  <SectionCard emoji="🧠" titulo="Modelo (motor)" resumen={modeloLabel} onClick={() => setAbierto('modelo')} />
+                </div>
+                <div className="panel" style={{ marginTop: 20, position: 'sticky', bottom: 12, boxShadow: 'var(--sh-md)' }}>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <label style={{ fontSize: 13, fontWeight: 700 }}>Formato
+                      <select className="select" value={aspect} onChange={(e) => setAspect(e.target.value)} style={{ display: 'block', marginTop: 6 }}>
+                        {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </label>
+                    <button className="btn-grad" onClick={generar} disabled={!puedeGenerar} style={{ flexGrow: 1, minWidth: 180 }}>
+                      {busy ? 'Generando…' : '✨ Generar imagen'}
+                    </button>
+                  </div>
+                  {!busy && personaje.refs.length === 0 ? <p className="sub" style={{ margin: '10px 0 0' }}>Primero subí la cara de tu personaje.</p> : null}
+                  {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
+                  {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
+                  {(busy || resultUrl) ? (
+                    <div style={{ marginTop: 14 }}>
+                      {busy ? <div className="sub">Generando…</div> : null}
+                      {resultUrl ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
+                          <div style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600, marginTop: 8 }}>✓ Lista y guardada en la Galería.</div>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
           </>
         ) : (
           /* ----- GALERÍA ----- */
