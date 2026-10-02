@@ -331,7 +331,7 @@ export default function Estudio() {
 
             {crearTab === 'editor' ? (
               <>
-                <div className="panel" style={{ marginBottom: 16 }}>
+                <div className="panel rise" style={{ marginBottom: 16 }}>
                   <div className="h2" style={{ marginBottom: 6 }}>Imágenes de referencia</div>
                   <p className="sub" style={{ marginTop: 0, marginBottom: 12 }}>Subí tus imágenes. En el texto las nombrás como <b>imagen 1</b>, <b>imagen 2</b>…</p>
                   <div className="grid-cards">
@@ -375,7 +375,7 @@ export default function Estudio() {
                         {MODELOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
                       </select>
                     </label>
-                    <button className="btn-grad" onClick={generarEditor} disabled={!editImgs.length || busy} style={{ flexGrow: 1, minWidth: 160 }}>
+                    <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generarEditor} disabled={!editImgs.length || busy} style={{ flexGrow: 1, minWidth: 160 }}>
                       {busy ? 'Generando…' : '✨ Generar'}
                     </button>
                   </div>
@@ -384,7 +384,7 @@ export default function Estudio() {
                   {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
                   {(busy || resultUrl) ? (
                     <div style={{ marginTop: 14 }}>
-                      {busy ? <div className="sub">Generando…</div> : null}
+                      {busy ? <div className="skel" /> : null}
                       {resultUrl ? (
                         <>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
@@ -392,7 +392,7 @@ export default function Estudio() {
                             <button className="btn-soft" onClick={() => { setResultUrl(null); setPhase('idle'); }}>✕ Cerrar</button>
                           </div>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
+                          <img className="result-pop" src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
                         </>
                       ) : null}
                     </div>
@@ -402,7 +402,7 @@ export default function Estudio() {
             ) : (
               <>
                 <p className="sub" style={{ marginTop: 0, marginBottom: 16 }}>Elegí por secciones. Todo es opcional menos el personaje.</p>
-                <div style={{ display: 'grid', gap: 10 }}>
+                <div className="stagger" style={{ display: 'grid', gap: 10 }}>
                   <SectionCard emoji="📸" titulo="Personaje" resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'} dest={personaje.refs.length === 0} thumb={personaje.refs[0]} onClick={() => setAbierto('personaje')} />
                   <SectionCard emoji="👗" titulo="Vestido" resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido ✓') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
                   {GALERIAS.map((g) => (
@@ -421,7 +421,7 @@ export default function Estudio() {
                         {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
                       </select>
                     </label>
-                    <button className="btn-grad" onClick={generar} disabled={!puedeGenerar} style={{ flexGrow: 1, minWidth: 180 }}>
+                    <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generar} disabled={!puedeGenerar} style={{ flexGrow: 1, minWidth: 180 }}>
                       {busy ? 'Generando…' : '✨ Generar imagen'}
                     </button>
                   </div>
@@ -430,7 +430,7 @@ export default function Estudio() {
                   {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
                   {(busy || resultUrl) ? (
                     <div style={{ marginTop: 14 }}>
-                      {busy ? <div className="sub">Generando…</div> : null}
+                      {busy ? <div className="skel" /> : null}
                       {resultUrl ? (
                         <>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
@@ -438,7 +438,7 @@ export default function Estudio() {
                             <button className="btn-soft" onClick={() => { setResultUrl(null); setPhase('idle'); }}>✕ Cerrar</button>
                           </div>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
+                          <img className="result-pop" src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
                         </>
                       ) : null}
                     </div>
@@ -463,7 +463,7 @@ export default function Estudio() {
               creaciones.length === 0 ? (
                 <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no generaste fotos. Andá a “Crear”.</p></div>
               ) : (
-                <div className="grid-cards">
+                <div className="grid-cards stagger">
                   {creaciones.map((c) => (
                     <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -476,7 +476,7 @@ export default function Estudio() {
               videos.length === 0 ? (
                 <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no hay videos. Abrí una foto y tocá “🎬 Crear video”.</p></div>
               ) : (
-                <div className="grid-cards">
+                <div className="grid-cards stagger">
                   {videos.map((v) => (
                     <div key={v.id} className="tile" style={{ cursor: 'default' }}>
                       <video src={v.url} controls playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
