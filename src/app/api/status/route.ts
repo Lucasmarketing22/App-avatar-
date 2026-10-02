@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getTask } from '@/lib/ia/kie';
+import { aplicarGrano } from '@/lib/grain';
 import { uploadPublic } from '@/lib/storage';
 
 export const runtime = 'nodejs';
@@ -31,12 +32,19 @@ export async function GET(request: Request) {
   try {
     const r = await fetch(task.imageUrl, { cache: 'no-store' });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const bytes = new Uint8Array(await r.arrayBuffer());
-    const ct = r.headers.get('content-type') ?? (esVideoUrl ? 'video/mp4' : 'image/png');
+    let bytes = new Uint8Array(await r.arrayBuffer());
+    let ct = r.headers.get('content-type') ?? (esVideoUrl ? 'video/mp4' : 'image/png');
     const esVideo = esVideoUrl || ct.includes('video');
     const kind = esVideo ? 'video' : 'image';
     const folder = esVideo ? 'videos' : 'results';
-    const ext = esVideo ? 'mp4' : ct.includes('webp') ? 'webp' : ct.includes('jpeg') || ct.includes('jpg') ? 'jpg' : 'png';
+    let ext = esVideo ? 'mp4' : ct.includes('webp') ? 'webp' : ct.includes('jpeg') || ct.includes('jpg') ? 'jpg' : 'png';
+
+    // Grano fotográfico automático (solo imágenes): realismo sin tocar la cara.
+    if (!esVideo) {
+      const conGrano = await aplicarGrano(bytes);
+      if (conGrano) { bytes = new Uint8Array(conGrano); ct = 'image/jpeg'; ext = 'jpg'; }
+    }
+
     const { url, error } = await uploadPublic(`${folder}/${taskId}.${ext}`, bytes, ct);
     if (error || !url) {
       return NextResponse.json({ state: 'success', url: task.imageUrl, kind, credits: task.credits, stored: false });
