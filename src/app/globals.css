@@ -68,7 +68,8 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 /* ---------- Topbar ---------- */
 .topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
 .logo { font-family: 'Bricolage Grotesque'; font-weight: 800; font-size: 26px; letter-spacing: -.02em; }
-.logo .g { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.logo .g { background: linear-gradient(120deg, #e5397f, #6d47e8, #e5397f); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shine 7s linear infinite; }
+@keyframes shine { to { background-position: 220% 0; } }
 .pill { font-size: 12px; font-weight: 700; color: var(--rosa-strong); background: var(--rosa-soft); padding: 5px 11px; border-radius: 999px; }
 .stat { margin-left: auto; font-size: 11px; color: var(--muted); text-align: right; line-height: 1.3; }
 .stat b { color: var(--ink); }
@@ -78,6 +79,14 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .btn-grad:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(229,57,127,.38); }
 .btn-grad:active:not(:disabled) { transform: translateY(0); }
 .btn-grad:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+/* Brillo que invita a tocar el botón principal */
+.btn-grad.shine { position: relative; overflow: hidden; }
+.btn-grad.shine::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,.42) 50%, transparent 65%); transform: translateX(-120%); animation: sheen 3.6s var(--ease) infinite; pointer-events: none; }
+@keyframes sheen { 0%, 62% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+/* Mientras genera: late suave y se mantiene encendido */
+.btn-grad.busy { animation: pulse 1.1s ease-in-out infinite; }
+.btn-grad.busy:disabled { opacity: .9; box-shadow: var(--sh-rosa); }
+@keyframes pulse { 0%, 100% { box-shadow: var(--sh-rosa); } 50% { box-shadow: 0 10px 30px rgba(109,71,232,.5); } }
 .btn-ghost { border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 9px 14px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; color: var(--ink); transition: background .15s, border-color .15s; }
 .btn-ghost:hover { background: var(--surface-2); border-color: #e3d9e0; }
 .btn-soft { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 8px 10px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; color: var(--ink); transition: background .15s, color .15s; }
@@ -98,7 +107,9 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .scard .th { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; flex: none; background: linear-gradient(135deg, var(--rosa-soft), var(--violeta-soft)); display: flex; align-items: center; justify-content: center; font-size: 20px; }
 .scard .nm { font-size: 15px; font-weight: 700; }
 .scard .sb { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scard .chev { margin-left: auto; color: var(--muted); font-size: 20px; }
+.scard .chev { margin-left: auto; color: var(--muted); font-size: 20px; transition: transform .18s var(--ease); }
+.scard:hover .chev { transform: translateX(3px); }
+.scard:active { transform: translateY(0); }
 
 .opt { padding: 9px 15px; border-radius: 999px; font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); transition: background .15s, border-color .15s, color .15s; }
 .opt:hover { border-color: #e3d9e0; background: var(--surface-2); }
@@ -110,7 +121,8 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
 .tile { position: relative; aspect-ratio: 3/4; border-radius: var(--r-md); overflow: hidden; cursor: pointer; border: 1px solid var(--line); background: var(--surface-2); transition: transform .15s var(--ease), box-shadow .15s var(--ease); }
 .tile:hover { transform: translateY(-1px); box-shadow: var(--sh-md); }
-.tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile img, .tile video { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s var(--ease); }
+.tile:hover img, .tile:hover video { transform: scale(1.06); }
 .tile.sel { border: 3px solid var(--rosa); box-shadow: 0 0 0 3px var(--rosa-soft); }
 .badge { position: absolute; bottom: 6px; left: 6px; background: var(--grad); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
 .xbtn { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 999px; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: 15px; line-height: 22px; text-align: center; cursor: pointer; padding: 0; }
@@ -147,6 +159,39 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideup { from { transform: translateY(16px); opacity: .6; } to { transform: translateY(0); opacity: 1; } }
 
+/* ---------- Vida: entrada escalonada ---------- */
+/* OJO: no ponemos opacity:0 en el elemento, solo en el keyframe "from".
+   Así, si el usuario pidió "reducir movimiento" (animation:none), el
+   elemento queda visible igual (no desaparece). */
+.rise { animation: rise .5s var(--ease) both; }
+.stagger > * { animation: rise .5s var(--ease) both; }
+.stagger > *:nth-child(1) { animation-delay: .03s; }
+.stagger > *:nth-child(2) { animation-delay: .09s; }
+.stagger > *:nth-child(3) { animation-delay: .15s; }
+.stagger > *:nth-child(4) { animation-delay: .21s; }
+.stagger > *:nth-child(5) { animation-delay: .27s; }
+.stagger > *:nth-child(6) { animation-delay: .33s; }
+.stagger > *:nth-child(7) { animation-delay: .38s; }
+.stagger > *:nth-child(8) { animation-delay: .42s; }
+.stagger > *:nth-child(9) { animation-delay: .46s; }
+.stagger > *:nth-child(n+10) { animation-delay: .5s; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Vida: cargando (skeleton con brillo) ---------- */
+.skel { width: 100%; max-width: 340px; aspect-ratio: 3 / 4; border-radius: 14px; background: linear-gradient(100deg, #efe7ec 30%, #f8f1f5 50%, #efe7ec 70%); background-size: 220% 100%; animation: sk 1.15s linear infinite; }
+@keyframes sk { to { background-position: -220% 0; } }
+
+/* ---------- Vida: el resultado aparece con un pop suave ---------- */
+.result-pop { animation: pop .42s var(--ease) both; }
+@keyframes pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+
+/* ---------- Vida: micro-feedback al tocar ---------- */
+.opt { transition: background .15s, border-color .15s, color .15s, transform .12s var(--ease); }
+.opt:active { transform: translateY(1px); }
+.btn-ghost:active, .btn-soft:active { transform: translateY(1px); }
+.rail-ic:active { transform: translateY(1px); }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
+  .stagger > *, .rise, .result-pop { opacity: 1 !important; transform: none !important; }
 }
