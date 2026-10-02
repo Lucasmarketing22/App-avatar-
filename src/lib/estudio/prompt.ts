@@ -45,3 +45,21 @@ export function componerPrompt(opts: {
 
   return partes.join(' ');
 }
+
+/**
+ * Editor libre con cajas de imágenes. Las imágenes van en orden (image 1,
+ * image 2, …) y la usuaria escribe qué hacer refiriéndose a ellas. Anclar a una
+ * FOTO REAL (image 1) y cambiar lo mínimo es lo que da realismo (como Flow).
+ */
+export function componerEditor(texto: string, nImgs: number): string {
+  const instrucciones = texto.trim() ||
+    'Recreate image 1 exactly (same scene, background, pose, lighting, framing and composition). The woman must be the woman shown in image 2 (same face and identity). Keep the same outfit and setting as image 1.';
+  const lista = Array.from({ length: Math.max(nImgs, 1) }, (_, i) => `image ${i + 1}`).join(', ');
+  return (
+    `Photorealistic photo edit. Use the provided reference images in order (${lista}). ` +
+    `Follow the instructions below exactly and change only what they ask, preserving everything else from the base image. ` +
+    `Keep the result fully photographic and realistic: real skin texture with visible pores and tiny natural imperfections, natural lighting and soft shadows, natural depth of field, like a genuine camera photo. ` +
+    `Absolutely avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render or AI-generated look.\n\n` +
+    `Instructions: ${instrucciones}`
+  );
+}
