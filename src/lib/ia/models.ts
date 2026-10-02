@@ -47,7 +47,7 @@ export const MODELOS: ModeloDef[] = [
     kieModel: 'seedream/4.5-edit',
     refsField: 'image_urls',
     aspects: COMUNES,
-    extra: (a) => ({ aspect_ratio: a, quality: 'high' }),
+    extra: (a) => ({ aspect_ratio: a, quality: 'basic' }),
   },
   {
     id: 'flux',

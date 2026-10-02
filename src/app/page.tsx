@@ -37,7 +37,7 @@ export default function Estudio() {
 
   const [sel, setSel] = useState<Selecciones>({});
   const [extra, setExtra] = useState('');
-  const [modelo, setModelo] = useState<ModeloId>('nano');
+  const [modelo, setModelo] = useState<ModeloId>('seedream');
   const [crearTab, setCrearTab] = useState<'editor' | 'guiado'>('editor');
   const [editImgs, setEditImgs] = useState<string[]>([]);
   const [editPrompt, setEditPrompt] = useState('');
