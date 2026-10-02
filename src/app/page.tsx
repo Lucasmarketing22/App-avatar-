@@ -378,9 +378,12 @@ export default function Estudio() {
                       {busy ? <div className="sub">Generando…</div> : null}
                       {resultUrl ? (
                         <>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+                            <span style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600 }}>✓ Lista y guardada en la Galería.</span>
+                            <button className="btn-soft" onClick={() => { setResultUrl(null); setPhase('idle'); }}>✕ Cerrar</button>
+                          </div>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
-                          <div style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600, marginTop: 8 }}>✓ Lista y guardada en la Galería.</div>
                         </>
                       ) : null}
                     </div>
@@ -421,9 +424,12 @@ export default function Estudio() {
                       {busy ? <div className="sub">Generando…</div> : null}
                       {resultUrl ? (
                         <>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+                            <span style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600 }}>✓ Lista y guardada en la Galería.</span>
+                            <button className="btn-soft" onClick={() => { setResultUrl(null); setPhase('idle'); }}>✕ Cerrar</button>
+                          </div>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
-                          <div style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600, marginTop: 8 }}>✓ Lista y guardada en la Galería.</div>
                         </>
                       ) : null}
                     </div>
