@@ -9,7 +9,7 @@ import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
 type Personaje = { nombre: string; refs: string[] };
 type Item = { id: string; url: string; nombre?: string };
-type Creacion = { id: string; url: string; ts: number };
+type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
 type Vista = 'crear' | 'galeria';
 
@@ -64,7 +64,9 @@ export default function Estudio() {
   const [motion, setMotion] = useState('');
   const [haciendoVideo, setHaciendoVideo] = useState<string | null>(null);
   const [vidMsg, setVidMsg] = useState('');
+  const [copiado, setCopiado] = useState(false);
 
+  const promptRef = useRef('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,6 +171,7 @@ export default function Estudio() {
     }
     const imageUrls = [...personaje.refs, ...refs.map((r) => r.url)];
     const prompt = componerPrompt({ hints: refs.map((r) => r.hint), selecciones: sel, extra });
+    promptRef.current = prompt;
     try {
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect, modelo }) });
       const data = await res.json().catch(() => ({}));
@@ -186,7 +189,12 @@ export default function Estudio() {
         const data = await res.json().catch(() => ({}));
         if (data.state === 'success') {
           setResultUrl(data.url); setPhase('done'); setStatusMsg('');
-          if (data.url) setCreaciones((prev) => [{ id: data.url as string, url: data.url as string, ts: Date.now() }, ...prev.filter((c) => c.url !== data.url)]);
+          if (data.url) {
+            const u = data.url as string;
+            const p = promptRef.current;
+            setCreaciones((prev) => [{ id: u, url: u, ts: Date.now(), prompt: p, modelo }, ...prev.filter((c) => c.url !== u)]);
+            if (p) fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: u, prompt: p, modelo }) }).catch(() => undefined);
+          }
           return;
         }
         if (data.state === 'fail' || (!res.ok && data.error)) { setError(data.error ?? 'La generación falló.'); setPhase('error'); return; }
@@ -240,6 +248,7 @@ export default function Estudio() {
     setAbierto(null); setError(''); setResultUrl(null);
     setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
     const prompt = componerEditor(editPrompt, editImgs.length);
+    promptRef.current = prompt;
     try {
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls: editImgs, aspect, modelo }) });
       const data = await res.json().catch(() => ({}));
@@ -576,7 +585,17 @@ export default function Estudio() {
           <div className="lb-panel" onClick={(e) => e.stopPropagation()}>
             <div className="lb-meta">
               <span>Fecha: <b>{new Date(lightbox.ts).toLocaleDateString()}</b></span>
+              {lightbox.modelo ? <span>Modelo: <b>{MODELOS.find((m) => m.id === lightbox.modelo)?.label ?? lightbox.modelo}</b></span> : null}
             </div>
+            {lightbox.prompt ? (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', color: 'var(--muted)', marginBottom: 4 }}>PROMPT</div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink)', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 10, padding: '8px 10px', maxHeight: 130, overflowY: 'auto', whiteSpace: 'pre-wrap' }}>{lightbox.prompt}</div>
+                <button className="btn-soft" style={{ marginTop: 6 }} onClick={() => { navigator.clipboard?.writeText(lightbox.prompt || ''); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>
+                  {copiado ? '¡Copiado! ✓' : '📋 Copiar prompt'}
+                </button>
+              </div>
+            ) : null}
             <div className="lb-row">
               <a className="btn-ghost" href={lightbox.url} target="_blank" rel="noreferrer">⬇ Descargar</a>
               <button className="btn-ghost" disabled={!!mejorando} onClick={() => { const c = lightbox; setLightbox(null); setVista('galeria'); setGalTab('fotos'); if (c) mejorar(c); }}>
