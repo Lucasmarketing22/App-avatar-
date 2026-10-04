@@ -285,6 +285,18 @@ export default function Estudio() {
     }, 3000);
   }
 
+  async function borrarCreacion(c: Creacion) {
+    if (typeof window !== 'undefined' && !window.confirm('¿Eliminar esta foto? No se puede deshacer.')) return;
+    setLightbox(null);
+    setCreaciones((prev) => prev.filter((x) => x.id !== c.id));
+    try { await fetch(`/api/creaciones?url=${encodeURIComponent(c.url)}`, { method: 'DELETE' }); } catch { /* */ }
+  }
+  async function borrarVideo(v: Creacion) {
+    if (typeof window !== 'undefined' && !window.confirm('¿Eliminar este video? No se puede deshacer.')) return;
+    setVideos((prev) => prev.filter((x) => x.id !== v.id));
+    try { await fetch(`/api/videos?url=${encodeURIComponent(v.url)}`, { method: 'DELETE' }); } catch { /* */ }
+  }
+
   function resumenCategoria(key: string): string {
     const cat = CATEGORIAS.find((c) => c.key === key);
     const op = cat?.opciones.find((o) => o.id === sel[key]);
@@ -470,6 +482,7 @@ export default function Estudio() {
                     <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={c.url} alt="creación" />
+                      <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
                     </div>
                   ))}
                 </div>
@@ -482,6 +495,7 @@ export default function Estudio() {
                   {videos.map((v) => (
                     <div key={v.id} className="tile" style={{ cursor: 'default' }}>
                       <video src={v.url} controls playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <button className="xbtn" title="Eliminar" onClick={() => borrarVideo(v)}>🗑️</button>
                     </div>
                   ))}
                 </div>
@@ -611,6 +625,13 @@ export default function Estudio() {
               </button>
               <p className="sub" style={{ margin: '8px 0 0', fontSize: 12 }}>El video (Veo 3.1) tarda 1–4 min y gasta más crédito que una foto.</p>
             </div>
+            <button
+              className="btn-ghost"
+              style={{ width: '100%', marginTop: 14, color: 'var(--err)', borderColor: '#f3cfcb' }}
+              onClick={() => { const c = lightbox; if (c) borrarCreacion(c); }}
+            >
+              🗑️ Eliminar esta foto
+            </button>
           </div>
         </div>
       ) : null}
