@@ -7,19 +7,6 @@ export type Categoria = { key: string; titulo: string; emoji: string; opciones: 
 
 export const CATEGORIAS: Categoria[] = [
   {
-    key: 'expresion',
-    titulo: 'Expresión',
-    emoji: '😊',
-    opciones: [
-      { id: 'sonrisa', label: 'Sonrisa natural', frag: 'a natural genuine smile' },
-      { id: 'suave', label: 'Sonrisa suave', frag: 'a soft subtle smile' },
-      { id: 'seria', label: 'Seria', frag: 'a calm neutral expression' },
-      { id: 'riendo', label: 'Riendo', frag: 'laughing candidly' },
-      { id: 'camara', label: 'Mira a cámara', frag: 'looking directly at the camera' },
-      { id: 'costado', label: 'Mira al costado', frag: 'looking away from the camera' },
-    ],
-  },
-  {
     key: 'luz',
     titulo: 'Luz',
     emoji: '💡',
