@@ -432,7 +432,18 @@ export default function Estudio() {
         <button className={`rail-ic ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><Icon name="sparkles" /><span>Crear</span></button>
         <button className={`rail-ic ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><Icon name="galeria" /><span>Galería</span></button>
         <button className={`rail-ic ${vista === 'voz' ? 'on' : ''}`} onClick={() => setVista('voz')}><Icon name="voz" /><span>Voz</span></button>
-        <div className="rail-spacer" />
+        <div className="rail-sep" />
+        <button className="rail-ic" onClick={() => { setVista('crear'); setAbierto('personaje'); }} title="Personaje"><Icon name="user" /><span>Personaje</span></button>
+        <button className="rail-ic" onClick={() => { setVista('crear'); setAbierto('vestidos'); }} title="Vestido"><Icon name="shirt" /><span>Vestido</span></button>
+        {GALERIAS.map((g) => (
+          <button key={g.key} className="rail-ic" onClick={() => { setVista('crear'); setAbierto(`gal:${g.key}`); }} title={g.titulo}><Icon name={ICONO[g.key] ?? 'image'} /><span>{RAIL_LABEL[g.key] ?? g.titulo}</span></button>
+        ))}
+        {CATEGORIAS.map((cat) => (
+          <button key={cat.key} className="rail-ic" onClick={() => { setVista('crear'); setAbierto(cat.key); }} title={cat.titulo}><Icon name={ICONO[cat.key] ?? 'palette'} /><span>{RAIL_LABEL[cat.key] ?? cat.titulo}</span></button>
+        ))}
+        <button className="rail-ic" onClick={() => { setVista('crear'); setAbierto('extra'); }} title="Detalle"><Icon name="pencil" /><span>Detalle</span></button>
+        <button className="rail-ic" onClick={() => { setVista('crear'); setAbierto('modelo'); }} title="Modelo"><Icon name="chip" /><span>Modelo</span></button>
+        <div className="rail-sep" />
         <button className="rail-ic" onClick={salir}><Icon name="salir" /><span>Salir</span></button>
       </aside>
 
@@ -446,8 +457,7 @@ export default function Estudio() {
         {cargando ? (
           <p className="sub">Cargando tu estudio…</p>
         ) : vista === 'crear' ? (
-          <div className="crear2">
-            <div className="crear2-side">
+          <>
             <h1 className="h1" style={{ marginBottom: 10 }}>Armá tu creación</h1>
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
               <button className={`opt ${crearTab === 'editor' ? 'on' : ''}`} onClick={() => setCrearTab('editor')}>🧩 Editor</button>
@@ -521,8 +531,11 @@ export default function Estudio() {
               </>
             ) : (
               <>
-                <p className="sub" style={{ marginTop: 0, marginBottom: 16 }}>Elegí por secciones. Todo es opcional menos el personaje.</p>
-                <div className="stagger" style={{ display: 'grid', gap: 10 }}>
+                <div className="solo-desktop panel" style={{ marginBottom: 16 }}>
+                  <p className="sub" style={{ margin: 0 }}>👈 Elegí las piezas (Personaje, Vestido, Poses, Escenas…) desde la <b>barra de la izquierda</b>, y después tocá Generar.</p>
+                </div>
+                <p className="sub solo-movil" style={{ marginTop: 0, marginBottom: 16 }}>Elegí por secciones. Todo es opcional menos el personaje.</p>
+                <div className="stagger solo-movil" style={{ display: 'grid', gap: 10 }}>
                   <SectionCard icon="user" titulo="Personaje" resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'} dest={personaje.refs.length === 0} thumb={personaje.refs[0]} onClick={() => setAbierto('personaje')} />
                   <SectionCard icon="shirt" titulo="Vestido" resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido ✓') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
                   {GALERIAS.map((g) => (
@@ -556,17 +569,8 @@ export default function Estudio() {
                 </div>
               </>
             )}
-            </div>
-            <div className="crear2-main">
-              {resultBlock || (
-                <div className="preview-empty">
-                  <div className="big">✨</div>
-                  <div style={{ fontWeight: 700, color: 'var(--ink)' }}>Acá van a aparecer tus creaciones</div>
-                  <div style={{ fontSize: 13, marginTop: 4 }}>Armá a la izquierda y tocá Generar.</div>
-                </div>
-              )}
-            </div>
-          </div>
+            {resultBlock}
+          </>
         ) : vista === 'voz' ? (
           <>
             <h1 className="h1" style={{ marginBottom: 10 }}>🎙️ Voz de tu modelo</h1>
@@ -808,6 +812,11 @@ export default function Estudio() {
 const ICONO: Record<string, string> = {
   personaje: 'user', vestido: 'shirt', peinados: 'scissors', poses: 'pose', escenas: 'image', cine: 'film',
   expresion: 'smile', luz: 'sun', estilo: 'palette', encuadre: 'crop', extra: 'pencil', modelo: 'chip',
+};
+// Etiquetas cortas para la barra lateral (los títulos largos no entran).
+const RAIL_LABEL: Record<string, string> = {
+  peinados: 'Peinados', poses: 'Poses', escenas: 'Escenas', cine: 'Cine',
+  expresion: 'Expresión', luz: 'Luz', estilo: 'Estilo', encuadre: 'Encuadre',
 };
 
 function Icon({ name }: { name?: string }) {

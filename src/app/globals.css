@@ -45,8 +45,12 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
   .app-bg { padding-left: 76px; }
   .content { padding-bottom: 40px; }
 }
-@media (min-width: 1000px) {
-  .content-inner { max-width: 1180px; }
+/* Mostrar/ocultar según pantalla */
+.solo-movil { display: block; }
+.solo-desktop { display: none; }
+@media (min-width: 900px) {
+  .solo-movil { display: none; }
+  .solo-desktop { display: block; }
 }
 
 /* ---------- Layout pro: 2 columnas (compu) ---------- */
@@ -76,10 +80,13 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .rail {
   position: fixed; left: 0; top: 0; bottom: 0; width: 76px;
   background: var(--surface); border-right: 1px solid var(--line);
-  display: none; flex-direction: column; align-items: center; gap: 6px;
-  padding: 16px 0; z-index: 30;
+  display: none; flex-direction: column; align-items: center; gap: 4px;
+  padding: 14px 0 20px; z-index: 30; overflow-y: auto; overflow-x: hidden;
 }
+.rail::-webkit-scrollbar { width: 0; }
 @media (min-width: 900px) { .rail { display: flex; } }
+.rail-sep { width: 38px; height: 1px; background: var(--line); margin: 7px 0; flex: none; }
+.rail-ic { flex: none; }
 .rail-logo { width: 40px; height: 40px; border-radius: 12px; background: var(--grad); color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Bricolage Grotesque'; font-weight: 800; font-size: 20px; margin-bottom: 10px; }
 .rail-ic { width: 48px; height: 48px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 19px; color: var(--muted); background: transparent; border: none; cursor: pointer; transition: background .18s var(--ease), color .18s var(--ease); }
 .rail-ic span { font-size: 9px; font-weight: 700; font-family: 'DM Sans'; }
