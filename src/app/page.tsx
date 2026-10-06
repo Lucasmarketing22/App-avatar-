@@ -9,7 +9,7 @@ import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
 type Personaje = { nombre: string; refs: string[] };
 type Item = { id: string; url: string; nombre?: string };
-type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string };
+type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
 type Vista = 'crear' | 'galeria';
 
@@ -44,10 +44,11 @@ export default function Estudio() {
   const [subiendoEdit, setSubiendoEdit] = useState(false);
 
   const [aspect, setAspect] = useState('3:4');
+  const [cantidad, setCantidad] = useState(2);
   const [phase, setPhase] = useState<Phase>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
-  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [resultUrls, setResultUrls] = useState<string[]>([]);
 
   const [subiendoCara, setSubiendoCara] = useState(false);
   const [subiendoVestido, setSubiendoVestido] = useState(false);
@@ -66,11 +67,18 @@ export default function Estudio() {
   const [vidMsg, setVidMsg] = useState('');
   const [copiado, setCopiado] = useState(false);
 
-  const promptRef = useRef('');
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); if (upTimer.current) clearTimeout(upTimer.current); if (vidTimer.current) clearTimeout(vidTimer.current); }, []);
+  const pollTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  function schedulePoll(fn: () => void, ms: number) {
+    const id = setTimeout(() => { pollTimers.current.delete(id); fn(); }, ms);
+    pollTimers.current.add(id);
+  }
+  useEffect(() => () => {
+    pollTimers.current.forEach(clearTimeout);
+    if (upTimer.current) clearTimeout(upTimer.current);
+    if (vidTimer.current) clearTimeout(vidTimer.current);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -159,10 +167,59 @@ export default function Estudio() {
     await fetch(`/api/galeria?tipo=${tipo}&id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => undefined);
   }
 
+  type GenMeta = { aspect: string; modelo: ModeloId };
+
+  /** Lanza N generaciones en paralelo (una por cada "cantidad") y las va mostrando. */
+  async function lanzar(prompt: string, imageUrls: string[], meta: GenMeta) {
+    setAbierto(null); setError(''); setResultUrls([]);
+    pollTimers.current.forEach(clearTimeout); pollTimers.current.clear();
+    setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
+    const n = Math.max(1, Math.min(4, cantidad));
+    const taskIds: string[] = [];
+    let ultimoError = '';
+    for (let i = 0; i < n; i++) {
+      try {
+        const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: meta.aspect, modelo: meta.modelo }) });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.taskId) taskIds.push(data.taskId);
+        else ultimoError = data.error ?? 'No se pudo crear la generación.';
+      } catch { ultimoError = 'No se pudo conectar. Probá de nuevo.'; }
+    }
+    if (!taskIds.length) { setError(ultimoError || 'No se pudo crear la generación.'); setPhase('error'); return; }
+    setPhase('polling'); setStatusMsg(`Generando ${taskIds.length} ${taskIds.length > 1 ? 'opciones' : 'imagen'}… (puede tardar ~1 minuto)`);
+    let remaining = taskIds.length;
+    let gotAny = false;
+    const finishOne = (ok: boolean) => {
+      if (ok) gotAny = true;
+      remaining -= 1;
+      if (remaining <= 0) { setPhase('done'); setStatusMsg(''); if (!gotAny) setError((p) => p || 'No salió ninguna imagen. Probá de nuevo.'); }
+    };
+    taskIds.forEach((id) => pollOne(id, 0, prompt, imageUrls, meta, finishOne));
+  }
+
+  function pollOne(taskId: string, tries: number, prompt: string, imageUrls: string[], meta: GenMeta, done: (ok: boolean) => void) {
+    if (tries > 40) { done(false); return; }
+    schedulePoll(async () => {
+      try {
+        const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
+        const data = await res.json().catch(() => ({}));
+        if (data.state === 'success') {
+          const u = data.url as string | undefined;
+          if (u) {
+            setResultUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
+            setCreaciones((prev) => [{ id: u, url: u, ts: Date.now(), prompt, modelo: meta.modelo, refs: imageUrls, aspect: meta.aspect }, ...prev.filter((c) => c.url !== u)]);
+            fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: u, prompt, modelo: meta.modelo, refs: imageUrls, aspect: meta.aspect }) }).catch(() => undefined);
+          }
+          done(!!u); return;
+        }
+        if (data.state === 'fail' || (!res.ok && data.error)) { done(false); return; }
+        pollOne(taskId, tries + 1, prompt, imageUrls, meta, done);
+      } catch { pollOne(taskId, tries + 1, prompt, imageUrls, meta, done); }
+    }, 3000);
+  }
+
   async function generar() {
     if (!puedeGenerar) return;
-    setAbierto(null); setError(''); setResultUrl(null);
-    setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
     const refs: { url: string; hint: string }[] = [];
     if (vestidoActual) refs.push({ url: vestidoActual.url, hint: 'Replace her clothing completely with the outfit shown in the outfit reference image, keeping its shape, color, fabric and details faithful.' });
     for (const g of GALERIAS) {
@@ -171,36 +228,17 @@ export default function Estudio() {
     }
     const imageUrls = [...personaje.refs, ...refs.map((r) => r.url)];
     const prompt = componerPrompt({ hints: refs.map((r) => r.hint), selecciones: sel, extra });
-    promptRef.current = prompt;
-    try {
-      const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect, modelo }) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.taskId) { setError(data.error ?? 'No se pudo crear la generación.'); setPhase('error'); return; }
-      setPhase('polling'); setStatusMsg('Generando la imagen… (puede tardar hasta ~1 minuto)');
-      poll(data.taskId, 0);
-    } catch { setError('No se pudo conectar. Probá de nuevo.'); setPhase('error'); }
+    lanzar(prompt, imageUrls, { aspect, modelo });
   }
 
-  function poll(taskId: string, tries: number) {
-    if (tries > 40) { setError('Se tardó demasiado. Probá de nuevo.'); setPhase('error'); return; }
-    timer.current = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
-        const data = await res.json().catch(() => ({}));
-        if (data.state === 'success') {
-          setResultUrl(data.url); setPhase('done'); setStatusMsg('');
-          if (data.url) {
-            const u = data.url as string;
-            const p = promptRef.current;
-            setCreaciones((prev) => [{ id: u, url: u, ts: Date.now(), prompt: p, modelo }, ...prev.filter((c) => c.url !== u)]);
-            if (p) fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: u, prompt: p, modelo }) }).catch(() => undefined);
-          }
-          return;
-        }
-        if (data.state === 'fail' || (!res.ok && data.error)) { setError(data.error ?? 'La generación falló.'); setPhase('error'); return; }
-        poll(taskId, tries + 1);
-      } catch { poll(taskId, tries + 1); }
-    }, 3000);
+  /** Repetir / variar: reusa el prompt y las referencias exactas de una creación. */
+  function variar(c: Creacion) {
+    if (busy) return;
+    if (!c.prompt || !c.refs || !c.refs.length) { setError('Esta foto es vieja y no guardó sus datos. Hacela de nuevo desde el Editor.'); return; }
+    const m = (c.modelo as ModeloId) || modelo;
+    const a = c.aspect || aspect;
+    setLightbox(null); setVista('crear'); setModelo(m); setAspect(a);
+    lanzar(c.prompt, c.refs, { aspect: a, modelo: m });
   }
 
   async function mejorar(c: Creacion) {
@@ -245,17 +283,8 @@ export default function Estudio() {
 
   async function generarEditor() {
     if (!editImgs.length || busy) return;
-    setAbierto(null); setError(''); setResultUrl(null);
-    setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
     const prompt = componerEditor(editPrompt, editImgs.length);
-    promptRef.current = prompt;
-    try {
-      const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls: editImgs, aspect, modelo }) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.taskId) { setError(data.error ?? 'No se pudo crear la generación.'); setPhase('error'); return; }
-      setPhase('polling'); setStatusMsg('Generando la imagen… (puede tardar hasta ~1 minuto)');
-      poll(data.taskId, 0);
-    } catch { setError('No se pudo conectar. Probá de nuevo.'); setPhase('error'); }
+    lanzar(prompt, editImgs, { aspect, modelo });
   }
 
   async function crearVideo(c: Creacion) {
@@ -289,6 +318,7 @@ export default function Estudio() {
     if (typeof window !== 'undefined' && !window.confirm('¿Eliminar esta foto? No se puede deshacer.')) return;
     setLightbox(null);
     setCreaciones((prev) => prev.filter((x) => x.id !== c.id));
+    setResultUrls((prev) => prev.filter((x) => x !== c.url));
     try { await fetch(`/api/creaciones?url=${encodeURIComponent(c.url)}`, { method: 'DELETE' }); } catch { /* */ }
   }
   async function borrarVideo(v: Creacion) {
@@ -312,6 +342,36 @@ export default function Estudio() {
     return (items.find((i) => i.id === galSel[key]) ?? items[0])?.url;
   }
   const salir = () => fetch('/api/logout', { method: 'POST' }).then(() => location.reload());
+
+  function openResult(u: string) {
+    setMotion('');
+    const c = creaciones.find((x) => x.url === u);
+    setLightbox(c ?? { id: u, url: u, ts: Date.now() });
+  }
+
+  // Bloque de resultados (varias opciones). Se usa en Editor y en Guiado.
+  const resultBlock = (busy || resultUrls.length) ? (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+        <span style={{ fontSize: 13, color: (!busy && resultUrls.length) ? 'var(--ok)' : 'var(--violeta)', fontWeight: 600 }}>
+          {busy ? `Generando… ${resultUrls.length}/${cantidad}` : `✓ ${resultUrls.length} guardada${resultUrls.length > 1 ? 's' : ''} en la Galería. Tocá para ver, 🗑️ para descartar.`}
+        </span>
+        {!busy ? <button className="btn-soft" onClick={() => { setResultUrls([]); setPhase('idle'); }}>✕ Cerrar</button> : null}
+      </div>
+      <div className="grid-cards">
+        {resultUrls.map((u) => (
+          <div key={u} className="tile result-pop" onClick={() => openResult(u)}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={u} alt="resultado" />
+            <button className="xbtn" title="Descartar" onClick={(e) => { e.stopPropagation(); const c = creaciones.find((x) => x.url === u) ?? { id: u, url: u, ts: Date.now() }; borrarCreacion(c); }}>🗑️</button>
+          </div>
+        ))}
+        {busy ? Array.from({ length: Math.max(0, cantidad - resultUrls.length) }).map((_, i) => (
+          <div key={`sk${i}`} className="tile"><div style={{ width: '100%', height: '100%', background: 'linear-gradient(100deg,#efe7ec 30%,#f8f1f5 50%,#efe7ec 70%)', backgroundSize: '220% 100%', animation: 'sk 1.15s linear infinite' }} /></div>
+        )) : null}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <main className="app-bg">
@@ -345,7 +405,10 @@ export default function Estudio() {
               <>
                 <div className="panel rise" style={{ marginBottom: 16 }}>
                   <div className="h2" style={{ marginBottom: 6 }}>Imágenes de referencia</div>
-                  <p className="sub" style={{ marginTop: 0, marginBottom: 12 }}>Subí tus imágenes. En el texto las nombrás como <b>imagen 1</b>, <b>imagen 2</b>…</p>
+                  <p className="sub" style={{ marginTop: 0, marginBottom: 12 }}>
+                    Subí tus imágenes y nombralas en el texto como <b>imagen 1</b>, <b>imagen 2</b>…<br />
+                    <b style={{ color: 'var(--rosa-strong)' }}>Regla de oro:</b> <b>Imagen 1</b> = la pose/escena que querés · <b>Imagen 2</b> = la cara de tu modelo.
+                  </p>
                   <div className="grid-cards">
                     {editImgs.map((u, i) => (
                       <div key={u} className="tile" style={{ cursor: 'default' }}>
@@ -389,6 +452,11 @@ export default function Estudio() {
                         {MODELOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
                       </select>
                     </label>
+                    <label style={{ fontSize: 13, fontWeight: 700 }}>Cantidad
+                      <select className="select" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ display: 'block', marginTop: 6 }}>
+                        {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </label>
                     <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generarEditor} disabled={!editImgs.length || busy} style={{ flexGrow: 1, minWidth: 160 }}>
                       {busy ? 'Generando…' : '✨ Generar'}
                     </button>
@@ -396,21 +464,7 @@ export default function Estudio() {
                   {!busy && !editImgs.length ? <p className="sub" style={{ margin: '10px 0 0' }}>Subí al menos una imagen de referencia.</p> : null}
                   {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
                   {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
-                  {(busy || resultUrl) ? (
-                    <div style={{ marginTop: 14 }}>
-                      {busy ? <div className="skel" /> : null}
-                      {resultUrl ? (
-                        <>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
-                            <span style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600 }}>✓ Lista y guardada en la Galería.</span>
-                            <button className="btn-soft" onClick={() => { setResultUrl(null); setPhase('idle'); }}>✕ Cerrar</button>
-                          </div>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img className="result-pop" src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
-                        </>
-                      ) : null}
-                    </div>
-                  ) : null}
+                  {resultBlock}
                 </div>
               </>
             ) : (
@@ -435,6 +489,11 @@ export default function Estudio() {
                         {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
                       </select>
                     </label>
+                    <label style={{ fontSize: 13, fontWeight: 700 }}>Cantidad
+                      <select className="select" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ display: 'block', marginTop: 6 }}>
+                        {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </label>
                     <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generar} disabled={!puedeGenerar} style={{ flexGrow: 1, minWidth: 180 }}>
                       {busy ? 'Generando…' : '✨ Generar imagen'}
                     </button>
@@ -442,21 +501,7 @@ export default function Estudio() {
                   {!busy && personaje.refs.length === 0 ? <p className="sub" style={{ margin: '10px 0 0' }}>Primero subí la cara de tu personaje.</p> : null}
                   {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
                   {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
-                  {(busy || resultUrl) ? (
-                    <div style={{ marginTop: 14 }}>
-                      {busy ? <div className="skel" /> : null}
-                      {resultUrl ? (
-                        <>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
-                            <span style={{ fontSize: 13, color: 'var(--ok)', fontWeight: 600 }}>✓ Lista y guardada en la Galería.</span>
-                            <button className="btn-soft" onClick={() => { setResultUrl(null); setPhase('idle'); }}>✕ Cerrar</button>
-                          </div>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img className="result-pop" src={resultUrl} alt="resultado" style={{ width: '100%', maxWidth: 340, borderRadius: 14, border: '1px solid var(--line)' }} />
-                        </>
-                      ) : null}
-                    </div>
-                  ) : null}
+                  {resultBlock}
                 </div>
               </>
             )}
@@ -618,6 +663,11 @@ export default function Estudio() {
                 {mejorando ? 'Mejorando…' : '🔎 Mejorar'}
               </button>
             </div>
+            {lightbox.prompt && lightbox.refs && lightbox.refs.length ? (
+              <button className="btn-grad shine" disabled={busy} style={{ width: '100%', marginTop: 10 }} onClick={() => { const c = lightbox; if (c) variar(c); }}>
+                {busy ? 'Generando…' : '🔁 Repetir / Variar (crear parecidas)'}
+              </button>
+            ) : null}
             <div style={{ marginTop: 12 }}>
               <input className="input" value={motion} onChange={(e) => setMotion(e.target.value)} placeholder="Movimiento (opcional): ej. camina y sonríe" style={{ width: '100%', boxSizing: 'border-box' }} />
               <button className="btn-grad" disabled={!!haciendoVideo} style={{ width: '100%', marginTop: 8 }} onClick={() => { const c = lightbox; setLightbox(null); if (c) crearVideo(c); }}>
