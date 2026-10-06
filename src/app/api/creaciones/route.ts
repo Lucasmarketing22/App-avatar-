@@ -16,7 +16,7 @@ export async function GET() {
   ]);
   const items = blobs
     .sort((a, b) => b.uploadedAt - a.uploadedAt)
-    .map((b) => ({ id: b.pathname, url: b.url, ts: b.uploadedAt, prompt: meta[b.url]?.prompt, modelo: meta[b.url]?.modelo }));
+    .map((b) => ({ id: b.pathname, url: b.url, ts: b.uploadedAt, prompt: meta[b.url]?.prompt, modelo: meta[b.url]?.modelo, refs: meta[b.url]?.refs, aspect: meta[b.url]?.aspect }));
   return NextResponse.json({ items });
 }
 
