@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 
 import { componerUnificado } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
@@ -454,8 +455,7 @@ export default function Estudio() {
                 <div className="arefbox">
                   {editImgs.map((u, i) => (
                     <div key={u} className="aref">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={u} alt="" />
+                      <Image src={u} alt="" fill sizes="46px" />
                       <span className="tag">imagen {i + 1}</span>
                       <button className="x" onClick={() => quitarEdit(u)}>×</button>
                     </div>
@@ -504,8 +504,7 @@ export default function Estudio() {
                 ) : previewActual ? (
                   <div>
                     <div className="pv result-pop" onClick={() => openResult(previewActual.url)} style={{ cursor: 'pointer' }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={previewActual.url} alt="creación" />
+                      <Image src={previewActual.url} alt="creación" fill sizes="250px" priority />
                       <div className="cap">Tu creación{previewActual.modelo ? ` · ${MODELOS.find((m) => m.id === previewActual.modelo)?.label ?? ''}` : ''}</div>
                     </div>
                     <div className="pvactions">
@@ -535,8 +534,7 @@ export default function Estudio() {
                     <div className="grid-cards">
                       {creaciones.slice(0, 6).map((c) => (
                         <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={c.url} alt="creación" loading="lazy" decoding="async" />
+                          <Image src={c.url} alt="creación" fill sizes="(max-width: 600px) 45vw, 160px" unoptimized={false} />
                           <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
                         </div>
                       ))}
@@ -621,8 +619,7 @@ export default function Estudio() {
                 <div className="grid-cards stagger">
                   {creaciones.map((c) => (
                     <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={c.url} alt="creación" loading="lazy" decoding="async" />
+                      <Image src={c.url} alt="creación" fill sizes="(max-width: 600px) 45vw, 160px" unoptimized={false} />
                       <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
                     </div>
                   ))}
@@ -666,9 +663,8 @@ export default function Estudio() {
           <p className="sub" style={hintS}>La cara que se mantiene igual en todas las fotos (subí 1 a 3).</p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {personaje.refs.map((url) => (
-              <div key={url} style={{ position: 'relative' }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt="cara" style={{ width: 96, height: 120, objectFit: 'cover', borderRadius: 12, border: '1px solid var(--line)' }} />
+              <div key={url} style={{ position: 'relative', width: 96, height: 120 }}>
+                <Image src={url} alt="cara" fill sizes="96px" style={{ objectFit: 'cover', borderRadius: 12, border: '1px solid var(--line)' }} />
                 <button className="xbtn" onClick={() => quitarCara(url)}>×</button>
               </div>
             ))}
@@ -845,8 +841,7 @@ function GaleriaGrid(props: {
         const s = it.id === sel;
         return (
           <div key={it.id} className={`tile ${s ? 'sel' : ''}`} onClick={() => onSelect(it.id)}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={it.url} alt="" />
+            <Image src={it.url} alt="" fill sizes="(max-width: 600px) 45vw, 160px" />
             {s ? <span className="badge">Elegida</span> : null}
             <button className="xbtn" onClick={(ev) => { ev.stopPropagation(); onDelete(it.id); }}>×</button>
           </div>
