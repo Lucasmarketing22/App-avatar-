@@ -41,26 +41,28 @@ export const MODELOS: ModeloDef[] = [
     kieModel: 'google/nano-banana-edit',
     refsField: 'image_urls',
     aspects: ['1:1', '3:4', '4:3', '9:16', '16:9', '4:5'],
-    extra: (a) => ({ aspect_ratio: a, output_format: 'png' }),
+    // jpeg: archivo más liviano que png => se descarga y guarda más rápido.
+    extra: (a) => ({ aspect_ratio: a, output_format: 'jpeg' }),
   },
   {
     id: 'nanopro',
     label: 'Nano Banana Pro',
-    desc: 'Más calidad y detalle (hasta 4K). Un poco más caro.',
+    desc: 'Más calidad y detalle, en 2K. Un poco más caro y a veces más lento (Google se satura).',
     kieModel: 'nano-banana-pro',
     refsField: 'image_input',
     aspects: ['1:1', '3:4', '4:3', '9:16', '16:9', '4:5'],
-    extra: (a) => ({ aspect_ratio: a, resolution: '2K', output_format: 'png' }),
+    // Ojo: este modelo escribe 'jpg' (el de arriba 'jpeg').
+    extra: (a) => ({ aspect_ratio: a, resolution: '2K', output_format: 'jpg' }),
   },
   {
     id: 'seedream',
-    label: 'Seedream 4.5 (4K)',
-    desc: 'El más realista y nítido, ahora en 4K. El mejor para fotos de moda, bikini y sensual.',
+    label: 'Seedream 4.5',
+    desc: 'El más realista y nítido, en 2K. El mejor para fotos de moda, bikini y sensual.',
     kieModel: 'seedream/4.5-edit',
     refsField: 'image_urls',
     aspects: COMUNES,
-    // quality 'high' = salida 4K (antes 'basic' = 2K). nsfw_checker off = menos rechazos en tomas sensuales.
-    extra: (a) => ({ aspect_ratio: a, quality: 'high', nsfw_checker: false }),
+    // quality 'basic' = salida 2K ('high' = 4K, bastante más lento). nsfw_checker off = menos rechazos en tomas sensuales.
+    extra: (a) => ({ aspect_ratio: a, quality: 'basic', nsfw_checker: false }),
   },
   {
     id: 'flux',
