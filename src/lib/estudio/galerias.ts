@@ -10,6 +10,7 @@ export type GaleriaDef = { key: string; titulo: string; emoji: string; hint: str
 
 export const GALERIAS: GaleriaDef[] = [
   { key: 'peinados', titulo: 'Peinados', emoji: '💇', hint: 'Give her a hairstyle like the one shown in the hairstyle reference image.' },
+  { key: 'expresion', titulo: 'Expresión', emoji: '😊', hint: 'One reference image is a close-up of the woman showing a specific facial expression; reproduce that same facial expression (eyes, mouth, mood) on her face.' },
   { key: 'poses', titulo: 'Poses / Gestos', emoji: '🤳', hint: 'Use a pose and body language like the one shown in the pose reference image.' },
   { key: 'escenas', titulo: 'Escenas / Fondos', emoji: '🏙️', hint: 'Place her in a setting and background like the one shown in the scene reference image.' },
   { key: 'cine', titulo: 'Looks de cine', emoji: '🎥', hint: 'Match the color grade, lighting and cinematic mood of the film-look reference image.' },
