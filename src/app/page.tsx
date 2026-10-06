@@ -531,15 +531,20 @@ export default function Estudio() {
                 {creaciones.length === 0 ? (
                   <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no generaste fotos.</p></div>
                 ) : (
-                  <div className="grid-cards">
-                    {creaciones.map((c) => (
-                      <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={c.url} alt="creación" />
-                        <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <div className="grid-cards">
+                      {creaciones.slice(0, 6).map((c) => (
+                        <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={c.url} alt="creación" loading="lazy" decoding="async" />
+                          <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
+                        </div>
+                      ))}
+                    </div>
+                    {creaciones.length > 6 ? (
+                      <button className="btn-ghost" style={{ marginTop: 12 }} onClick={() => setVista('galeria')}>Ver todas ({creaciones.length}) en la Galería →</button>
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>
@@ -617,7 +622,7 @@ export default function Estudio() {
                   {creaciones.map((c) => (
                     <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={c.url} alt="creación" />
+                      <img src={c.url} alt="creación" loading="lazy" decoding="async" />
                       <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
                     </div>
                   ))}
