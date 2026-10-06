@@ -40,7 +40,8 @@ export function componerPrompt(opts: {
     'Ultra realistic and natural, with real skin texture (clearly visible pores, fine lines and small natural imperfections, not uniform skin). ' +
       'Do NOT smooth, retouch, beautify or over-light the skin. Imperfect, uneven natural lighting with real shadows, no glossy or waxy highlights. ' +
       'It should look like a raw, candid amateur photo taken on a modern smartphone, slightly imperfect, not retouched. ' +
-      'Avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render, beauty-filter or AI-generated look.',
+      'Avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render, beauty-filter or AI-generated look. ' +
+      'Technical quality must be high: high resolution, crisp and in sharp focus on her face and eyes, with rich fine detail and correct anatomy. No blur, no motion blur, no noise, no lowres, no jpeg artifacts, no distortion, no extra or deformed fingers.',
   );
 
   return partes.join(' ');
@@ -65,7 +66,8 @@ export function componerEditor(texto: string, nImgs: number): string {
     `Keep the result fully photographic and realistic: real skin texture with clearly visible pores, fine lines and small natural imperfections (not uniform or perfect skin). ` +
     `Do NOT smooth, retouch, beautify, soften or over-light the skin. Imperfect, uneven natural lighting with real shadows — no glossy, waxy or glowing highlights. ` +
     `Make it look like a raw, candid amateur smartphone snapshot, slightly imperfect, NOT a polished studio shot or an AI/beauty-filter image. ` +
-    `Absolutely avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render or AI-generated look.\n\n` +
+    `Absolutely avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render or AI-generated look. ` +
+    `Technical quality must be high: high resolution, crisp and in sharp focus on her face and eyes, rich fine detail and correct anatomy. No blur, no motion blur, no noise, no lowres, no jpeg artifacts, no distortion, no extra or deformed fingers.\n\n` +
     `Instructions: ${instrucciones}`
   );
 }
