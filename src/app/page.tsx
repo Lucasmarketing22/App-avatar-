@@ -433,7 +433,7 @@ export default function Estudio() {
                     <span className="th"><Icon name="user" /></span>
                   )}
                   <div style={{ minWidth: 0 }}>
-                    <div className="lb">PERSONAJE</div>
+                    <div className="aplb">PERSONAJE</div>
                     <div className="nm">{personaje.nombre || (personaje.refs.length ? 'Listo' : 'Subí la cara')}</div>
                   </div>
                   {personaje.refs.length ? <span className="ck">✓</span> : <span className="chev">›</span>}
