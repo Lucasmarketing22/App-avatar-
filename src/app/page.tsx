@@ -253,8 +253,12 @@ export default function Estudio() {
     taskIds.forEach((id) => pollOne(id, 0, prompt, imageUrls, meta, finishOne));
   }
 
+  // Espera hasta ~10 minutos: Nano Banana Pro a veces tarda varios minutos
+  // (antes cortábamos a los 2 y la foto se perdía aunque la IA la terminara).
+  // Los primeros ~60s consulta cada 3s; después cada 6s.
   function pollOne(taskId: string, tries: number, prompt: string, imageUrls: string[], meta: GenMeta, done: (ok: boolean) => void) {
-    if (tries > 40) { done(false); return; }
+    if (tries > 110) { setError('La IA tardó más de 10 minutos. Probá de nuevo o con otro modelo.'); done(false); return; }
+    if (tries === 30) setStatusMsg('La IA está tardando más de lo normal… seguimos esperando (Nano Banana Pro a veces se demora unos minutos).');
     schedulePoll(async () => {
       try {
         const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
@@ -271,7 +275,7 @@ export default function Estudio() {
         if (data.state === 'fail' || (!res.ok && data.error)) { done(false); return; }
         pollOne(taskId, tries + 1, prompt, imageUrls, meta, done);
       } catch { pollOne(taskId, tries + 1, prompt, imageUrls, meta, done); }
-    }, 3000);
+    }, tries < 20 ? 3000 : 6000);
   }
 
   /** Generar unificado (estilo Aria): junta personaje + piezas + referencias + prompt. */
