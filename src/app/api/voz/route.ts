@@ -8,7 +8,8 @@ export const runtime = 'nodejs';
 type VozCfg = { reference_id?: string; nombre?: string };
 
 function fishKey(): string {
-  return process.env.FISH_AUDIO_API_KEY ?? '';
+  // Acepta el nombre estándar y también "fishapi" (como lo cargó el usuario).
+  return process.env.FISH_AUDIO_API_KEY || process.env.fishapi || process.env.FISHAPI || '';
 }
 
 /** Estado + voz guardada + audios generados. */
