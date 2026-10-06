@@ -66,13 +66,21 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .aplbl { font-size: 10px; font-weight: 800; letter-spacing: .07em; color: var(--muted); text-transform: uppercase; margin: 13px 0 7px; }
 .aplbl:first-child { margin-top: 0; }
 
-.apchar { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1.5px solid var(--rosa); border-radius: 12px; padding: 8px 11px; background: #fff; cursor: pointer; font-family: inherit; color: var(--ink); }
-.apchar .th { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; background: linear-gradient(135deg, var(--rosa-soft), var(--violeta-soft)); display: flex; align-items: center; justify-content: center; flex: none; }
-.apchar .th svg { width: 18px; height: 18px; stroke: var(--rosa-strong); fill: none; stroke-width: 1.7; }
-.apchar .aplb { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
-.apchar .nm { font-size: 14px; font-weight: 700; }
-.apchar .ck { margin-left: auto; width: 20px; height: 20px; border-radius: 50%; background: var(--rosa); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; flex: none; }
-.apchar .chev { margin-left: auto; color: var(--muted); font-size: 18px; }
+.apchar { border: 1.5px solid var(--rosa); border-radius: 12px; padding: 8px 9px 9px; background: #fff; color: var(--ink); }
+.apchar .aplb { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); margin: 0 0 0 2px; }
+.apchar .aphint { font-weight: 600; letter-spacing: .02em; text-transform: none; }
+/* Fichas de modelos (una por modelo + "Nueva"). Si hay muchas, se deslizan de costado. */
+.mrow { display: flex; gap: 7px; padding: 7px 7px 2px 0; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.mrow::-webkit-scrollbar { display: none; }
+.mchip { position: relative; display: flex; align-items: center; gap: 8px; flex: none; max-width: 150px; border: 1.5px solid var(--line); border-radius: 11px; padding: 5px 10px 5px 5px; background: #fff; cursor: pointer; font-family: inherit; color: var(--ink); text-align: left; transition: border-color .15s, background .15s; }
+.mchip.on { border-color: var(--rosa); background: var(--rosa-soft); }
+.mchip .th { position: relative; width: 34px; height: 34px; border-radius: 9px; overflow: hidden; flex: none; background: linear-gradient(135deg, var(--rosa-soft), var(--violeta-soft)); display: flex; align-items: center; justify-content: center; }
+.mchip .th img { object-fit: cover; }
+.mchip .th svg { width: 17px; height: 17px; stroke: var(--rosa-strong); fill: none; stroke-width: 1.7; }
+.mchip .nm { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mchip .ck { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--rosa); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; border: 2px solid #fff; }
+.mchip.add { border-style: dashed; color: var(--rosa-strong); padding: 5px 12px; }
+.mchip.add .plus { font-size: 18px; line-height: 1; color: var(--rosa); }
 
 .apieces { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; margin-top: 10px; }
 .apc { position: relative; border: 1px solid var(--line); border-radius: 11px; padding: 8px 4px; text-align: center; background: #fff; cursor: pointer; font-family: inherit; color: var(--ink); overflow: hidden; }
