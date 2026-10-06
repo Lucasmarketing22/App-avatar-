@@ -8,7 +8,8 @@ import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
-type Personaje = { nombre: string; refs: string[] };
+type Personaje = { id: string; nombre: string; refs: string[] };
+const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
@@ -29,7 +30,9 @@ async function subir(file: File, folder: string): Promise<string> {
 export default function Estudio() {
   const [vista, setVista] = useState<Vista>('crear');
 
-  const [personaje, setPersonaje] = useState<Personaje>({ nombre: '', refs: [] });
+  const [modelas, setModelas] = useState<Personaje[]>([]);
+  const [activoId, setActivoId] = useState('');
+  const personaje = modelas.find((m) => m.id === activoId) ?? modelas[0] ?? SIN_MODELO;
   const [vestidos, setVestidos] = useState<Item[]>([]);
   const [vestidoSel, setVestidoSel] = useState<string | null>(null);
   const [galerias, setGalerias] = useState<Record<string, Item[]>>({});
@@ -100,7 +103,7 @@ export default function Estudio() {
           fetch('/api/vestidos').then((r) => r.json()),
           fetch('/api/creaciones').then((r) => r.json()),
         ]);
-        if (p && Array.isArray(p.refs)) setPersonaje({ nombre: p.nombre ?? '', refs: p.refs });
+        if (p && Array.isArray(p.lista)) { setModelas(p.lista); setActivoId(p.activo ?? p.lista[0]?.id ?? ''); }
         if (v && Array.isArray(v.items)) setVestidos(v.items);
         if (c && Array.isArray(c.items)) setCreaciones(c.items);
         try { const vd = await fetch('/api/videos').then((r) => r.json()); if (Array.isArray(vd.items)) setVideos(vd.items); } catch { /* */ }
@@ -140,9 +143,32 @@ export default function Estudio() {
     setSel((s) => ({ ...s, [catKey]: s[catKey] === id ? undefined : id }));
   }
 
+  async function guardarModelas(lista: Personaje[], activo: string) {
+    setModelas(lista); setActivoId(activo);
+    try { await fetch('/api/personaje', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ activo, lista }) }); } catch { /* */ }
+  }
   async function guardarPersonaje(next: Personaje) {
-    setPersonaje(next);
-    try { await fetch('/api/personaje', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) }); } catch { /* */ }
+    const existe = modelas.some((m) => m.id === next.id);
+    if (existe) { await guardarModelas(modelas.map((m) => (m.id === next.id ? next : m)), activoId || next.id); return; }
+    const fija = { ...next, id: next.id || 'p1' };
+    await guardarModelas([...modelas, fija], fija.id);
+  }
+  /** Tocar una modelo: si no está elegida la elige; si ya lo está, abre su ficha. */
+  function tocarModelo(id: string) {
+    if (id === personaje.id) { setAbierto('personaje'); return; }
+    guardarModelas(modelas, id);
+  }
+  function nuevaModelo() {
+    const nueva: Personaje = { id: `p${Date.now().toString(36)}`, nombre: '', refs: [] };
+    guardarModelas([...modelas, nueva], nueva.id);
+    setAbierto('personaje');
+  }
+  function borrarModelo() {
+    if (modelas.length < 2) return;
+    if (!window.confirm(`¿Eliminar a ${personaje.nombre || 'esta modelo'}? Sus fotos creadas quedan en la galería.`)) return;
+    const resto = modelas.filter((m) => m.id !== personaje.id);
+    guardarModelas(resto, resto[0].id);
+    setAbierto(null);
   }
 
   async function onSubirCara(e: React.ChangeEvent<HTMLInputElement>) {
@@ -206,14 +232,15 @@ export default function Estudio() {
     const n = Math.max(1, Math.min(4, cantidad));
     const taskIds: string[] = [];
     let ultimoError = '';
-    for (let i = 0; i < n; i++) {
+    // Los pedidos salen todos a la vez (antes iban de a uno).
+    await Promise.all(Array.from({ length: n }, async () => {
       try {
         const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: meta.aspect, modelo: meta.modelo }) });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.taskId) taskIds.push(data.taskId);
         else ultimoError = data.error ?? 'No se pudo crear la generación.';
       } catch { ultimoError = 'No se pudo conectar. Probá de nuevo.'; }
-    }
+    }));
     if (!taskIds.length) { setError(ultimoError || 'No se pudo crear la generación.'); setPhase('error'); return; }
     setPhase('polling'); setStatusMsg(`Generando ${taskIds.length} ${taskIds.length > 1 ? 'opciones' : 'imagen'}… (puede tardar ~1 minuto)`);
     let remaining = taskIds.length;
@@ -425,19 +452,25 @@ export default function Estudio() {
             {/* ===== PANEL (como el "Crear Imagen" de Aria) ===== */}
             <div className="aria-panel">
               <div className="aria-pscroll">
-                <button className="apchar" onClick={() => setAbierto('personaje')}>
-                  {personaje.refs[0] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img className="th" src={personaje.refs[0]} alt="" />
-                  ) : (
-                    <span className="th"><Icon name="user" /></span>
-                  )}
-                  <div style={{ minWidth: 0 }}>
-                    <div className="aplb">PERSONAJE</div>
-                    <div className="nm">{personaje.nombre || (personaje.refs.length ? 'Listo' : 'Subí la cara')}</div>
+                <div className="apchar">
+                  <div className="aplb">PERSONAJE <span className="aphint">· tocá para elegir</span></div>
+                  <div className="mrow">
+                    {modelas.map((m) => (
+                      <button key={m.id} className={`mchip ${m.id === personaje.id ? 'on' : ''}`} onClick={() => tocarModelo(m.id)} title={m.id === personaje.id ? 'Editar' : 'Elegir'}>
+                        {m.refs[0] ? (
+                          <span className="th"><Image src={m.refs[0]} alt="" fill sizes="36px" /></span>
+                        ) : (
+                          <span className="th"><Icon name="user" /></span>
+                        )}
+                        <span className="nm">{m.nombre || (m.refs.length ? 'Sin nombre' : 'Subí la cara')}</span>
+                        {m.id === personaje.id ? <span className="ck">✓</span> : null}
+                      </button>
+                    ))}
+                    <button className="mchip add" onClick={nuevaModelo} title="Agregar otra modelo">
+                      <span className="plus">＋</span><span className="nm">Nueva</span>
+                    </button>
                   </div>
-                  {personaje.refs.length ? <span className="ck">✓</span> : <span className="chev">›</span>}
-                </button>
+                </div>
 
                 <div className="apieces">
                   <PieceCard on={!!vestidoActual} icon="shirt" label="Vestido" value={vestidoActual ? (vestidoActual.nombre || 'Elegido') : 'por defecto'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
@@ -659,7 +692,7 @@ export default function Estudio() {
 
       {/* ===== MODALES ===== */}
       {abierto === 'personaje' ? (
-        <Modal title="Tu personaje" onClose={() => setAbierto(null)}>
+        <Modal title={personaje.nombre ? `Modelo: ${personaje.nombre}` : 'Tu modelo'} onClose={() => setAbierto(null)}>
           <p className="sub" style={hintS}>La cara que se mantiene igual en todas las fotos (subí 1 a 3).</p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {personaje.refs.map((url) => (
@@ -678,8 +711,12 @@ export default function Estudio() {
           </div>
           <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginTop: 16 }}>
             Nombre (opcional)
-            <input className="input" value={personaje.nombre} onChange={(e) => setPersonaje((p) => ({ ...p, nombre: e.target.value }))} onBlur={() => guardarPersonaje(personaje)} placeholder="Ej: Luna" style={{ display: 'block', marginTop: 6, width: 220, maxWidth: '100%' }} />
+            <input className="input" value={personaje.nombre} onChange={(e) => { const v = e.target.value; setModelas((ms) => ms.map((m) => (m.id === personaje.id ? { ...m, nombre: v } : m))); }} onBlur={() => guardarPersonaje(personaje)} placeholder="Ej: Luna" style={{ display: 'block', marginTop: 6, width: 220, maxWidth: '100%' }} />
           </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18 }}>
+            <button className="btn-soft" onClick={nuevaModelo}>＋ Agregar otra modelo</button>
+            {modelas.length > 1 ? <button className="btn-soft" onClick={borrarModelo}>🗑️ Eliminar esta modelo</button> : null}
+          </div>
         </Modal>
       ) : null}
 
