@@ -11,7 +11,7 @@ type Personaje = { nombre: string; refs: string[] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
-type Vista = 'crear' | 'galeria';
+type Vista = 'crear' | 'galeria' | 'voz';
 
 const ASPECTS = ['3:4', '1:1', '4:5', '9:16', '16:9', '4:3'];
 
@@ -378,10 +378,11 @@ export default function Estudio() {
       {/* Barra lateral (desktop) */}
       <aside className="rail">
         <div className="rail-logo">m</div>
-        <button className={`rail-ic ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}>✨<span>Crear</span></button>
-        <button className={`rail-ic ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}>🖼️<span>Galería</span></button>
+        <button className={`rail-ic ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><Icon name="sparkles" /><span>Crear</span></button>
+        <button className={`rail-ic ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><Icon name="galeria" /><span>Galería</span></button>
+        <button className={`rail-ic ${vista === 'voz' ? 'on' : ''}`} onClick={() => setVista('voz')}><Icon name="voz" /><span>Voz</span></button>
         <div className="rail-spacer" />
-        <button className="rail-ic" onClick={salir}>⇽<span>Salir</span></button>
+        <button className="rail-ic" onClick={salir}><Icon name="salir" /><span>Salir</span></button>
       </aside>
 
       <div className="content"><div className="content-inner">
@@ -394,11 +395,12 @@ export default function Estudio() {
         {cargando ? (
           <p className="sub">Cargando tu estudio…</p>
         ) : vista === 'crear' ? (
-          <>
+          <div className="crear2">
+            <div className="crear2-side">
             <h1 className="h1" style={{ marginBottom: 10 }}>Armá tu creación</h1>
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              <button className={`opt ${crearTab === 'editor' ? 'on' : ''}`} onClick={() => setCrearTab('editor')}>🧩 Editor (imágenes + texto)</button>
-              <button className={`opt ${crearTab === 'guiado' ? 'on' : ''}`} onClick={() => setCrearTab('guiado')}>🎛️ Guiado (por piezas)</button>
+              <button className={`opt ${crearTab === 'editor' ? 'on' : ''}`} onClick={() => setCrearTab('editor')}>🧩 Editor</button>
+              <button className={`opt ${crearTab === 'guiado' ? 'on' : ''}`} onClick={() => setCrearTab('guiado')}>🎛️ Guiado</button>
             </div>
 
             {crearTab === 'editor' ? (
@@ -440,7 +442,7 @@ export default function Estudio() {
                   </div>
                 </div>
 
-                <div className="panel" style={{ position: 'sticky', bottom: 12, boxShadow: 'var(--sh-md)' }}>
+                <div className="panel" style={{ marginTop: 16, boxShadow: 'var(--sh-md)' }}>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <label style={{ fontSize: 13, fontWeight: 700 }}>Formato
                       <select className="select" value={aspect} onChange={(e) => setAspect(e.target.value)} style={{ display: 'block', marginTop: 6 }}>
@@ -464,25 +466,24 @@ export default function Estudio() {
                   {!busy && !editImgs.length ? <p className="sub" style={{ margin: '10px 0 0' }}>Subí al menos una imagen de referencia.</p> : null}
                   {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
                   {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
-                  {resultBlock}
                 </div>
               </>
             ) : (
               <>
                 <p className="sub" style={{ marginTop: 0, marginBottom: 16 }}>Elegí por secciones. Todo es opcional menos el personaje.</p>
                 <div className="stagger" style={{ display: 'grid', gap: 10 }}>
-                  <SectionCard emoji="📸" titulo="Personaje" resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'} dest={personaje.refs.length === 0} thumb={personaje.refs[0]} onClick={() => setAbierto('personaje')} />
-                  <SectionCard emoji="👗" titulo="Vestido" resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido ✓') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
+                  <SectionCard icon="user" titulo="Personaje" resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'} dest={personaje.refs.length === 0} thumb={personaje.refs[0]} onClick={() => setAbierto('personaje')} />
+                  <SectionCard icon="shirt" titulo="Vestido" resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido ✓') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
                   {GALERIAS.map((g) => (
-                    <SectionCard key={g.key} emoji={g.emoji} titulo={g.titulo} resumen={resumenGaleria(g.key)} thumb={thumbGaleria(g.key)} onClick={() => setAbierto(`gal:${g.key}`)} />
+                    <SectionCard key={g.key} icon={ICONO[g.key] ?? 'image'} titulo={g.titulo} resumen={resumenGaleria(g.key)} thumb={thumbGaleria(g.key)} onClick={() => setAbierto(`gal:${g.key}`)} />
                   ))}
                   {CATEGORIAS.map((cat) => (
-                    <SectionCard key={cat.key} emoji={cat.emoji} titulo={cat.titulo} resumen={resumenCategoria(cat.key)} onClick={() => setAbierto(cat.key)} />
+                    <SectionCard key={cat.key} icon={ICONO[cat.key] ?? 'palette'} titulo={cat.titulo} resumen={resumenCategoria(cat.key)} onClick={() => setAbierto(cat.key)} />
                   ))}
-                  <SectionCard emoji="✍️" titulo="Detalle extra" resumen={extra.trim() ? 'Escrito' : 'Opcional'} onClick={() => setAbierto('extra')} />
-                  <SectionCard emoji="🧠" titulo="Modelo (motor)" resumen={modeloLabel} onClick={() => setAbierto('modelo')} />
+                  <SectionCard icon="pencil" titulo="Detalle extra" resumen={extra.trim() ? 'Escrito' : 'Opcional'} onClick={() => setAbierto('extra')} />
+                  <SectionCard icon="chip" titulo="Modelo (motor)" resumen={modeloLabel} onClick={() => setAbierto('modelo')} />
                 </div>
-                <div className="panel" style={{ marginTop: 20, position: 'sticky', bottom: 12, boxShadow: 'var(--sh-md)' }}>
+                <div className="panel" style={{ marginTop: 20, boxShadow: 'var(--sh-md)' }}>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <label style={{ fontSize: 13, fontWeight: 700 }}>Formato
                       <select className="select" value={aspect} onChange={(e) => setAspect(e.target.value)} style={{ display: 'block', marginTop: 6 }}>
@@ -501,10 +502,27 @@ export default function Estudio() {
                   {!busy && personaje.refs.length === 0 ? <p className="sub" style={{ margin: '10px 0 0' }}>Primero subí la cara de tu personaje.</p> : null}
                   {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
                   {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
-                  {resultBlock}
                 </div>
               </>
             )}
+            </div>
+            <div className="crear2-main">
+              {resultBlock || (
+                <div className="preview-empty">
+                  <div className="big">✨</div>
+                  <div style={{ fontWeight: 700, color: 'var(--ink)' }}>Acá van a aparecer tus creaciones</div>
+                  <div style={{ fontSize: 13, marginTop: 4 }}>Armá a la izquierda y tocá Generar.</div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : vista === 'voz' ? (
+          <>
+            <h1 className="h1" style={{ marginBottom: 10 }}>Voz de tu modelo</h1>
+            <div className="panel">
+              <p className="sub" style={{ marginTop: 0 }}>Pronto vas a poder darle una <b>voz propia</b> a tu modelo: generar audios con el texto que escribas y elegir o clonar su voz.</p>
+              <p className="sub" style={{ marginBottom: 0 }}>Estamos integrando <b>Fish Audio</b>. En cuanto cargues la clave, se activa esta sección. 🎙️</p>
+            </div>
           </>
         ) : (
           /* ----- GALERÍA ----- */
@@ -552,9 +570,10 @@ export default function Estudio() {
 
       {/* Nav inferior (mobile) */}
       <nav className="tabbar">
-        <button className={`tab ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><span className="ti">✨</span>Crear</button>
-        <button className={`tab ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><span className="ti">🖼️</span>Galería</button>
-        <button className="tab" onClick={salir}><span className="ti">⇽</span>Salir</button>
+        <button className={`tab ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><span className="ti"><Icon name="sparkles" /></span>Crear</button>
+        <button className={`tab ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><span className="ti"><Icon name="galeria" /></span>Galería</button>
+        <button className={`tab ${vista === 'voz' ? 'on' : ''}`} onClick={() => setVista('voz')}><span className="ti"><Icon name="voz" /></span>Voz</button>
+        <button className="tab" onClick={salir}><span className="ti"><Icon name="salir" /></span>Salir</button>
       </nav>
 
       {/* ===== MODALES ===== */}
@@ -689,6 +708,34 @@ export default function Estudio() {
   );
 }
 
+/* ---------- Iconos propios (SVG línea) ---------- */
+const ICONO: Record<string, string> = {
+  personaje: 'user', vestido: 'shirt', peinados: 'scissors', poses: 'pose', escenas: 'image', cine: 'film',
+  expresion: 'smile', luz: 'sun', estilo: 'palette', encuadre: 'crop', extra: 'pencil', modelo: 'chip',
+};
+
+function Icon({ name }: { name?: string }) {
+  const p: Record<string, React.ReactNode> = {
+    sparkles: <><path d="M12 3l1.8 4.6L18.5 9.4 13.8 11.2 12 16l-1.8-4.8L5.5 9.4l4.7-1.8z" /><path d="M19 15l.7 1.8 1.8.7-1.8.7L19 20l-.7-1.8L16.5 17.5l1.8-.7z" /></>,
+    galeria: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5-5L5 20" /></>,
+    image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="M21 16l-5-5L5 20" /></>,
+    voz: <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0" /><path d="M12 18v3" /><path d="M8 21h8" /></>,
+    salir: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5" /><path d="M21 12H9" /></>,
+    user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+    shirt: <path d="M16 3l5 3-2 4-2-1v11H7V9L5 10 3 6l5-3 2 2a2 2 0 0 0 4 0z" />,
+    scissors: <><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.1 15.9" /><path d="M14.5 14.5L20 20" /><path d="M8.1 8.1L12 12" /></>,
+    pose: <><circle cx="12" cy="4.5" r="2" /><path d="M12 6.5v6" /><path d="M8 9.5l4-1 4 1" /><path d="M9 21l3-6 3 6" /></>,
+    film: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4" /></>,
+    smile: <><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01M15 9h.01" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,
+    palette: <><path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-.9-.5-1.3-.3-.4-.5-.8-.5-1.2 0-.8.7-1.5 1.5-1.5H17a4 4 0 0 0 4-4c0-5-4-9-9-9z" /><circle cx="7.5" cy="10.5" r="1" /><circle cx="12" cy="7.5" r="1" /><circle cx="16.5" cy="10.5" r="1" /></>,
+    crop: <><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M2 6h14a2 2 0 0 1 2 2v14" /></>,
+    pencil: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
+    chip: <><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></>,
+  };
+  return <svg className="ico" viewBox="0 0 24 24" aria-hidden="true">{p[name ?? 'image'] ?? p.image}</svg>;
+}
+
 /* ---------- Componentes ---------- */
 const hintS: React.CSSProperties = { marginTop: 0, marginBottom: 14 };
 
@@ -720,15 +767,15 @@ function GaleriaGrid(props: {
   );
 }
 
-function SectionCard(props: { emoji: string; titulo: string; resumen: string; thumb?: string; dest?: boolean; onClick: () => void }) {
-  const { emoji, titulo, resumen, thumb, dest, onClick } = props;
+function SectionCard(props: { icon?: string; titulo: string; resumen: string; thumb?: string; dest?: boolean; onClick: () => void }) {
+  const { icon, titulo, resumen, thumb, dest, onClick } = props;
   return (
     <button className={`scard ${dest ? 'dest' : ''}`} onClick={onClick}>
       {thumb ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img className="th" src={thumb} alt="" />
       ) : (
-        <span className="th">{emoji}</span>
+        <span className="th"><Icon name={icon} /></span>
       )}
       <div style={{ flexGrow: 1, minWidth: 0 }}>
         <div className="nm">{titulo}</div>

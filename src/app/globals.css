@@ -3,12 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --bg: #faf6f4;
+  --bg: #f3eef0;
   --surface: #ffffff;
   --surface-2: #fbf8f7;
   --ink: #231f26;
   --muted: #8a8490;
-  --line: #efe7ec;
+  --line: #e4d8df;
+  --line-2: #efe7ec;
   --rosa: #e5397f;
   --rosa-strong: #c81e63;
   --rosa-soft: #fde6ef;
@@ -44,6 +45,33 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
   .app-bg { padding-left: 76px; }
   .content { padding-bottom: 40px; }
 }
+@media (min-width: 1000px) {
+  .content-inner { max-width: 1180px; }
+}
+
+/* ---------- Layout pro: 2 columnas (compu) ---------- */
+.crear2 { display: block; }
+@media (min-width: 1000px) {
+  .crear2 { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .crear2-main { position: sticky; top: 22px; }
+}
+.panel-side { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-sm); overflow: hidden; }
+.panel-side .ps-head { padding: 15px 16px 12px; border-bottom: 1px solid var(--line-2); }
+.panel-side .ps-body { padding: 14px 16px; }
+.panel-side .ps-foot { padding: 13px 16px; border-top: 1px solid var(--line-2); background: var(--surface-2); position: sticky; bottom: 0; }
+.mini-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.mini-row .mcol { flex: 1; min-width: 0; }
+.mini-row .mcol b { font-size: 10px; letter-spacing: .05em; color: var(--muted); font-weight: 700; display: block; margin-bottom: 4px; }
+.mini-row .select { width: 100%; height: 40px; }
+.preview-empty { border: 1.5px dashed var(--line); border-radius: var(--r-lg); background: var(--surface); padding: 48px 22px; text-align: center; color: var(--muted); }
+.preview-empty .big { font-size: 40px; margin-bottom: 8px; opacity: .5; }
+
+/* ---------- Iconos propios (SVG) ---------- */
+.ico { width: 20px; height: 20px; display: inline-block; vertical-align: middle; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.scard .th svg { width: 22px; height: 22px; stroke: var(--rosa-strong); }
+.rail-ic svg { width: 22px; height: 22px; }
+.tab .ti svg { width: 21px; height: 21px; }
+.ps-tab svg { width: 17px; height: 17px; }
 
 .rail {
   position: fixed; left: 0; top: 0; bottom: 0; width: 76px;
