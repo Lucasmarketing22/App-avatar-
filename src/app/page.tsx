@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { componerPrompt, componerEditor } from '@/lib/estudio/prompt';
+import { componerUnificado } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
@@ -38,7 +38,6 @@ export default function Estudio() {
   const [sel, setSel] = useState<Selecciones>({});
   const [extra, setExtra] = useState('');
   const [modelo, setModelo] = useState<ModeloId>('seedream');
-  const [crearTab, setCrearTab] = useState<'editor' | 'guiado'>('editor');
   const [editImgs, setEditImgs] = useState<string[]>([]);
   const [editPrompt, setEditPrompt] = useState('');
   const [subiendoEdit, setSubiendoEdit] = useState(false);
@@ -130,7 +129,10 @@ export default function Estudio() {
 
   const busy = phase === 'creating' || phase === 'polling';
   const vestidoActual = vestidos.find((v) => v.id === vestidoSel) ?? null;
-  const puedeGenerar = personaje.refs.length > 0 && !busy;
+  const puedeCrear = (personaje.refs.length > 0 || editImgs.length > 0) && !busy;
+  const previewActual: Creacion | null = resultUrls.length
+    ? (creaciones.find((c) => c.url === resultUrls[0]) ?? { id: resultUrls[0], url: resultUrls[0], ts: Date.now() })
+    : (creaciones[0] ?? null);
   const modeloLabel = MODELOS.find((m) => m.id === modelo)?.label ?? 'Nano Banana';
 
   function elegirPieza(catKey: string, id: string) {
@@ -244,16 +246,21 @@ export default function Estudio() {
     }, 3000);
   }
 
-  async function generar() {
-    if (!puedeGenerar) return;
-    const refs: { url: string; hint: string }[] = [];
-    if (vestidoActual) refs.push({ url: vestidoActual.url, hint: 'Replace her clothing completely with the outfit shown in the outfit reference image, keeping its shape, color, fabric and details faithful.' });
+  /** Generar unificado (estilo Aria): junta personaje + piezas + referencias + prompt. */
+  async function generarUnificado() {
+    if (busy) return;
+    const refsExtra: { url: string; hint: string }[] = [];
+    if (vestidoActual) refsExtra.push({ url: vestidoActual.url, hint: 'One reference image shows an outfit; dress her in that exact outfit, keeping its shape, color, fabric and details.' });
     for (const g of GALERIAS) {
       const item = (galerias[g.key] ?? []).find((i) => i.id === galSel[g.key]);
-      if (item) refs.push({ url: item.url, hint: g.hint });
+      if (item) refsExtra.push({ url: item.url, hint: g.hint });
     }
-    const imageUrls = [...personaje.refs, ...refs.map((r) => r.url)];
-    const prompt = componerPrompt({ hints: refs.map((r) => r.hint), selecciones: sel, extra });
+    const imageUrls = [...editImgs, ...personaje.refs, ...refsExtra.map((r) => r.url)];
+    if (!imageUrls.length) { setError('Subí al menos una imagen: el personaje (cara) o una referencia.'); setPhase('error'); return; }
+    const faceHint = personaje.refs.length ? ["One or more reference images show the woman's face and identity; keep her face exactly."] : [];
+    const hints = [...faceHint, ...refsExtra.map((r) => r.hint)];
+    const texto = [editPrompt.trim(), extra.trim()].filter(Boolean).join('. ');
+    const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel });
     lanzar(prompt, imageUrls, { aspect, modelo });
   }
 
@@ -306,12 +313,6 @@ export default function Estudio() {
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo subir la imagen.'); } finally { setSubiendoEdit(false); }
   }
   function quitarEdit(url: string) { setEditImgs((prev) => prev.filter((u) => u !== url)); }
-
-  async function generarEditor() {
-    if (!editImgs.length || busy) return;
-    const prompt = componerEditor(editPrompt, editImgs.length);
-    lanzar(prompt, editImgs, { aspect, modelo });
-  }
 
   async function crearVideo(c: Creacion) {
     if (haciendoVideo) return;
@@ -378,20 +379,6 @@ export default function Estudio() {
     try { await fetch(`/api/voz?url=${encodeURIComponent(a.url)}`, { method: 'DELETE' }); } catch { /* */ }
   }
 
-  function resumenCategoria(key: string): string {
-    const cat = CATEGORIAS.find((c) => c.key === key);
-    const op = cat?.opciones.find((o) => o.id === sel[key]);
-    return op ? op.label : 'Opcional';
-  }
-  function resumenGaleria(key: string): string {
-    const items = galerias[key] ?? [];
-    if (galSel[key] && items.some((i) => i.id === galSel[key])) return 'Elegida ✓';
-    return items.length ? `${items.length} foto${items.length > 1 ? 's' : ''}` : 'Subí fotos';
-  }
-  function thumbGaleria(key: string): string | undefined {
-    const items = galerias[key] ?? [];
-    return (items.find((i) => i.id === galSel[key]) ?? items[0])?.url;
-  }
   const salir = () => fetch('/api/logout', { method: 'POST' }).then(() => location.reload());
 
   function openResult(u: string) {
@@ -399,30 +386,6 @@ export default function Estudio() {
     const c = creaciones.find((x) => x.url === u);
     setLightbox(c ?? { id: u, url: u, ts: Date.now() });
   }
-
-  // Bloque de resultados (varias opciones). Se usa en Editor y en Guiado.
-  const resultBlock = (busy || resultUrls.length) ? (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
-        <span style={{ fontSize: 13, color: (!busy && resultUrls.length) ? 'var(--ok)' : 'var(--violeta)', fontWeight: 600 }}>
-          {busy ? `Generando… ${resultUrls.length}/${cantidad}` : `✓ ${resultUrls.length} guardada${resultUrls.length > 1 ? 's' : ''} en la Galería. Tocá para ver, 🗑️ para descartar.`}
-        </span>
-        {!busy ? <button className="btn-soft" onClick={() => { setResultUrls([]); setPhase('idle'); }}>✕ Cerrar</button> : null}
-      </div>
-      <div className="grid-cards">
-        {resultUrls.map((u) => (
-          <div key={u} className="tile result-pop" onClick={() => openResult(u)}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={u} alt="resultado" />
-            <button className="xbtn" title="Descartar" onClick={(e) => { e.stopPropagation(); const c = creaciones.find((x) => x.url === u) ?? { id: u, url: u, ts: Date.now() }; borrarCreacion(c); }}>🗑️</button>
-          </div>
-        ))}
-        {busy ? Array.from({ length: Math.max(0, cantidad - resultUrls.length) }).map((_, i) => (
-          <div key={`sk${i}`} className="tile"><div style={{ width: '100%', height: '100%', background: 'linear-gradient(100deg,#efe7ec 30%,#f8f1f5 50%,#efe7ec 70%)', backgroundSize: '220% 100%', animation: 'sk 1.15s linear infinite' }} /></div>
-        )) : null}
-      </div>
-    </div>
-  ) : null;
 
   return (
     <main className="app-bg">
@@ -457,120 +420,130 @@ export default function Estudio() {
         {cargando ? (
           <p className="sub">Cargando tu estudio…</p>
         ) : vista === 'crear' ? (
-          <>
-            <h1 className="h1" style={{ marginBottom: 10 }}>Armá tu creación</h1>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              <button className={`opt ${crearTab === 'editor' ? 'on' : ''}`} onClick={() => setCrearTab('editor')}>🧩 Editor</button>
-              <button className={`opt ${crearTab === 'guiado' ? 'on' : ''}`} onClick={() => setCrearTab('guiado')}>🎛️ Guiado</button>
+          <div className="aria">
+            {/* ===== PANEL (como el "Crear Imagen" de Aria) ===== */}
+            <div className="aria-panel">
+              <div className="aria-pscroll">
+                <button className="apchar" onClick={() => setAbierto('personaje')}>
+                  {personaje.refs[0] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className="th" src={personaje.refs[0]} alt="" />
+                  ) : (
+                    <span className="th"><Icon name="user" /></span>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div className="lb">PERSONAJE</div>
+                    <div className="nm">{personaje.nombre || (personaje.refs.length ? 'Listo' : 'Subí la cara')}</div>
+                  </div>
+                  {personaje.refs.length ? <span className="ck">✓</span> : <span className="chev">›</span>}
+                </button>
+
+                <div className="apieces">
+                  <PieceCard on={!!vestidoActual} icon="shirt" label="Vestido" value={vestidoActual ? (vestidoActual.nombre || 'Elegido') : 'por defecto'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
+                  {GALERIAS.map((g) => {
+                    const it = (galerias[g.key] ?? []).find((i) => i.id === galSel[g.key]);
+                    return <PieceCard key={g.key} on={!!it} icon={ICONO[g.key] ?? 'image'} label={RAIL_LABEL[g.key] ?? g.titulo} value={it ? 'Elegida' : 'por defecto'} thumb={it?.url} onClick={() => setAbierto(`gal:${g.key}`)} />;
+                  })}
+                  {CATEGORIAS.map((cat) => {
+                    const op = cat.opciones.find((o) => o.id === sel[cat.key]);
+                    return <PieceCard key={cat.key} on={!!op} icon={ICONO[cat.key] ?? 'palette'} label={RAIL_LABEL[cat.key] ?? cat.titulo} value={op ? op.label : 'por defecto'} onClick={() => setAbierto(cat.key)} />;
+                  })}
+                </div>
+
+                <div className="aplbl">Referencias (@imagen)</div>
+                <div className="arefbox">
+                  {editImgs.map((u, i) => (
+                    <div key={u} className="aref">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={u} alt="" />
+                      <span className="tag">imagen {i + 1}</span>
+                      <button className="x" onClick={() => quitarEdit(u)}>×</button>
+                    </div>
+                  ))}
+                  {editImgs.length < 6 ? (
+                    <label className="arefadd">
+                      <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={onSubirEdit} style={{ display: 'none' }} />
+                      <span style={{ fontSize: 18, color: 'var(--rosa)' }}>＋</span>
+                      <span>{subiendoEdit ? '…' : 'Subir'}</span>
+                    </label>
+                  ) : null}
+                </div>
+
+                <div className="aplbl">Modelo de imagen</div>
+                <select className="select" value={modelo} onChange={(e) => setModelo(e.target.value as ModeloId)} style={{ width: '100%' }}>
+                  {MODELOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+
+                <div className="aplbl">Formato · Cantidad</div>
+                <div className="afmt">
+                  {ASPECTS.map((a) => <button key={a} className={`fb ${aspect === a ? 'on' : ''}`} onClick={() => setAspect(a)}>{a}</button>)}
+                  <select className="select" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ height: 30, marginLeft: 'auto', width: 66 }}>
+                    {[1, 2, 3, 4].map((n) => <option key={n} value={n}>×{n}</option>)}
+                  </select>
+                </div>
+
+                <div className="aplbl">Prompt</div>
+                <textarea className="textarea" style={{ height: 92 }} value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} placeholder="Describí lo que querés crear. Ej: la misma mujer, en bikini en la playa, pose sensual, foto realista. Podés nombrar las referencias como imagen 1, imagen 2…" />
+                <button className="btn-ghost" style={{ marginTop: 8, width: '100%' }} onClick={() => setEditPrompt('Recreá la imagen 1 tal cual (misma escena, fondo, pose, luz y encuadre). La chica debe ser la de la imagen 2 (misma cara e identidad).')}>📸 Clonar foto + cambiar cara</button>
+              </div>
+              <div className="aria-pfoot">
+                <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generarUnificado} disabled={!puedeCrear} style={{ width: '100%' }}>
+                  {busy ? `Generando… ${resultUrls.length}/${cantidad}` : '✨ Generar imagen'}
+                </button>
+                {!busy && !puedeCrear ? <p className="sub" style={{ margin: '8px 0 0', fontSize: 12 }}>Subí la cara del personaje o una referencia.</p> : null}
+                {statusMsg ? <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
+                {error ? <p className="errbox" style={{ margin: '8px 0 0' }}>{error}</p> : null}
+              </div>
             </div>
 
-            {crearTab === 'editor' ? (
-              <>
-                <div className="panel rise" style={{ marginBottom: 16 }}>
-                  <div className="h2" style={{ marginBottom: 6 }}>Imágenes de referencia</div>
-                  <p className="sub" style={{ marginTop: 0, marginBottom: 12 }}>
-                    Subí tus imágenes y nombralas en el texto como <b>imagen 1</b>, <b>imagen 2</b>…<br />
-                    <b style={{ color: 'var(--rosa-strong)' }}>Regla de oro:</b> <b>Imagen 1</b> = la pose/escena que querés · <b>Imagen 2</b> = la cara de tu modelo.
-                  </p>
+            {/* ===== MAIN: preview grande + galería ===== */}
+            <div className="aria-main">
+              <div className="aria-preview">
+                {busy ? (
+                  <div className="pv"><div className="sk" /></div>
+                ) : previewActual ? (
+                  <div>
+                    <div className="pv result-pop" onClick={() => openResult(previewActual.url)} style={{ cursor: 'pointer' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={previewActual.url} alt="creación" />
+                      <div className="cap">Tu creación{previewActual.modelo ? ` · ${MODELOS.find((m) => m.id === previewActual.modelo)?.label ?? ''}` : ''}</div>
+                    </div>
+                    <div className="pvactions">
+                      <a className="btn-soft" href={previewActual.url} target="_blank" rel="noreferrer">⬇ Descargar</a>
+                      <button className="btn-soft" disabled={!!mejorando} onClick={() => mejorar(previewActual)}>{mejorando ? 'Mejorando…' : '🔎 Mejorar'}</button>
+                      {previewActual.prompt && previewActual.refs?.length ? <button className="btn-soft" onClick={() => variar(previewActual)}>🔁 Variar</button> : null}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pv-empty">
+                    <Icon name="sparkles" />
+                    <div style={{ fontWeight: 700, color: 'var(--ink)', marginTop: 8 }}>Acá va a aparecer tu creación</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>Armá a la izquierda y tocá Generar.</div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <h2 className="h2" style={{ fontSize: 15 }}>Mis creaciones</h2>
+                  <span className="sub" style={{ fontSize: 12 }}>· {creaciones.length}</span>
+                </div>
+                {creaciones.length === 0 ? (
+                  <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no generaste fotos.</p></div>
+                ) : (
                   <div className="grid-cards">
-                    {editImgs.map((u, i) => (
-                      <div key={u} className="tile" style={{ cursor: 'default' }}>
+                    {creaciones.map((c) => (
+                      <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={u} alt="" />
-                        <span className="badge">imagen {i + 1}</span>
-                        <button className="xbtn" onClick={() => quitarEdit(u)}>×</button>
+                        <img src={c.url} alt="creación" />
+                        <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
                       </div>
                     ))}
-                    {editImgs.length < 6 ? (
-                      <label className="upload-tile" style={{ aspectRatio: '3 / 4' }}>
-                        <input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={onSubirEdit} style={{ display: 'none' }} />
-                        <span style={{ fontSize: 26, color: 'var(--rosa)' }}>＋</span>
-                        <span className="sub" style={{ fontSize: 12, marginTop: 4 }}>{subiendoEdit ? 'Subiendo…' : 'Subir'}</span>
-                      </label>
-                    ) : null}
                   </div>
-
-                  <label style={{ display: 'block', marginTop: 16, fontSize: 13, fontWeight: 700 }}>
-                    Qué querés hacer
-                    <textarea className="textarea" style={{ height: 120, marginTop: 6 }} value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} placeholder="Describí lo que querés CREAR. Ej: La misma mujer de las imágenes, en bikini rojo en la playa al atardecer, pose sensual natural, foto realista de celular. — O si querés clonar una foto y solo cambiar la cara, usá el botón de abajo." />
-                  </label>
-                  <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setEditPrompt('Recreá la imagen 1 tal cual (misma escena, fondo, pose, luz y encuadre). La chica debe ser la de la imagen 2 (misma cara e identidad). Mantené el mismo vestuario y escenario de la imagen 1.')}>📸 Clonar foto + cambiar cara</button>
-
-                  <div style={{ marginTop: 14, background: 'var(--violeta-soft)', borderRadius: 'var(--r-md)', padding: '12px 14px', fontSize: 13 }}>
-                    💡 <b>Dos formas de usarlo:</b><br />
-                    <b>1) Crear algo nuevo:</b> describí la escena que querés (ej: “la misma mujer, en bikini en la playa”). La IA la crea y mantiene su cara. Para bikini/sensual usá <b>Seedream 4.5</b> o <b>Flux 2 Pro</b> (Nano bloquea bikini).<br />
-                    <b>2) Clonar foto (realista como Flow):</b> poné una <b>foto real</b> como <b>imagen 1</b> y la <b>cara</b> como <b>imagen 2</b>, y tocá “📸 Clonar foto + cambiar cara”.
-                  </div>
-                </div>
-
-                <div className="panel" style={{ marginTop: 16, boxShadow: 'var(--sh-md)' }}>
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <label style={{ fontSize: 13, fontWeight: 700 }}>Formato
-                      <select className="select" value={aspect} onChange={(e) => setAspect(e.target.value)} style={{ display: 'block', marginTop: 6 }}>
-                        {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ fontSize: 13, fontWeight: 700 }}>Modelo
-                      <select className="select" value={modelo} onChange={(e) => setModelo(e.target.value as ModeloId)} style={{ display: 'block', marginTop: 6 }}>
-                        {MODELOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ fontSize: 13, fontWeight: 700 }}>Cantidad
-                      <select className="select" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ display: 'block', marginTop: 6 }}>
-                        {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                    </label>
-                    <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generarEditor} disabled={!editImgs.length || busy} style={{ flexGrow: 1, minWidth: 160 }}>
-                      {busy ? 'Generando…' : '✨ Generar'}
-                    </button>
-                  </div>
-                  {!busy && !editImgs.length ? <p className="sub" style={{ margin: '10px 0 0' }}>Subí al menos una imagen de referencia.</p> : null}
-                  {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
-                  {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="solo-desktop panel" style={{ marginBottom: 16 }}>
-                  <p className="sub" style={{ margin: 0 }}>👈 Elegí las piezas (Personaje, Vestido, Poses, Escenas…) desde la <b>barra de la izquierda</b>, y después tocá Generar.</p>
-                </div>
-                <p className="sub solo-movil" style={{ marginTop: 0, marginBottom: 16 }}>Elegí por secciones. Todo es opcional menos el personaje.</p>
-                <div className="stagger solo-movil" style={{ display: 'grid', gap: 10 }}>
-                  <SectionCard icon="user" titulo="Personaje" resumen={personaje.refs.length ? `${personaje.refs.length} foto${personaje.refs.length > 1 ? 's' : ''}` : 'Subí la cara'} dest={personaje.refs.length === 0} thumb={personaje.refs[0]} onClick={() => setAbierto('personaje')} />
-                  <SectionCard icon="shirt" titulo="Vestido" resumen={vestidoActual ? (vestidoActual.nombre || 'Elegido ✓') : vestidos.length ? 'Elegí uno' : 'Subí vestidos'} thumb={vestidoActual?.url} onClick={() => setAbierto('vestidos')} />
-                  {GALERIAS.map((g) => (
-                    <SectionCard key={g.key} icon={ICONO[g.key] ?? 'image'} titulo={g.titulo} resumen={resumenGaleria(g.key)} thumb={thumbGaleria(g.key)} onClick={() => setAbierto(`gal:${g.key}`)} />
-                  ))}
-                  {CATEGORIAS.map((cat) => (
-                    <SectionCard key={cat.key} icon={ICONO[cat.key] ?? 'palette'} titulo={cat.titulo} resumen={resumenCategoria(cat.key)} onClick={() => setAbierto(cat.key)} />
-                  ))}
-                  <SectionCard icon="pencil" titulo="Detalle extra" resumen={extra.trim() ? 'Escrito' : 'Opcional'} onClick={() => setAbierto('extra')} />
-                  <SectionCard icon="chip" titulo="Modelo (motor)" resumen={modeloLabel} onClick={() => setAbierto('modelo')} />
-                </div>
-                <div className="panel" style={{ marginTop: 20, boxShadow: 'var(--sh-md)' }}>
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <label style={{ fontSize: 13, fontWeight: 700 }}>Formato
-                      <select className="select" value={aspect} onChange={(e) => setAspect(e.target.value)} style={{ display: 'block', marginTop: 6 }}>
-                        {ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                    </label>
-                    <label style={{ fontSize: 13, fontWeight: 700 }}>Cantidad
-                      <select className="select" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ display: 'block', marginTop: 6 }}>
-                        {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
-                      </select>
-                    </label>
-                    <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generar} disabled={!puedeGenerar} style={{ flexGrow: 1, minWidth: 180 }}>
-                      {busy ? 'Generando…' : '✨ Generar imagen'}
-                    </button>
-                  </div>
-                  {!busy && personaje.refs.length === 0 ? <p className="sub" style={{ margin: '10px 0 0' }}>Primero subí la cara de tu personaje.</p> : null}
-                  {statusMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
-                  {error ? <p className="errbox" style={{ margin: '10px 0 0' }}>{error}</p> : null}
-                </div>
-              </>
-            )}
-            {resultBlock}
-          </>
+                )}
+              </div>
+            </div>
+          </div>
         ) : vista === 'voz' ? (
           <>
             <h1 className="h1" style={{ marginBottom: 10 }}>🎙️ Voz de tu modelo</h1>
@@ -675,6 +648,12 @@ export default function Estudio() {
         <button className={`tab ${vista === 'voz' ? 'on' : ''}`} onClick={() => setVista('voz')}><span className="ti"><Icon name="voz" /></span>Voz</button>
         <button className="tab" onClick={salir}><span className="ti"><Icon name="salir" /></span>Salir</button>
       </nav>
+
+      {/* Barra de consola (desktop) */}
+      <div className="consola">
+        <span>CONSOLA · <span className="k">Kie API</span> · {modeloLabel}</span>
+        <div className="rr"><span>{creaciones.length} creaciones</span><span>{videos.length} videos</span><span>● API en vivo</span></div>
+      </div>
 
       {/* ===== MODALES ===== */}
       {abierto === 'personaje' ? (
@@ -872,21 +851,18 @@ function GaleriaGrid(props: {
   );
 }
 
-function SectionCard(props: { icon?: string; titulo: string; resumen: string; thumb?: string; dest?: boolean; onClick: () => void }) {
-  const { icon, titulo, resumen, thumb, dest, onClick } = props;
+function PieceCard(props: { on: boolean; icon: string; label: string; value: string; thumb?: string; onClick: () => void }) {
+  const { on, icon, label, value, thumb, onClick } = props;
   return (
-    <button className={`scard ${dest ? 'dest' : ''}`} onClick={onClick}>
+    <button className={`apc ${on ? 'on' : ''}`} onClick={onClick}>
       {thumb ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img className="th" src={thumb} alt="" />
       ) : (
         <span className="th"><Icon name={icon} /></span>
       )}
-      <div style={{ flexGrow: 1, minWidth: 0 }}>
-        <div className="nm">{titulo}</div>
-        <div className="sb">{resumen}</div>
-      </div>
-      <span className="chev">›</span>
+      <div className="t">{label}</div>
+      <div className="v">{value}</div>
     </button>
   );
 }

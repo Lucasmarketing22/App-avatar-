@@ -71,3 +71,48 @@ export function componerEditor(texto: string, nImgs: number): string {
     `Instructions: ${instrucciones}`
   );
 }
+
+/**
+ * Panel unificado (estilo Aria): combina las REFERENCIAS @imagen (numeradas),
+ * la cara del personaje, las piezas (vestido/pose/escena…) y las categorías de
+ * texto, en una sola instrucción con un solo Generar.
+ */
+export function componerUnificado(opts: {
+  texto: string;
+  nRefs: number;
+  hints?: string[];
+  selecciones?: Selecciones;
+}): string {
+  const { texto, nRefs, hints = [], selecciones = {} } = opts;
+  const instrucciones = texto.trim() ||
+    'Create a new photorealistic photo of the same woman shown in the reference images, keeping her exact face and identity.';
+  const partes: string[] = [];
+
+  partes.push('Photorealistic image generation using the provided reference images.');
+  if (nRefs > 0) {
+    const lista = Array.from({ length: nRefs }, (_, i) => `image ${i + 1}`).join(', ');
+    partes.push(`The first reference images, named in order (${lista}), are the ones the instructions below refer to.`);
+  }
+  partes.push(
+    "The remaining reference images show, as noted, the woman's face and identity, and when provided her outfit, hairstyle, pose or scene — use each one for what it represents.",
+  );
+  partes.push(
+    "Always keep the woman's face and identity consistent with the person reference image (same face, bone structure, skin tone, freckles, eye color and natural features). Do not change her face.",
+  );
+
+  for (const h of hints) { const t = h.trim(); if (t) partes.push(t); }
+
+  const frags = fragmentosDe(selecciones);
+  if (frags.length) partes.push(frags.join(', ') + '.');
+
+  partes.push(
+    'Keep it fully photographic and realistic: real skin texture with clearly visible pores, fine lines and small natural imperfections (not uniform or perfect skin). ' +
+      'Do NOT smooth, retouch, beautify, soften or over-light the skin. Imperfect, uneven natural lighting with real shadows — no glossy, waxy or glowing highlights. ' +
+      'Make it look like a raw, candid amateur smartphone snapshot, NOT a polished studio shot or an AI/beauty-filter image. ' +
+      'Avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render or AI-generated look. ' +
+      'High resolution, crisp and in sharp focus on her face and eyes, rich fine detail and correct anatomy. No blur, noise, lowres, jpeg artifacts, distortion or deformed fingers.',
+  );
+
+  partes.push(`Instructions: ${instrucciones}`);
+  return partes.join(' ');
+}

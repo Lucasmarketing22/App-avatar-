@@ -52,6 +52,63 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
   .solo-movil { display: none; }
   .solo-desktop { display: block; }
 }
+@media (min-width: 1000px) { .content-inner { max-width: 1280px; } }
+
+/* ---------- Layout estilo Aria (panel + preview/galería) ---------- */
+.aria { display: block; }
+@media (min-width: 1000px) {
+  .aria { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; align-items: start; }
+}
+.aria-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-sm); display: flex; flex-direction: column; overflow: hidden; margin-bottom: 16px; }
+@media (min-width: 1000px) { .aria-panel { position: sticky; top: 14px; max-height: calc(100vh - 70px); margin-bottom: 0; } }
+.aria-pscroll { padding: 13px; overflow-y: auto; }
+.aria-pfoot { padding: 12px 13px; border-top: 1px solid var(--line-2); background: var(--surface-2); }
+.aplbl { font-size: 10px; font-weight: 800; letter-spacing: .07em; color: var(--muted); text-transform: uppercase; margin: 13px 0 7px; }
+.aplbl:first-child { margin-top: 0; }
+
+.apchar { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1.5px solid var(--rosa); border-radius: 12px; padding: 8px 11px; background: #fff; cursor: pointer; font-family: inherit; color: var(--ink); }
+.apchar .th { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; background: linear-gradient(135deg, var(--rosa-soft), var(--violeta-soft)); display: flex; align-items: center; justify-content: center; flex: none; }
+.apchar .th svg { width: 18px; height: 18px; stroke: var(--rosa-strong); fill: none; stroke-width: 1.7; }
+.apchar .lb { font-size: 9px; font-weight: 800; letter-spacing: .08em; color: var(--muted); }
+.apchar .nm { font-size: 14px; font-weight: 700; }
+.apchar .ck { margin-left: auto; width: 20px; height: 20px; border-radius: 50%; background: var(--rosa); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; flex: none; }
+.apchar .chev { margin-left: auto; color: var(--muted); font-size: 18px; }
+
+.apieces { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; margin-top: 10px; }
+.apc { position: relative; border: 1px solid var(--line); border-radius: 11px; padding: 8px 4px; text-align: center; background: #fff; cursor: pointer; font-family: inherit; color: var(--ink); overflow: hidden; }
+.apc.on { border: 1.5px solid var(--rosa); background: var(--rosa-soft); }
+.apc .th { width: 32px; height: 32px; margin: 0 auto 5px; border-radius: 50%; object-fit: cover; background: linear-gradient(135deg, var(--rosa-soft), var(--violeta-soft)); display: flex; align-items: center; justify-content: center; }
+.apc .th svg { width: 15px; height: 15px; stroke: var(--rosa-strong); fill: none; stroke-width: 1.7; }
+.apc .t { font-size: 8px; font-weight: 800; letter-spacing: .03em; color: var(--muted); text-transform: uppercase; }
+.apc .v { font-size: 9.5px; font-weight: 700; margin-top: 1px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.arefbox { border: 1.5px dashed var(--line); border-radius: 11px; padding: 8px; display: flex; gap: 7px; flex-wrap: wrap; align-items: flex-start; }
+.aref { position: relative; width: 46px; height: 46px; border-radius: 9px; overflow: hidden; border: 1px solid var(--line); }
+.aref img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.aref .tag { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(229,57,127,.85); color: #fff; font-size: 7px; font-weight: 700; text-align: center; }
+.aref .x { position: absolute; top: 2px; right: 2px; width: 15px; height: 15px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; font-size: 10px; line-height: 15px; padding: 0; cursor: pointer; }
+.arefadd { width: 46px; height: 46px; border: 1.5px dashed var(--line); border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--rosa); font-size: 18px; cursor: pointer; }
+.arefadd span { font-size: 8px; font-weight: 700; color: var(--muted); }
+
+.afmt { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.afmt .fb { height: 30px; min-width: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 11px; font-weight: 700; color: var(--muted); cursor: pointer; font-family: inherit; }
+.afmt .fb.on { border: 1.5px solid var(--rosa); color: var(--rosa-strong); background: var(--rosa-soft); }
+
+/* Main: preview grande + galería */
+.aria-main { display: flex; flex-direction: column; gap: 16px; }
+.aria-preview { display: flex; justify-content: center; }
+.pv { width: 100%; max-width: 300px; aspect-ratio: 3/4; border-radius: 16px; overflow: hidden; position: relative; border: 3px solid #fff; box-shadow: var(--sh-md); background: var(--surface-2); }
+.pv img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pv .cap { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(20,12,24,.72); color: #fff; font-size: 11px; font-weight: 600; text-align: center; padding: 6px; }
+.pv .sk { width: 100%; height: 100%; background: linear-gradient(100deg,#efe7ec 30%,#f8f1f5 50%,#efe7ec 70%); background-size: 220% 100%; animation: sk 1.15s linear infinite; }
+.pv-empty { width: 100%; max-width: 300px; aspect-ratio: 3/4; border: 1.5px dashed var(--line); border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); text-align: center; padding: 20px; background: var(--surface); }
+.pvactions { display: flex; gap: 7px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+
+/* Consola (barra inferior) */
+.consola { position: fixed; left: 0; right: 0; bottom: 0; background: #171318; color: #b9b2bd; font-size: 11px; padding: 8px 16px; display: none; align-items: center; gap: 14px; z-index: 25; letter-spacing: .02em; }
+@media (min-width: 900px) { .consola { display: flex; left: 76px; } .content { padding-bottom: 46px; } }
+.consola .k { color: #6ee7a8; font-weight: 700; }
+.consola .rr { margin-left: auto; display: flex; gap: 16px; }
 
 /* ---------- Layout pro: 2 columnas (compu) ---------- */
 .crear2 { display: block; }
