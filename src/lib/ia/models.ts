@@ -54,12 +54,13 @@ export const MODELOS: ModeloDef[] = [
   },
   {
     id: 'seedream',
-    label: 'Seedream 4.5',
-    desc: 'Muy realista y nítido (4K). Ideal para fotos de producto/moda.',
+    label: 'Seedream 4.5 (4K)',
+    desc: 'El más realista y nítido, ahora en 4K. El mejor para fotos de moda, bikini y sensual.',
     kieModel: 'seedream/4.5-edit',
     refsField: 'image_urls',
     aspects: COMUNES,
-    extra: (a) => ({ aspect_ratio: a, quality: 'basic' }),
+    // quality 'high' = salida 4K (antes 'basic' = 2K). nsfw_checker off = menos rechazos en tomas sensuales.
+    extra: (a) => ({ aspect_ratio: a, quality: 'high', nsfw_checker: false }),
   },
   {
     id: 'flux',
