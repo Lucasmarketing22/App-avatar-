@@ -72,6 +72,13 @@ export function componerEditor(texto: string, nImgs: number): string {
   );
 }
 
+const REALISMO =
+  'Keep it fully photographic and realistic: real skin texture with clearly visible pores, fine lines and small natural imperfections (not uniform or perfect skin). ' +
+  'Do NOT smooth, retouch, beautify, soften or over-light the skin. Imperfect, uneven natural lighting with real shadows — no glossy, waxy or glowing highlights. ' +
+  'Make it look like a raw, candid amateur smartphone snapshot, NOT a polished studio shot or an AI/beauty-filter image. ' +
+  'Avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render or AI-generated look. ' +
+  'High resolution, crisp and in sharp focus on her face and eyes, rich fine detail and correct anatomy. No blur, noise, lowres, jpeg artifacts, distortion or deformed fingers.';
+
 /**
  * Panel unificado (estilo Aria): combina las REFERENCIAS @imagen (numeradas),
  * la cara del personaje, las piezas (vestido/pose/escena…) y las categorías de
@@ -105,14 +112,33 @@ export function componerUnificado(opts: {
   const frags = fragmentosDe(selecciones);
   if (frags.length) partes.push(frags.join(', ') + '.');
 
-  partes.push(
-    'Keep it fully photographic and realistic: real skin texture with clearly visible pores, fine lines and small natural imperfections (not uniform or perfect skin). ' +
-      'Do NOT smooth, retouch, beautify, soften or over-light the skin. Imperfect, uneven natural lighting with real shadows — no glossy, waxy or glowing highlights. ' +
-      'Make it look like a raw, candid amateur smartphone snapshot, NOT a polished studio shot or an AI/beauty-filter image. ' +
-      'Avoid any plastic, waxy, airbrushed, over-smooth, over-saturated, CGI, 3D-render or AI-generated look. ' +
-      'High resolution, crisp and in sharp focus on her face and eyes, rich fine detail and correct anatomy. No blur, noise, lowres, jpeg artifacts, distortion or deformed fingers.',
-  );
+  partes.push(REALISMO);
 
   partes.push(`Instructions: ${instrucciones}`);
+  return partes.join(' ');
+}
+
+/**
+ * Sesión de fotos: a partir de una foto ya creada (image 1), otras tomas del
+ * MISMO set — mismo escenario, luz, ropa y peinado — cambiando pose y encuadre.
+ * Cada toma es un pedido distinto para que las fotos salgan variadas.
+ */
+export const TOMAS_SESION: string[] = [
+  'a full body shot showing her whole outfit from head to toe, standing in a relaxed natural pose, camera at chest height',
+  'a close-up portrait of her face and shoulders, looking at the camera with a soft natural expression',
+  'a medium shot from a three-quarter side angle, walking or moving naturally, a candid moment as if she did not notice the camera',
+  'a medium shot of her sitting or leaning on something in the same place, relaxed pose, looking away from the camera',
+];
+
+export function componerSesion(toma: string, conCaras: boolean): string {
+  const partes: string[] = [
+    'Photorealistic photoshoot continuation. Image 1 is a photo from an ongoing photo session.',
+    'Keep EXACTLY the same location, background and setting, the same lighting, weather and time of day, and the same outfit (every garment, color, fabric, pattern and accessory) and the same hairstyle and makeup as in image 1.',
+    conCaras
+      ? "The other reference images show the woman's face and identity: keep her face exactly the same (same face, bone structure, skin tone, freckles, eye color and natural features)."
+      : 'Keep the woman exactly the same person as in image 1 (same face, bone structure, skin tone, freckles, eye color and natural features).',
+    `Create a NEW, different photo from this same session: ${toma}. Do not copy the pose, angle or framing of image 1.`,
+    REALISMO,
+  ];
   return partes.join(' ');
 }
