@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
-import { componerUnificado } from '@/lib/estudio/prompt';
+import { componerSesion, componerUnificado, TOMAS_SESION } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
@@ -224,33 +224,37 @@ export default function Estudio() {
 
   type GenMeta = { aspect: string; modelo: ModeloId };
 
-  /** Lanza N generaciones en paralelo (una por cada "cantidad") y las va mostrando. */
-  async function lanzar(prompt: string, imageUrls: string[], meta: GenMeta) {
+  /**
+   * Lanza generaciones en paralelo y las va mostrando. Con un solo prompt hace
+   * tantas copias como "cantidad"; con una lista (sesión de fotos) hace un
+   * pedido por cada prompt.
+   */
+  async function lanzar(prompt: string | string[], imageUrls: string[], meta: GenMeta, aviso?: string) {
     setAbierto(null); setError(''); setResultUrls([]);
     pollTimers.current.forEach(clearTimeout); pollTimers.current.clear();
     setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
-    const n = Math.max(1, Math.min(4, cantidad));
-    const taskIds: string[] = [];
+    const prompts = Array.isArray(prompt) ? prompt : Array.from({ length: Math.max(1, Math.min(4, cantidad)) }, () => prompt);
+    const tareas: { id: string; prompt: string }[] = [];
     let ultimoError = '';
     // Los pedidos salen todos a la vez (antes iban de a uno).
-    await Promise.all(Array.from({ length: n }, async () => {
+    await Promise.all(prompts.map(async (pr) => {
       try {
-        const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: meta.aspect, modelo: meta.modelo }) });
+        const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: pr, imageUrls, aspect: meta.aspect, modelo: meta.modelo }) });
         const data = await res.json().catch(() => ({}));
-        if (res.ok && data.taskId) taskIds.push(data.taskId);
+        if (res.ok && data.taskId) tareas.push({ id: data.taskId, prompt: pr });
         else ultimoError = data.error ?? 'No se pudo crear la generación.';
       } catch { ultimoError = 'No se pudo conectar. Probá de nuevo.'; }
     }));
-    if (!taskIds.length) { setError(ultimoError || 'No se pudo crear la generación.'); setPhase('error'); return; }
-    setPhase('polling'); setStatusMsg(`Generando ${taskIds.length} ${taskIds.length > 1 ? 'opciones' : 'imagen'}… (puede tardar ~1 minuto)`);
-    let remaining = taskIds.length;
+    if (!tareas.length) { setError(ultimoError || 'No se pudo crear la generación.'); setPhase('error'); return; }
+    setPhase('polling'); setStatusMsg(aviso ?? `Generando ${tareas.length} ${tareas.length > 1 ? 'opciones' : 'imagen'}… (puede tardar ~1 minuto)`);
+    let remaining = tareas.length;
     let gotAny = false;
     const finishOne = (ok: boolean) => {
       if (ok) gotAny = true;
       remaining -= 1;
       if (remaining <= 0) { setPhase('done'); setStatusMsg(''); if (!gotAny) setError((p) => p || 'No salió ninguna imagen. Probá de nuevo.'); }
     };
-    taskIds.forEach((id) => pollOne(id, 0, prompt, imageUrls, meta, finishOne));
+    tareas.forEach((t) => pollOne(t.id, 0, t.prompt, imageUrls, meta, finishOne));
   }
 
   // Espera hasta ~10 minutos: Nano Banana Pro a veces tarda varios minutos
@@ -304,6 +308,25 @@ export default function Estudio() {
     const a = c.aspect || aspect;
     setLightbox(null); setVista('crear'); setModelo(m); setAspect(a);
     lanzar(c.prompt, c.refs, { aspect: a, modelo: m });
+  }
+
+  /**
+   * Sesión de fotos: 4 tomas nuevas del mismo escenario y vestuario de una foto.
+   * Usa la foto como image 1 y las caras de la modelo que salía en ella (si no
+   * se sabe, la modelo elegida).
+   */
+  function sesionDeFotos(c: Creacion) {
+    if (busy) return;
+    const deLaFoto = modelas.find((m) => m.refs.some((u) => c.refs?.includes(u)));
+    const caras = (deLaFoto ?? personaje).refs;
+    const a = c.aspect || aspect;
+    setLightbox(null); setVista('crear'); setAspect(a);
+    lanzar(
+      TOMAS_SESION.map((t) => componerSesion(t, caras.length > 0)),
+      [c.url, ...caras],
+      { aspect: a, modelo },
+      `📸 Sesión de fotos: generando ${TOMAS_SESION.length} tomas del mismo set… (puede tardar ~1 minuto)`,
+    );
   }
 
   async function mejorar(c: Creacion) {
@@ -549,6 +572,9 @@ export default function Estudio() {
                       <button className="btn-soft" disabled={!!mejorando} onClick={() => mejorar(previewActual)}>{mejorando ? 'Mejorando…' : '🔎 Mejorar'}</button>
                       {previewActual.prompt && previewActual.refs?.length ? <button className="btn-soft" onClick={() => variar(previewActual)}>🔁 Variar</button> : null}
                     </div>
+                    <button className="btn-grad shine sesion-btn" disabled={busy} onClick={() => sesionDeFotos(previewActual)}>
+                      📸 Sesión de fotos <span className="sesion-n">{TOMAS_SESION.length} tomas</span>
+                    </button>
                   </div>
                 ) : (
                   <div className="pv-empty">
@@ -803,8 +829,11 @@ export default function Estudio() {
                 {mejorando ? 'Mejorando…' : '🔎 Mejorar'}
               </button>
             </div>
+            <button className="btn-grad shine" disabled={busy} style={{ width: '100%', marginTop: 10 }} onClick={() => { const c = lightbox; if (c) sesionDeFotos(c); }}>
+              {busy ? 'Generando…' : `📸 Sesión de fotos · ${TOMAS_SESION.length} tomas`}
+            </button>
             {lightbox.prompt && lightbox.refs && lightbox.refs.length ? (
-              <button className="btn-grad shine" disabled={busy} style={{ width: '100%', marginTop: 10 }} onClick={() => { const c = lightbox; if (c) variar(c); }}>
+              <button className="btn-ghost" disabled={busy} style={{ width: '100%', marginTop: 10 }} onClick={() => { const c = lightbox; if (c) variar(c); }}>
                 {busy ? 'Generando…' : '🔁 Repetir / Variar (crear parecidas)'}
               </button>
             ) : null}
