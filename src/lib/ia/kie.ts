@@ -26,6 +26,7 @@ export type CreateResult =
 export async function createTask(
   model: string,
   input: Record<string, unknown>,
+  callBackUrl?: string,
 ): Promise<CreateResult> {
   if (!process.env.KIE_API_KEY) {
     return { ok: false, error: 'Falta configurar la clave de Kie (KIE_API_KEY).' };
@@ -37,7 +38,7 @@ export async function createTask(
       method: 'POST',
       headers: authHeaders(),
       cache: 'no-store',
-      body: JSON.stringify({ model, input }),
+      body: JSON.stringify(callBackUrl ? { model, callBackUrl, input } : { model, input }),
     });
   } catch {
     return { ok: false, error: 'No se pudo conectar con Kie.ai. Probá de nuevo.' };
