@@ -122,6 +122,13 @@ function friendlyMessage(msg?: string): string {
 
 function friendlyFail(failMsg?: string): string {
   const m = (failMsg ?? '').toLowerCase();
+  // Motion control: no encontró una persona en el video o en la foto.
+  if (m.includes('character') && m.includes('video')) {
+    return 'La IA no encontró a una persona en el video de referencia. Usá un video donde se vea UNA sola persona, clara y de frente, de la cabeza a la cintura (no muy lejos, bien iluminada, sin textos ni partes de la pantalla de TikTok/Instagram encima).';
+  }
+  if (m.includes('character') && (m.includes('image') || m.includes('picture') || m.includes('photo'))) {
+    return 'La IA no encontró a tu modelo en la foto. Elegí una foto donde se la vea clara, de la cabeza a la cintura (mejor medio cuerpo o cuerpo entero).';
+  }
   if (m.includes('nsfw') || m.includes('sensitive') || m.includes('content') || m.includes('policy')) {
     return 'La IA rechazó la imagen por su contenido. Probá con otra descripción.';
   }
