@@ -6,7 +6,7 @@ import { SESSION_COOKIE, sessionToken } from '@/lib/auth';
  * Candado de la app: todo requiere haber entrado con la contraseña única,
  * excepto la propia pantalla de login y su API.
  */
-const PUBLIC_PATHS = new Set(['/login', '/api/login', '/api/health']);
+const PUBLIC_PATHS = new Set(['/login', '/api/login', '/api/health', '/api/kie-callback']);
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

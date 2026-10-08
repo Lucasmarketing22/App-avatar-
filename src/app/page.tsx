@@ -70,10 +70,11 @@ export default function Estudio() {
   const [haciendoVideo, setHaciendoVideo] = useState<string | null>(null);
   const [vidMsg, setVidMsg] = useState('');
   // Motion control: video de referencia + foto de la modelo.
-  const [mVideo, setMVideo] = useState<{ url: string; dur: number } | null>(null);
+  const [mModo, setMModo] = useState<'mover' | 'reemplazar'>('mover');
+  const [mVideo, setMVideo] = useState<{ url: string; dur: number; mb: number } | null>(null);
   const [mFoto, setMFoto] = useState<string | null>(null);
   const [mOri, setMOri] = useState<'video' | 'image'>('video');
-  const [mCal, setMCal] = useState<'720p' | '1080p'>('720p');
+  const [mCal, setMCal] = useState<'480p' | '720p' | '1080p'>('720p');
   const [mTxt, setMTxt] = useState('');
   const [mSubiendo, setMSubiendo] = useState(0); // % de subida del video (0 = no está subiendo)
   const [mSubiendoFoto, setMSubiendoFoto] = useState(false);
@@ -442,7 +443,7 @@ export default function Estudio() {
         onUploadProgress: (p) => { if (!terminado) setMSubiendo(Math.min(99, Math.max(1, Math.round(p.percentage)))); },
       });
       terminado = true;
-      setMVideo({ url: blob.url, dur });
+      setMVideo({ url: blob.url, dur, mb: f.size / (1024 * 1024) });
     } catch (err) {
       setMError(err instanceof Error && err.message ? `No se pudo subir el video: ${err.message}` : 'No se pudo subir el video. Probá de nuevo.');
     } finally { terminado = true; setMSubiendo(0); }
@@ -455,12 +456,18 @@ export default function Estudio() {
     catch (err) { setMError(err instanceof Error ? err.message : 'No se pudo subir la foto.'); }
     finally { setMSubiendoFoto(false); }
   }
+  // "Reemplazar en el video" (Wan) acepta videos de hasta 10 MB.
+  const mPesado = mModo === 'reemplazar' && !!mVideo && mVideo.mb > 10;
+  function elegirModoMotion(m: 'mover' | 'reemplazar') {
+    setMModo(m); setMError('');
+    setMCal('720p');
+  }
   async function generarMotion() {
-    if (haciendoVideo || !mVideo || !mFoto) return;
+    if (haciendoVideo || !mVideo || !mFoto || mPesado) return;
     setMError(''); setError(''); setHaciendoVideo('motion');
     setVidMsg('🕺 Creando el video con movimiento… Tarda unos minutos; podés seguir usando la app.');
     try {
-      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: mFoto, videoUrl: mVideo.url, prompt: mTxt.trim() || undefined, orientacion: mOri, calidad: mCal }) });
+      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: mFoto, videoUrl: mVideo.url, prompt: mModo === 'mover' ? (mTxt.trim() || undefined) : undefined, orientacion: mOri, calidad: mCal }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
       pollVideo(data.taskId, 0);
@@ -685,16 +692,29 @@ export default function Estudio() {
         ) : vista === 'motion' ? (
           <>
             <h1 className="h1" style={{ marginBottom: 6 }}>🕺 Motion control</h1>
-            <p className="sub" style={{ marginTop: 0, marginBottom: 14 }}>Tu modelo hace los mismos movimientos que la persona del video: un baile, un trend, un gesto.</p>
+            <p className="sub" style={{ marginTop: 0, marginBottom: 14 }}>Copiá un baile, un trend o un gesto con tu modelo. Elegí cómo:</p>
+
+            <div className="mmodos">
+              <button className={`mmodo ${mModo === 'mover' ? 'on' : ''}`} onClick={() => elegirModoMotion('mover')}>
+                <span className="mm-t">🕺 Mover mi foto</span>
+                <span className="mm-d">Tu modelo hace los movimientos del video, en el escenario de tu foto. Kling 3.0.</span>
+              </button>
+              <button className={`mmodo ${mModo === 'reemplazar' ? 'on' : ''}`} onClick={() => elegirModoMotion('reemplazar')}>
+                <span className="mm-t">🔁 Reemplazar en el video</span>
+                <span className="mm-d">Queda el video original (lugar, cámara, luz) y la persona pasa a ser tu modelo. Ideal para replicar trends.</span>
+              </button>
+            </div>
+
+            <div className="mtip">💡 <b>Clave para que salga bien:</b> usá una foto de tu modelo con el <b>mismo encuadre</b> que el video. Si el video es un baile de cuerpo entero, elegí una foto de cuerpo entero. Una sola persona en el video, bien visible.</div>
 
             <div className="panel" style={{ marginBottom: 14 }}>
               <div className="h2" style={{ marginBottom: 6 }}>1. Video de referencia</div>
-              <p className="sub" style={hintS}>De 3 a 30 segundos y hasta 100 MB. Que se vea bien a la persona, de la cabeza a la cintura.</p>
+              <p className="sub" style={hintS}>{mModo === 'reemplazar' ? 'De 3 a 30 segundos y hasta 10 MB (unos 10–15 s de video de celular).' : 'De 3 a 30 segundos y hasta 100 MB.'} Una sola persona, bien visible, de la cabeza a la cintura o cuerpo entero.</p>
               {mVideo ? (
                 <div className="mvid">
                   <video src={mVideo.url} controls playsInline preload="metadata" />
                   <div className="mvid-info">
-                    <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b></span>
+                    <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b> · <b>{mVideo.mb.toFixed(1)} MB</b></span>
                     <button className="btn-soft" onClick={() => setMVideo(null)}>Cambiar video</button>
                   </div>
                 </div>
@@ -709,7 +729,7 @@ export default function Estudio() {
 
             <div className="panel" style={{ marginBottom: 14 }}>
               <div className="h2" style={{ marginBottom: 6 }}>2. Foto de tu modelo</div>
-              <p className="sub" style={hintS}>Elegí una foto donde se la vea de la cabeza a la cintura (mejor medio cuerpo o cuerpo entero).</p>
+              <p className="sub" style={hintS}>Elegí una foto con el mismo encuadre que el video (cuerpo entero si el video es de cuerpo entero).</p>
               <div className="mfotos">
                 <label className="upload-tile mfoto-add">
                   <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onSubirFotoMotion} style={{ display: 'none' }} />
@@ -727,23 +747,37 @@ export default function Estudio() {
 
             <div className="panel" style={{ marginBottom: 14 }}>
               <div className="h2" style={{ marginBottom: 2 }}>3. Opciones</div>
-              <div className="aplbl" style={{ marginTop: 12 }}>Encuadre</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className={`opt ${mOri === 'video' ? 'on' : ''}`} onClick={() => setMOri('video')}>Como en el video · hasta 30 s</button>
-                <button className={`opt ${mOri === 'image' ? 'on' : ''}`} onClick={() => setMOri('image')}>Como en la foto · hasta 10 s</button>
-              </div>
-              <div className="aplbl">Calidad</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className={`opt ${mCal === '720p' ? 'on' : ''}`} onClick={() => setMCal('720p')}>720p · más barato</button>
-                <button className={`opt ${mCal === '1080p' ? 'on' : ''}`} onClick={() => setMCal('1080p')}>1080p · más nítido</button>
-              </div>
-              <div className="aplbl">Detalle (opcional)</div>
-              <input className="input" value={mTxt} onChange={(e) => setMTxt(e.target.value)} placeholder="Ej: sonríe a cámara al final" style={{ width: '100%', boxSizing: 'border-box' }} />
+              {mModo === 'mover' ? (
+                <>
+                  <div className="aplbl" style={{ marginTop: 12 }}>Encuadre</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className={`opt ${mOri === 'video' ? 'on' : ''}`} onClick={() => setMOri('video')}>Como en el video · hasta 30 s</button>
+                    <button className={`opt ${mOri === 'image' ? 'on' : ''}`} onClick={() => setMOri('image')}>Como en la foto · hasta 10 s</button>
+                  </div>
+                  <p className="sub" style={{ fontSize: 12, margin: '6px 0 0' }}>Para bailes y trends: “Como en el video”. Para un gesto con el fondo de tu foto: “Como en la foto”.</p>
+                  <div className="aplbl">Calidad</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className={`opt ${mCal === '720p' ? 'on' : ''}`} onClick={() => setMCal('720p')}>720p · más barato</button>
+                    <button className={`opt ${mCal === '1080p' ? 'on' : ''}`} onClick={() => setMCal('1080p')}>1080p · más nítido</button>
+                  </div>
+                  <div className="aplbl">Detalle (opcional)</div>
+                  <input className="input" value={mTxt} onChange={(e) => setMTxt(e.target.value)} placeholder="Ej: smiles at the camera at the end" style={{ width: '100%', boxSizing: 'border-box' }} />
+                </>
+              ) : (
+                <>
+                  <div className="aplbl" style={{ marginTop: 12 }}>Calidad</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button className={`opt ${mCal === '480p' ? 'on' : ''}`} onClick={() => setMCal('480p')}>480p · más barato</button>
+                    <button className={`opt ${mCal === '720p' ? 'on' : ''}`} onClick={() => setMCal('720p')}>720p · más nítido</button>
+                  </div>
+                </>
+              )}
             </div>
 
-            {mOri === 'image' && mVideo && mVideo.dur > 10 ? <p className="sub" style={{ fontSize: 12, margin: '0 0 10px' }}>⚠️ Con “Como en la foto” el video sale de 10 segundos como máximo.</p> : null}
-            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || !!haciendoVideo || mSubiendo > 0} onClick={generarMotion}>
-              {haciendoVideo === 'motion' ? 'Creando video…' : '🕺 Generar video con movimiento'}
+            {mPesado ? <p className="errbox" style={{ margin: '0 0 10px' }}>Para “Reemplazar en el video” el video tiene que pesar hasta 10 MB (este pesa {mVideo?.mb.toFixed(1)} MB). Recortalo o usá “Mover mi foto”.</p> : null}
+            {mModo === 'mover' && mOri === 'image' && mVideo && mVideo.dur > 10 ? <p className="sub" style={{ fontSize: 12, margin: '0 0 10px' }}>⚠️ Con “Como en la foto” el video sale de 10 segundos como máximo.</p> : null}
+            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || !!haciendoVideo || mSubiendo > 0 || mPesado} onClick={generarMotion}>
+              {haciendoVideo === 'motion' ? 'Creando video…' : mModo === 'reemplazar' ? '🔁 Reemplazar con mi modelo' : '🕺 Generar video con movimiento'}
             </button>
             {!haciendoVideo && (!mVideo || !mFoto) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta {!mVideo && !mFoto ? 'subir el video y elegir la foto' : !mVideo ? 'subir el video' : 'elegir la foto'}.</p> : null}
             {vidMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
