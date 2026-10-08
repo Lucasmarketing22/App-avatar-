@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+import { upload } from '@vercel/blob/client';
 
 import { componerSesion, componerUnificado, TOMAS_SESION } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
@@ -13,7 +14,7 @@ const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
-type Vista = 'crear' | 'galeria' | 'voz';
+type Vista = 'crear' | 'galeria' | 'voz' | 'motion';
 
 const ASPECTS = ['3:4', '1:1', '4:5', '9:16', '16:9', '4:3'];
 
@@ -68,6 +69,15 @@ export default function Estudio() {
   const [motion, setMotion] = useState('');
   const [haciendoVideo, setHaciendoVideo] = useState<string | null>(null);
   const [vidMsg, setVidMsg] = useState('');
+  // Motion control: video de referencia + foto de la modelo.
+  const [mVideo, setMVideo] = useState<{ url: string; dur: number } | null>(null);
+  const [mFoto, setMFoto] = useState<string | null>(null);
+  const [mOri, setMOri] = useState<'video' | 'image'>('video');
+  const [mCal, setMCal] = useState<'720p' | '1080p'>('720p');
+  const [mTxt, setMTxt] = useState('');
+  const [mSubiendo, setMSubiendo] = useState(0); // % de subida del video (0 = no está subiendo)
+  const [mSubiendoFoto, setMSubiendoFoto] = useState(false);
+  const [mError, setMError] = useState('');
   const [copiado, setCopiado] = useState(false);
 
   // ----- Voz (Fish Audio) -----
@@ -380,7 +390,8 @@ export default function Estudio() {
     } catch { setError('No se pudo conectar.'); setHaciendoVideo(null); setVidMsg(''); }
   }
   function pollVideo(taskId: string, tries: number) {
-    if (tries > 90) { setError('El video tardó demasiado. Probá de nuevo.'); setHaciendoVideo(null); setVidMsg(''); return; }
+    // Hasta ~15 min: los videos (sobre todo Motion de 30 s) pueden tardar bastante.
+    if (tries > 120) { setError('El video tardó demasiado. Probá de nuevo.'); setHaciendoVideo(null); setVidMsg(''); return; }
     vidTimer.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
@@ -393,7 +404,67 @@ export default function Estudio() {
         if (data.state === 'fail' || (!res.ok && data.error)) { setError(data.error ?? 'El video falló.'); setHaciendoVideo(null); setVidMsg(''); return; }
         pollVideo(taskId, tries + 1);
       } catch { pollVideo(taskId, tries + 1); }
-    }, 3000);
+    }, tries < 20 ? 3000 : 8000);
+  }
+
+  /* ----- Motion control ----- */
+  function duracionDe(file: File): Promise<number> {
+    return new Promise((resolve) => {
+      const u = URL.createObjectURL(file);
+      const v = document.createElement('video');
+      v.preload = 'metadata';
+      v.onloadedmetadata = () => { const d = v.duration; URL.revokeObjectURL(u); resolve(Number.isFinite(d) ? d : 0); };
+      v.onerror = () => { URL.revokeObjectURL(u); resolve(0); };
+      v.src = u;
+    });
+  }
+  async function onSubirVideoMotion(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    setMError('');
+    if (f.size > 100 * 1024 * 1024) { setMError('El video pesa más de 100 MB. Recortalo o grabalo en menor calidad y volvé a subirlo.'); return; }
+    const dur = await duracionDe(f);
+    if (dur && dur < 3) { setMError('El video tiene que durar al menos 3 segundos.'); return; }
+    if (dur > 30.5) { setMError(`El video dura ${Math.round(dur)} segundos y el máximo es 30. Recortalo y volvé a subirlo.`); return; }
+    setMSubiendo(1);
+    // El aviso de progreso puede llegar DESPUÉS de terminar la subida: lo
+    // ignoramos para que no quede trabado en "Subiendo…".
+    let terminado = false;
+    try {
+      const ext = (f.name.split('.').pop() || 'mp4').toLowerCase();
+      const tipo = f.type || (ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4');
+      // Sube DIRECTO al almacenamiento (sin pasar por el servidor de la app).
+      const blob = await upload(`motion/referencia.${ext}`, f, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-video',
+        contentType: tipo,
+        multipart: f.size > 8 * 1024 * 1024,
+        onUploadProgress: (p) => { if (!terminado) setMSubiendo(Math.min(99, Math.max(1, Math.round(p.percentage)))); },
+      });
+      terminado = true;
+      setMVideo({ url: blob.url, dur });
+    } catch (err) {
+      setMError(err instanceof Error && err.message ? `No se pudo subir el video: ${err.message}` : 'No se pudo subir el video. Probá de nuevo.');
+    } finally { terminado = true; setMSubiendo(0); }
+  }
+  async function onSubirFotoMotion(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    setMError(''); setMSubiendoFoto(true);
+    try { setMFoto(await subir(f, 'refs')); }
+    catch (err) { setMError(err instanceof Error ? err.message : 'No se pudo subir la foto.'); }
+    finally { setMSubiendoFoto(false); }
+  }
+  async function generarMotion() {
+    if (haciendoVideo || !mVideo || !mFoto) return;
+    setMError(''); setError(''); setHaciendoVideo('motion');
+    setVidMsg('🕺 Creando el video con movimiento… Tarda unos minutos; podés seguir usando la app.');
+    try {
+      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: mFoto, videoUrl: mVideo.url, prompt: mTxt.trim() || undefined, orientacion: mOri, calidad: mCal }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
+      pollVideo(data.taskId, 0);
+    } catch { setMError('No se pudo conectar. Probá de nuevo.'); setHaciendoVideo(null); setVidMsg(''); }
   }
 
   async function borrarCreacion(c: Creacion) {
@@ -450,6 +521,7 @@ export default function Estudio() {
         <button className={`rail-ic ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><Icon name="sparkles" /><span>Crear</span></button>
         <button className={`rail-ic ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><Icon name="galeria" /><span>Galería</span></button>
         <button className={`rail-ic ${vista === 'voz' ? 'on' : ''}`} onClick={() => setVista('voz')}><Icon name="voz" /><span>Voz</span></button>
+        <button className={`rail-ic ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><Icon name="motion" /><span>Motion</span></button>
         <div className="rail-sep" />
         <button className="rail-ic" onClick={() => { setVista('crear'); setAbierto('personaje'); }} title="Personaje"><Icon name="user" /><span>Personaje</span></button>
         <button className="rail-ic" onClick={() => { setVista('crear'); setAbierto('vestidos'); }} title="Vestido"><Icon name="shirt" /><span>Vestido</span></button>
@@ -610,6 +682,74 @@ export default function Estudio() {
               </div>
             </div>
           </div>
+        ) : vista === 'motion' ? (
+          <>
+            <h1 className="h1" style={{ marginBottom: 6 }}>🕺 Motion control</h1>
+            <p className="sub" style={{ marginTop: 0, marginBottom: 14 }}>Tu modelo hace los mismos movimientos que la persona del video: un baile, un trend, un gesto.</p>
+
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="h2" style={{ marginBottom: 6 }}>1. Video de referencia</div>
+              <p className="sub" style={hintS}>De 3 a 30 segundos y hasta 100 MB. Que se vea bien a la persona, de la cabeza a la cintura.</p>
+              {mVideo ? (
+                <div className="mvid">
+                  <video src={mVideo.url} controls playsInline preload="metadata" />
+                  <div className="mvid-info">
+                    <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b></span>
+                    <button className="btn-soft" onClick={() => setMVideo(null)}>Cambiar video</button>
+                  </div>
+                </div>
+              ) : (
+                <label className="upload-tile mup">
+                  <input type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={onSubirVideoMotion} disabled={mSubiendo > 0} style={{ display: 'none' }} />
+                  <span style={{ fontSize: 26, color: 'var(--rosa)' }}>＋</span>
+                  <span className="sub" style={{ fontSize: 13, marginTop: 4 }}>{mSubiendo ? `Subiendo… ${mSubiendo}%` : 'Subir video'}</span>
+                </label>
+              )}
+            </div>
+
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="h2" style={{ marginBottom: 6 }}>2. Foto de tu modelo</div>
+              <p className="sub" style={hintS}>Elegí una foto donde se la vea de la cabeza a la cintura (mejor medio cuerpo o cuerpo entero).</p>
+              <div className="mfotos">
+                <label className="upload-tile mfoto-add">
+                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onSubirFotoMotion} style={{ display: 'none' }} />
+                  <span style={{ fontSize: 20, color: 'var(--rosa)' }}>＋</span>
+                  <span className="sub" style={{ fontSize: 11, marginTop: 2, textAlign: 'center' }}>{mSubiendoFoto ? 'Subiendo…' : 'Subir foto'}</span>
+                </label>
+                {(mFoto && !creaciones.some((c) => c.url === mFoto) ? [mFoto, ...creaciones.map((c) => c.url)] : creaciones.map((c) => c.url)).map((u) => (
+                  <button key={u} className={`mfoto ${mFoto === u ? 'on' : ''}`} onClick={() => setMFoto(u)}>
+                    <Image src={u} alt="" fill sizes="90px" />
+                    {mFoto === u ? <span className="ck">✓</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="h2" style={{ marginBottom: 2 }}>3. Opciones</div>
+              <div className="aplbl" style={{ marginTop: 12 }}>Encuadre</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className={`opt ${mOri === 'video' ? 'on' : ''}`} onClick={() => setMOri('video')}>Como en el video · hasta 30 s</button>
+                <button className={`opt ${mOri === 'image' ? 'on' : ''}`} onClick={() => setMOri('image')}>Como en la foto · hasta 10 s</button>
+              </div>
+              <div className="aplbl">Calidad</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className={`opt ${mCal === '720p' ? 'on' : ''}`} onClick={() => setMCal('720p')}>720p · más barato</button>
+                <button className={`opt ${mCal === '1080p' ? 'on' : ''}`} onClick={() => setMCal('1080p')}>1080p · más nítido</button>
+              </div>
+              <div className="aplbl">Detalle (opcional)</div>
+              <input className="input" value={mTxt} onChange={(e) => setMTxt(e.target.value)} placeholder="Ej: sonríe a cámara al final" style={{ width: '100%', boxSizing: 'border-box' }} />
+            </div>
+
+            {mOri === 'image' && mVideo && mVideo.dur > 10 ? <p className="sub" style={{ fontSize: 12, margin: '0 0 10px' }}>⚠️ Con “Como en la foto” el video sale de 10 segundos como máximo.</p> : null}
+            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || !!haciendoVideo || mSubiendo > 0} onClick={generarMotion}>
+              {haciendoVideo === 'motion' ? 'Creando video…' : '🕺 Generar video con movimiento'}
+            </button>
+            {!haciendoVideo && (!mVideo || !mFoto) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta {!mVideo && !mFoto ? 'subir el video y elegir la foto' : !mVideo ? 'subir el video' : 'elegir la foto'}.</p> : null}
+            {vidMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
+            {mError || error ? <p className="errbox" style={{ marginTop: 10 }}>{mError || error}</p> : null}
+            <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos.</p>
+          </>
         ) : vista === 'voz' ? (
           <>
             <h1 className="h1" style={{ marginBottom: 10 }}>🎙️ Voz de tu modelo</h1>
@@ -711,6 +851,7 @@ export default function Estudio() {
         <button className={`tab ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><span className="ti"><Icon name="sparkles" /></span>Crear</button>
         <button className={`tab ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><span className="ti"><Icon name="galeria" /></span>Galería</button>
         <button className={`tab ${vista === 'voz' ? 'on' : ''}`} onClick={() => setVista('voz')}><span className="ti"><Icon name="voz" /></span>Voz</button>
+        <button className={`tab ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><span className="ti"><Icon name="motion" /></span>Motion</button>
         <button className="tab" onClick={salir}><span className="ti"><Icon name="salir" /></span>Salir</button>
       </nav>
 
@@ -843,6 +984,9 @@ export default function Estudio() {
                 {haciendoVideo ? 'Creando video…' : '🎬 Crear video'}
               </button>
               <p className="sub" style={{ margin: '8px 0 0', fontSize: 12 }}>El video (Veo 3.1) tarda 1–4 min y gasta más crédito que una foto.</p>
+              <button className="btn-ghost" style={{ width: '100%', marginTop: 10 }} onClick={() => { const c = lightbox; setLightbox(null); if (c) { setMFoto(c.url); setVista('motion'); } }}>
+                🕺 Usar esta foto en Motion (copiar un baile o trend)
+              </button>
             </div>
             <button
               className="btn-ghost"
@@ -886,6 +1030,7 @@ function Icon({ name }: { name?: string }) {
     palette: <><path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-.9-.5-1.3-.3-.4-.5-.8-.5-1.2 0-.8.7-1.5 1.5-1.5H17a4 4 0 0 0 4-4c0-5-4-9-9-9z" /><circle cx="7.5" cy="10.5" r="1" /><circle cx="12" cy="7.5" r="1" /><circle cx="16.5" cy="10.5" r="1" /></>,
     crop: <><path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M2 6h14a2 2 0 0 1 2 2v14" /></>,
     pencil: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></>,
+    motion: <><circle cx="14" cy="4.5" r="2" /><path d="M14 6.5l-1.5 6 3 3.5v5" /><path d="M12.5 12.5l-3 2.5-1.5 5" /><path d="M9 9l4-1.5 3 3 3-1" /><path d="M3.5 8.5c1.2-1.4 1.2-3.6 0-5M6 10.5c1.8-2.2 1.8-5.8 0-8" /></>,
     chip: <><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></>,
   };
   return <svg className="ico" viewBox="0 0 24 24" aria-hidden="true">{p[name ?? 'image'] ?? p.image}</svg>;
