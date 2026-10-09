@@ -185,3 +185,22 @@ export function componerCambioAvatar(
     REALISMO,
   ].filter(Boolean).join(' ');
 }
+
+/**
+ * Motion "Mismo escenario que el video": image 1 es un cuadro del video
+ * original. Se recrea esa misma foto (lugar, luz, postura, ropa, encuadre)
+ * pero con la cara y el cuerpo de la modelo, para usarla como primer cuadro.
+ */
+export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?: string): string {
+  const instr = instrucciones.trim();
+  return [
+    'Image 1 is a frame taken from a video. Recreate EXACTLY this same photo: the same place, background, bed or furniture, sheets, objects, lighting, light direction, colors, time of day, camera angle, lens, distance and framing.',
+    "Keep the person's exact body pose and position from image 1 (lying down, sitting, leaning, head and arm positions, where she looks) and the same outfit, so it matches the first frame of that video.",
+    conCaras
+      ? 'Replace ONLY the person with the woman from the other reference images: her face, identity, bone structure, face width, skin tone, freckles, eye color and hair (color, length and style) must be exactly hers. Nothing of the original person’s face may remain.'
+      : 'Keep the same woman.',
+    instr ? `Also apply this change and keep everything else unchanged: ${instr}.` : '',
+    pistaCuerpo(cuerpo),
+    REALISMO,
+  ].filter(Boolean).join(' ');
+}

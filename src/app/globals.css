@@ -343,3 +343,11 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .pv-gen .gen { flex-direction: column; text-align: center; gap: 10px; }
 .pv-gen .gen-ring { width: 54px; height: 54px; }
 @media (prefers-reduced-motion: reduce) { .gen-ring { animation-duration: 2s; } }
+
+/* ---------- Motion: mismo escenario que el video ---------- */
+.mescena { border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 12px; margin: 4px 0 12px; background: var(--surface); }
+.mescena.on { border-color: var(--rosa); background: var(--rosa-soft); }
+.mescena-ck { display: flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+.mescena-body { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }
+.mescena-th { position: relative; flex: none; width: 64px; height: 96px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--surface-2); }
+.mescena-th img { object-fit: cover; }
