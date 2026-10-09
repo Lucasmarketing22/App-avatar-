@@ -21,7 +21,7 @@ const PROMPT_MOVER =
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { modo?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string }
+    | { modo?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string }
     | null;
 
   const imageUrl = typeof body?.imageUrl === 'string' && body.imageUrl.startsWith('http') ? body.imageUrl : '';
@@ -46,7 +46,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ taskId: result.taskId });
   }
 
-  const extra = (body?.prompt ?? '').trim();
+  const cuerpo = (body?.cuerpo ?? '').trim().slice(0, 200);
+  const extra = [
+    cuerpo ? `Her body shape and measurements must stay: ${cuerpo}; her face stays exactly as in the reference image.` : '',
+    (body?.prompt ?? '').trim(),
+  ].filter(Boolean).join(' ');
   const result = await createTask(
     'kling-3.0/motion-control',
     {
