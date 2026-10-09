@@ -318,3 +318,6 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .mmodo .mm-d { font-size: 11.5px; line-height: 1.35; color: var(--muted); }
 .mtip { font-size: 12.5px; line-height: 1.45; background: var(--violeta-soft); border: 1px solid #ddd3f6; border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; color: var(--ink); }
 .vence { position: absolute; top: 6px; left: 6px; z-index: 1; background: rgba(20,12,24,.72); color: #fff; font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; pointer-events: none; }
+.costo { margin: 8px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.costo.ok { color: var(--ink); background: #eaf7ef; border: 1px solid #c9ead5; border-radius: 10px; padding: 7px 10px; }
+.stat .saldo { font-size: 12px; white-space: nowrap; }

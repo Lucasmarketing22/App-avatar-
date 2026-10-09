@@ -12,7 +12,7 @@ import { MODELOS, type ModeloId } from '@/lib/ia/models';
 type Personaje = { id: string; nombre: string; refs: string[] };
 const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
-type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string };
+type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
 type Vista = 'crear' | 'galeria' | 'voz' | 'motion';
 
@@ -69,6 +69,28 @@ export default function Estudio() {
   const [motion, setMotion] = useState('');
   const [haciendoVideo, setHaciendoVideo] = useState<string | null>(null);
   const [vidMsg, setVidMsg] = useState('');
+  // Créditos de Kie: saldo de la cuenta y último costo real de cada tipo de generación.
+  const [saldo, setSaldo] = useState<number | null>(null);
+  const [costos, setCostos] = useState<Record<string, { credits: number }>>({});
+  const [costoMsg, setCostoMsg] = useState('');
+  async function cargarSaldo() {
+    try {
+      const d = await fetch('/api/saldo').then((r) => r.json());
+      if (typeof d.credits === 'number') setSaldo(d.credits);
+      if (d.costos && typeof d.costos === 'object') setCostos(d.costos);
+    } catch { /* sin saldo */ }
+  }
+  /** Último costo conocido (en créditos) de un tipo de generación, o null. */
+  function costoDe(clave: string): number | null {
+    const c = costos[clave]?.credits;
+    return typeof c === 'number' ? c : null;
+  }
+  function claveFoto(id: ModeloId): string {
+    const m = MODELOS.find((x) => x.id === id) ?? MODELOS[0];
+    const e = m.extra('3:4');
+    const cal = e.mode ?? e.resolution ?? e.quality;
+    return `${m.kieModel}|${typeof cal === 'string' ? cal : ''}`;
+  }
   // Motion control: video de referencia + foto de la modelo.
   const [mModo, setMModo] = useState<'mover' | 'reemplazar'>('mover');
   const [mVideo, setMVideo] = useState<{ url: string; dur: number; mb: number } | null>(null);
@@ -96,6 +118,8 @@ export default function Estudio() {
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  // Créditos ya gastados en un paso previo del mismo video (foto con cambios de Motion).
+  const costoPrevio = useRef(0);
   function schedulePoll(fn: () => void, ms: number) {
     const id = setTimeout(() => { pollTimers.current.delete(id); fn(); }, ms);
     pollTimers.current.add(id);
@@ -118,6 +142,7 @@ export default function Estudio() {
         if (v && Array.isArray(v.items)) setVestidos(v.items);
         if (c && Array.isArray(c.items)) setCreaciones(c.items);
         try { const vd = await fetch('/api/videos').then((r) => r.json()); if (Array.isArray(vd.items)) setVideos(vd.items); } catch { /* */ }
+        cargarSaldo();
         const gals: Record<string, Item[]> = {};
         await Promise.all(GALERIAS.map(async (g) => {
           try { const d = await fetch(`/api/galeria?tipo=${g.key}`).then((r) => r.json()); gals[g.key] = Array.isArray(d.items) ? d.items : []; }
@@ -241,7 +266,7 @@ export default function Estudio() {
    * pedido por cada prompt.
    */
   async function lanzar(prompt: string | string[], imageUrls: string[], meta: GenMeta, aviso?: string) {
-    setAbierto(null); setError(''); setResultUrls([]);
+    setAbierto(null); setError(''); setResultUrls([]); setCostoMsg('');
     pollTimers.current.forEach(clearTimeout); pollTimers.current.clear();
     setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
     const prompts = Array.isArray(prompt) ? prompt : Array.from({ length: Math.max(1, Math.min(4, cantidad)) }, () => prompt);
@@ -260,10 +285,18 @@ export default function Estudio() {
     setPhase('polling'); setStatusMsg(aviso ?? `Generando ${tareas.length} ${tareas.length > 1 ? 'opciones' : 'imagen'}… (puede tardar ~1 minuto)`);
     let remaining = tareas.length;
     let gotAny = false;
-    const finishOne = (ok: boolean) => {
-      if (ok) gotAny = true;
+    let gastado = 0;
+    let fotosOk = 0;
+    const finishOne = (ok: boolean, credits?: number) => {
+      if (ok) { gotAny = true; fotosOk += 1; }
+      if (typeof credits === 'number') gastado += credits;
       remaining -= 1;
-      if (remaining <= 0) { setPhase('done'); setStatusMsg(''); if (!gotAny) setError((p) => p || 'No salió ninguna imagen. Probá de nuevo.'); }
+      if (remaining <= 0) {
+        setPhase('done'); setStatusMsg('');
+        if (!gotAny) setError((p) => p || 'No salió ninguna imagen. Probá de nuevo.');
+        if (gastado > 0) setCostoMsg(`💳 ${fotosOk} ${fotosOk === 1 ? 'foto' : 'fotos'} · costó ${fmtCred(gastado)} créditos (≈ ${fmtUsd(gastado)})`);
+        cargarSaldo();
+      }
     };
     tareas.forEach((t) => pollOne(t.id, 0, t.prompt, imageUrls, meta, finishOne));
   }
@@ -271,7 +304,7 @@ export default function Estudio() {
   // Espera hasta ~10 minutos: Nano Banana Pro a veces tarda varios minutos
   // (antes cortábamos a los 2 y la foto se perdía aunque la IA la terminara).
   // Los primeros ~60s consulta cada 3s; después cada 6s.
-  function pollOne(taskId: string, tries: number, prompt: string, imageUrls: string[], meta: GenMeta, done: (ok: boolean) => void) {
+  function pollOne(taskId: string, tries: number, prompt: string, imageUrls: string[], meta: GenMeta, done: (ok: boolean, credits?: number) => void) {
     if (tries > 110) { setError('La IA tardó más de 10 minutos. Probá de nuevo o con otro modelo.'); done(false); return; }
     if (tries === 30) setStatusMsg('La IA está tardando más de lo normal… seguimos esperando (Nano Banana Pro a veces se demora unos minutos).');
     schedulePoll(async () => {
@@ -280,12 +313,13 @@ export default function Estudio() {
         const data = await res.json().catch(() => ({}));
         if (data.state === 'success') {
           const u = data.url as string | undefined;
+          const credits = typeof data.credits === 'number' ? (data.credits as number) : undefined;
           if (u) {
             setResultUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
-            setCreaciones((prev) => [{ id: u, url: u, ts: Date.now(), prompt, modelo: meta.modelo, refs: imageUrls, aspect: meta.aspect }, ...prev.filter((c) => c.url !== u)]);
-            fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: u, prompt, modelo: meta.modelo, refs: imageUrls, aspect: meta.aspect }) }).catch(() => undefined);
+            setCreaciones((prev) => [{ id: u, url: u, ts: Date.now(), prompt, modelo: meta.modelo, refs: imageUrls, aspect: meta.aspect, credits }, ...prev.filter((c) => c.url !== u)]);
+            fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: u, prompt, modelo: meta.modelo, refs: imageUrls, aspect: meta.aspect, credits }) }).catch(() => undefined);
           }
-          done(!!u); return;
+          done(!!u, credits); return;
         }
         if (data.state === 'fail' || (!res.ok && data.error)) { done(false); return; }
         pollOne(taskId, tries + 1, prompt, imageUrls, meta, done);
@@ -399,6 +433,10 @@ export default function Estudio() {
         const data = await res.json().catch(() => ({}));
         if (data.state === 'success') {
           if (data.url) setVideos((prev) => [{ id: data.url as string, url: data.url as string, ts: Date.now() }, ...prev.filter((x) => x.url !== data.url)]);
+          const extra = costoPrevio.current; costoPrevio.current = 0;
+          const total = (typeof data.credits === 'number' ? data.credits : 0) + extra;
+          if (total > 0) setCostoMsg(`💳 Video listo · costó ${fmtCred(total)} créditos (≈ ${fmtUsd(total)})${extra > 0 ? ', incluida la foto con los cambios' : ''}`);
+          cargarSaldo();
           setHaciendoVideo(null); setVidMsg(''); setVista('galeria'); setGalTab('videos');
           return;
         }
@@ -478,12 +516,12 @@ export default function Estudio() {
     });
   }
   /** Espera a que termine una foto (hasta ~6 min). Devuelve su URL o tira error. */
-  async function esperarFoto(taskId: string): Promise<string> {
+  async function esperarFoto(taskId: string): Promise<{ url: string; credits?: number }> {
     for (let i = 0; i < 80; i++) {
       await new Promise((r) => setTimeout(r, i < 20 ? 3000 : 6000));
       try {
         const data = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`).then((r) => r.json());
-        if (data.state === 'success' && data.url) return data.url as string;
+        if (data.state === 'success' && data.url) return { url: data.url as string, credits: typeof data.credits === 'number' ? data.credits : undefined };
         if (data.state === 'fail') throw new Error(data.error ?? 'No se pudo crear la foto con los cambios.');
       } catch (e) { if (e instanceof Error && e.message) throw e; }
     }
@@ -492,7 +530,8 @@ export default function Estudio() {
 
   async function generarMotion() {
     if (haciendoVideo || !mVideo || !mFoto || mPesado) return;
-    setMError(''); setError(''); setHaciendoVideo('motion');
+    setMError(''); setError(''); setCostoMsg(''); setHaciendoVideo('motion');
+    costoPrevio.current = 0;
     const instr = mTxt.trim();
     let foto = mFoto;
     try {
@@ -507,10 +546,12 @@ export default function Estudio() {
         const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: asp, modelo: 'seedream' }) });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.taskId) throw new Error(data.error ?? 'No se pudo crear la foto con los cambios.');
-        foto = await esperarFoto(data.taskId);
+        const hecha = await esperarFoto(data.taskId);
+        foto = hecha.url;
+        costoPrevio.current = hecha.credits ?? 0;
         const nueva = foto;
-        setCreaciones((prev) => [{ id: nueva, url: nueva, ts: Date.now(), prompt, modelo: 'seedream', refs: imageUrls, aspect: asp }, ...prev.filter((c) => c.url !== nueva)]);
-        fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: nueva, prompt, modelo: 'seedream', refs: imageUrls, aspect: asp }) }).catch(() => undefined);
+        setCreaciones((prev) => [{ id: nueva, url: nueva, ts: Date.now(), prompt, modelo: 'seedream', refs: imageUrls, aspect: asp, credits: hecha.credits }, ...prev.filter((c) => c.url !== nueva)]);
+        fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: nueva, prompt, modelo: 'seedream', refs: imageUrls, aspect: asp, credits: hecha.credits }) }).catch(() => undefined);
         setMFoto(nueva);
       }
       setVidMsg(`🕺 ${instr ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
@@ -595,7 +636,7 @@ export default function Estudio() {
         <header className="topbar">
           <div className="logo">musa<span className="g">.studio</span></div>
           <span className="pill">Estudio</span>
-          <div className="stat"><b>{creaciones.length}</b> creaciones<br />{modeloLabel}</div>
+          <div className="stat"><b>{creaciones.length}</b> creaciones<br />{modeloLabel}{saldo !== null ? <><br /><span className="saldo">💳 <b>{fmtCred(saldo)}</b> créditos</span><br /><span className="saldo">≈ {fmtUsd(saldo)}</span></> : null}</div>
         </header>
 
         {cargando ? (
@@ -677,7 +718,9 @@ export default function Estudio() {
                   {busy ? `Generando… ${resultUrls.length}/${cantidad}` : '✨ Generar imagen'}
                 </button>
                 {!busy && !puedeCrear ? <p className="sub" style={{ margin: '8px 0 0', fontSize: 12 }}>Subí la cara del personaje o una referencia.</p> : null}
+                {!busy ? <p className="costo">{costoTexto(costoDe(claveFoto(modelo)), cantidad, 'foto')}</p> : null}
                 {statusMsg ? <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--violeta)' }}>{statusMsg}</p> : null}
+                {costoMsg && vista === 'crear' ? <p className="costo ok">{costoMsg}</p> : null}
                 {error ? <p className="errbox" style={{ margin: '8px 0 0' }}>{error}</p> : null}
               </div>
             </div>
@@ -701,6 +744,7 @@ export default function Estudio() {
                     <button className="btn-grad shine sesion-btn" disabled={busy} onClick={() => sesionDeFotos(previewActual)}>
                       📸 Sesión de fotos <span className="sesion-n">{TOMAS_SESION.length} tomas</span>
                     </button>
+                    <p className="costo" style={{ maxWidth: 250 }}>{costoTexto(costoDe(claveFoto(modelo)), TOMAS_SESION.length, 'toma')}</p>
                   </div>
                 ) : (
                   <div className="pv-empty">
@@ -833,6 +877,7 @@ export default function Estudio() {
               {haciendoVideo === 'motion' ? 'Creando video…' : mModo === 'reemplazar' ? '🔁 Reemplazar con mi modelo' : '🕺 Generar video con movimiento'}
             </button>
             {!haciendoVideo && (!mVideo || !mFoto) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta {!mVideo && !mFoto ? 'subir el video a recrear y elegir la imagen de tu avatar' : !mVideo ? 'subir el video a recrear' : 'elegir la imagen de tu avatar'}.</p> : null}
+            {!haciendoVideo ? <p className="costo">{costoMotionTexto(costoDe(mModo === 'reemplazar' ? `wan/2-2-animate-replace|${mCal}` : `kling-3.0/motion-control|${mCal}`), mTxt.trim() ? costoDe(claveFoto('seedream')) : null, !!mTxt.trim())}</p> : null}
             {vidMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
             {mError || error ? <p className="errbox" style={{ marginTop: 10 }}>{mError || error}</p> : null}
             <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos. ⏳ Los videos se borran solos a los 3 días: descargalos antes.</p>
@@ -900,6 +945,7 @@ export default function Estudio() {
             </div>
             {upMsg ? <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--violeta)' }}>{upMsg}</p> : null}
             {vidMsg ? <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
+            {costoMsg ? <p className="costo ok" style={{ margin: '0 0 12px' }}>{costoMsg}</p> : null}
             {error ? <p className="errbox" style={{ marginBottom: 12 }}>{error}</p> : null}
 
             {galTab === 'fotos' ? (
@@ -1045,6 +1091,7 @@ export default function Estudio() {
             <div className="lb-meta">
               <span>Fecha: <b>{new Date(lightbox.ts).toLocaleDateString()}</b></span>
               {lightbox.modelo ? <span>Modelo: <b>{MODELOS.find((m) => m.id === lightbox.modelo)?.label ?? lightbox.modelo}</b></span> : null}
+              {typeof lightbox.credits === 'number' ? <span>Costo: <b>{fmtCred(lightbox.credits)} créditos</b> (≈ {fmtUsd(lightbox.credits)})</span> : null}
             </div>
             {lightbox.prompt ? (
               <div style={{ marginTop: 12 }}>
@@ -1091,6 +1138,31 @@ export default function Estudio() {
       ) : null}
     </main>
   );
+}
+
+/* ---------- Créditos de Kie ---------- */
+// 1 crédito de Kie ≈ US$ 0,005 (1.000 créditos ≈ US$ 5). Es aproximado.
+const USD_POR_CREDITO = 0.005;
+function fmtCred(n: number): string {
+  return n.toLocaleString('es-AR', { maximumFractionDigits: 1 });
+}
+function fmtUsd(n: number): string {
+  return `US$ ${(n * USD_POR_CREDITO).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+function costoTexto(porUnidad: number | null, n: number, unidad: string): string {
+  if (porUnidad === null) return `💳 Costo: lo vas a ver después de la primera ${unidad} con este modelo.`;
+  const total = porUnidad * n;
+  return n > 1
+    ? `💳 ≈ ${fmtCred(porUnidad)} créditos por ${unidad} × ${n} = ${fmtCred(total)} créditos (≈ ${fmtUsd(total)})`
+    : `💳 ≈ ${fmtCred(total)} créditos (≈ ${fmtUsd(total)})`;
+}
+function costoMotionTexto(ultimoVideo: number | null, foto: number | null, conCambios: boolean): string {
+  const partes: string[] = [];
+  partes.push(ultimoVideo !== null
+    ? `💳 El último video así costó ${fmtCred(ultimoVideo)} créditos (≈ ${fmtUsd(ultimoVideo)}). Depende de cuánto dure.`
+    : '💳 El costo del video lo vas a ver cuando termine el primero así (depende de cuánto dure).');
+  if (conCambios) partes.push(foto !== null ? `+ ≈ ${fmtCred(foto)} créditos por la foto con los cambios.` : '+ el costo de 1 foto por los cambios.');
+  return partes.join(' ');
 }
 
 /** Los videos se borran a los 3 días (ver src/lib/limpieza.ts). */
