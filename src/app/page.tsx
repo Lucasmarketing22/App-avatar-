@@ -102,6 +102,24 @@ export default function Estudio() {
   const [mSubiendoFoto, setMSubiendoFoto] = useState(false);
   const [mError, setMError] = useState('');
   const [copiado, setCopiado] = useState(false);
+  const [linkCopiado, setLinkCopiado] = useState(false);
+  /** Copia un link al portapapeles (con plan B para navegadores que no dejan). */
+  async function copiarLink(url: string) {
+    let ok = false;
+    try { await navigator.clipboard.writeText(url); ok = true; } catch { /* plan B */ }
+    if (!ok) {
+      try {
+        const t = document.createElement('textarea');
+        t.value = url; t.setAttribute('readonly', ''); t.style.position = 'fixed'; t.style.opacity = '0';
+        document.body.appendChild(t); t.select(); t.setSelectionRange(0, url.length);
+        ok = document.execCommand('copy');
+        document.body.removeChild(t);
+      } catch { ok = false; }
+    }
+    setLinkCopiado(ok);
+    if (ok) setTimeout(() => setLinkCopiado(false), 2500);
+    return ok;
+  }
 
   // ----- Voz (Fish Audio) -----
   const [vozCargada, setVozCargada] = useState(false);
@@ -807,9 +825,13 @@ export default function Estudio() {
                   <video src={mVideo.url} controls playsInline preload="metadata" />
                   <div className="mvid-info">
                     <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b> · <b>{mVideo.mb.toFixed(1)} MB</b></span>
+                    <button className="btn-grad" style={{ height: 40, padding: '0 14px', fontSize: 13 }} onClick={() => copiarLink(mVideo.url)}>{linkCopiado ? '¡Link copiado! ✓' : '📋 Copiar link del video'}</button>
                     <button className="btn-soft" onClick={() => setMVideo(null)}>Cambiar video</button>
                   </div>
                 </div>
+              ) : null}
+              {mVideo ? (
+                <input className="input" readOnly value={mVideo.url} onFocus={(e) => e.currentTarget.select()} aria-label="Link del video" style={{ width: '100%', boxSizing: 'border-box', marginTop: 10, fontSize: 11, height: 34 }} />
               ) : (
                 <label className="upload-tile mup">
                   <input type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={onSubirVideoMotion} disabled={mSubiendo > 0} style={{ display: 'none' }} />
