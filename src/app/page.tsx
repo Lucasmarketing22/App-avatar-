@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
-import { componerSesion, componerUnificado, TOMAS_SESION } from '@/lib/estudio/prompt';
+import { componerCambioAvatar, componerSesion, componerUnificado, TOMAS_SESION } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
@@ -462,16 +462,63 @@ export default function Estudio() {
     setMModo(m); setMError('');
     setMCal('720p');
   }
+  /** Relación de aspecto (de las que acepta Seedream) más parecida a la de una foto. */
+  function aspectoDe(url: string): Promise<string> {
+    const c = creaciones.find((x) => x.url === url);
+    if (c?.aspect) return Promise.resolve(c.aspect);
+    return new Promise((resolve) => {
+      const im = new window.Image();
+      im.onload = () => {
+        const r = im.naturalWidth / Math.max(1, im.naturalHeight);
+        const ops: [string, number][] = [['9:16', 9 / 16], ['3:4', 3 / 4], ['1:1', 1], ['4:3', 4 / 3], ['16:9', 16 / 9]];
+        resolve(ops.reduce((a, b) => (Math.abs(b[1] - r) < Math.abs(a[1] - r) ? b : a))[0]);
+      };
+      im.onerror = () => resolve('3:4');
+      im.src = url;
+    });
+  }
+  /** Espera a que termine una foto (hasta ~6 min). Devuelve su URL o tira error. */
+  async function esperarFoto(taskId: string): Promise<string> {
+    for (let i = 0; i < 80; i++) {
+      await new Promise((r) => setTimeout(r, i < 20 ? 3000 : 6000));
+      try {
+        const data = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`).then((r) => r.json());
+        if (data.state === 'success' && data.url) return data.url as string;
+        if (data.state === 'fail') throw new Error(data.error ?? 'No se pudo crear la foto con los cambios.');
+      } catch (e) { if (e instanceof Error && e.message) throw e; }
+    }
+    throw new Error('La foto con los cambios tardó demasiado. Probá de nuevo.');
+  }
+
   async function generarMotion() {
     if (haciendoVideo || !mVideo || !mFoto || mPesado) return;
     setMError(''); setError(''); setHaciendoVideo('motion');
-    setVidMsg('🕺 Creando el video con movimiento… Tarda unos minutos; podés seguir usando la app.');
+    const instr = mTxt.trim();
+    let foto = mFoto;
     try {
-      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: mFoto, videoUrl: mVideo.url, prompt: mModo === 'mover' ? (mTxt.trim() || undefined) : undefined, orientacion: mOri, calidad: mCal }) });
+      // Paso 1 (solo si hay instrucciones): foto nueva del avatar con el cambio.
+      if (instr) {
+        setVidMsg('✍️ Paso 1 de 2: creando la foto de tu avatar con los cambios… (~1 min)');
+        const deLaFoto = modelas.find((m) => m.refs.some((u) => creaciones.find((c) => c.url === mFoto)?.refs?.includes(u)));
+        const caras = (deLaFoto ?? personaje).refs;
+        const prompt = componerCambioAvatar(instr, caras.length > 0);
+        const imageUrls = [mFoto, ...caras];
+        const asp = await aspectoDe(mFoto);
+        const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: asp, modelo: 'seedream' }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.taskId) throw new Error(data.error ?? 'No se pudo crear la foto con los cambios.');
+        foto = await esperarFoto(data.taskId);
+        const nueva = foto;
+        setCreaciones((prev) => [{ id: nueva, url: nueva, ts: Date.now(), prompt, modelo: 'seedream', refs: imageUrls, aspect: asp }, ...prev.filter((c) => c.url !== nueva)]);
+        fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: nueva, prompt, modelo: 'seedream', refs: imageUrls, aspect: asp }) }).catch(() => undefined);
+        setMFoto(nueva);
+      }
+      setVidMsg(`🕺 ${instr ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
+      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: mOri, calidad: mCal }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
       pollVideo(data.taskId, 0);
-    } catch { setMError('No se pudo conectar. Probá de nuevo.'); setHaciendoVideo(null); setVidMsg(''); }
+    } catch (e) { setMError(e instanceof Error && e.message ? e.message : 'No se pudo conectar. Probá de nuevo.'); setHaciendoVideo(null); setVidMsg(''); }
   }
 
   async function borrarCreacion(c: Creacion) {
@@ -708,7 +755,8 @@ export default function Estudio() {
             <div className="mtip">💡 <b>Clave para que salga bien:</b> usá una foto de tu modelo con el <b>mismo encuadre</b> que el video. Si el video es un baile de cuerpo entero, elegí una foto de cuerpo entero. Una sola persona en el video, bien visible.</div>
 
             <div className="panel" style={{ marginBottom: 14 }}>
-              <div className="h2" style={{ marginBottom: 6 }}>1. Video de referencia</div>
+              <div className="h2" style={{ marginBottom: 4 }}>1. 🎬 Video a recrear</div>
+              <p className="sub" style={{ marginTop: 0, marginBottom: 6, color: 'var(--ink)', fontWeight: 600 }}>Acá va el baile o trend que querés copiar.</p>
               <p className="sub" style={hintS}>{mModo === 'reemplazar' ? 'De 3 a 30 segundos y hasta 10 MB (unos 10–15 s de video de celular).' : 'De 3 a 30 segundos y hasta 100 MB.'} Una sola persona, bien visible, de la cabeza a la cintura o cuerpo entero.</p>
               {mVideo ? (
                 <div className="mvid">
@@ -728,8 +776,9 @@ export default function Estudio() {
             </div>
 
             <div className="panel" style={{ marginBottom: 14 }}>
-              <div className="h2" style={{ marginBottom: 6 }}>2. Foto de tu modelo</div>
-              <p className="sub" style={hintS}>Elegí una foto con el mismo encuadre que el video (cuerpo entero si el video es de cuerpo entero).</p>
+              <div className="h2" style={{ marginBottom: 4 }}>2. 👩 Imagen de tu avatar</div>
+              <p className="sub" style={{ marginTop: 0, marginBottom: 6, color: 'var(--ink)', fontWeight: 600 }}>Acá va la foto de tu modelo: ella es la que va a aparecer en el video.</p>
+              <p className="sub" style={hintS}>Elegí una con el mismo encuadre que el video (cuerpo entero si el video es de cuerpo entero).</p>
               <div className="mfotos">
                 <label className="upload-tile mfoto-add">
                   <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onSubirFotoMotion} style={{ display: 'none' }} />
@@ -746,7 +795,13 @@ export default function Estudio() {
             </div>
 
             <div className="panel" style={{ marginBottom: 14 }}>
-              <div className="h2" style={{ marginBottom: 2 }}>3. Opciones</div>
+              <div className="h2" style={{ marginBottom: 4 }}>3. ✍️ Instrucciones <span className="sub" style={{ fontSize: 13, fontWeight: 600 }}>(opcional)</span></div>
+              <p className="sub" style={{ marginTop: 0, marginBottom: 8 }}>¿Querés cambiarle algo a tu avatar? Por ejemplo la ropa o el pelo. Si escribís algo, primero se crea una foto nueva de tu avatar con ese cambio (cuesta como 1 foto y queda en tu galería) y después el video.</p>
+              <textarea className="textarea" value={mTxt} onChange={(e) => setMTxt(e.target.value)} placeholder="Ej: con un vestido rojo corto · en bikini negro · con el pelo recogido" style={{ height: 80 }} />
+            </div>
+
+            <div className="panel" style={{ marginBottom: 14 }}>
+              <div className="h2" style={{ marginBottom: 2 }}>4. Opciones</div>
               {mModo === 'mover' ? (
                 <>
                   <div className="aplbl" style={{ marginTop: 12 }}>Encuadre</div>
@@ -760,8 +815,6 @@ export default function Estudio() {
                     <button className={`opt ${mCal === '720p' ? 'on' : ''}`} onClick={() => setMCal('720p')}>720p · más barato</button>
                     <button className={`opt ${mCal === '1080p' ? 'on' : ''}`} onClick={() => setMCal('1080p')}>1080p · más nítido</button>
                   </div>
-                  <div className="aplbl">Detalle (opcional)</div>
-                  <input className="input" value={mTxt} onChange={(e) => setMTxt(e.target.value)} placeholder="Ej: smiles at the camera at the end" style={{ width: '100%', boxSizing: 'border-box' }} />
                 </>
               ) : (
                 <>
@@ -779,10 +832,10 @@ export default function Estudio() {
             <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || !!haciendoVideo || mSubiendo > 0 || mPesado} onClick={generarMotion}>
               {haciendoVideo === 'motion' ? 'Creando video…' : mModo === 'reemplazar' ? '🔁 Reemplazar con mi modelo' : '🕺 Generar video con movimiento'}
             </button>
-            {!haciendoVideo && (!mVideo || !mFoto) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta {!mVideo && !mFoto ? 'subir el video y elegir la foto' : !mVideo ? 'subir el video' : 'elegir la foto'}.</p> : null}
+            {!haciendoVideo && (!mVideo || !mFoto) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta {!mVideo && !mFoto ? 'subir el video a recrear y elegir la imagen de tu avatar' : !mVideo ? 'subir el video a recrear' : 'elegir la imagen de tu avatar'}.</p> : null}
             {vidMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
             {mError || error ? <p className="errbox" style={{ marginTop: 10 }}>{mError || error}</p> : null}
-            <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos.</p>
+            <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos. ⏳ Los videos se borran solos a los 3 días: descargalos antes.</p>
           </>
         ) : vista === 'voz' ? (
           <>
@@ -866,14 +919,18 @@ export default function Estudio() {
               videos.length === 0 ? (
                 <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no hay videos. Abrí una foto y tocá “🎬 Crear video”.</p></div>
               ) : (
+                <>
+                <p className="sub" style={{ margin: '0 0 10px', fontSize: 12.5 }}>⏳ Los videos se borran solos a los 3 días. Descargá los que quieras guardar.</p>
                 <div className="grid-cards stagger">
                   {videos.map((v) => (
                     <div key={v.id} className="tile" style={{ cursor: 'default' }}>
                       <video src={v.url} controls playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <span className="vence">⏳ {venceEn(v.ts)}</span>
                       <button className="xbtn" title="Eliminar" onClick={() => borrarVideo(v)}>🗑️</button>
                     </div>
                   ))}
                 </div>
+                </>
               )
             )}
           </>
@@ -1034,6 +1091,13 @@ export default function Estudio() {
       ) : null}
     </main>
   );
+}
+
+/** Los videos se borran a los 3 días (ver src/lib/limpieza.ts). */
+function venceEn(ts: number): string {
+  const dias = Math.ceil((ts + 3 * 24 * 60 * 60 * 1000 - Date.now()) / (24 * 60 * 60 * 1000));
+  if (dias <= 1) return 'se borra en menos de 24 h';
+  return `se borra en ${dias} días`;
 }
 
 /* ---------- Iconos propios (SVG línea) ---------- */
