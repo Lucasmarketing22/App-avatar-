@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
+import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
+
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
-type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string };
+type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; voz?: VozModelo };
 type FotoCuerpo = 'entero' | 'medio';
 const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
@@ -138,17 +140,8 @@ export default function Estudio() {
     return ok;
   }
 
-  // ----- Voz (Fish Audio) -----
-  const [vozCargada, setVozCargada] = useState(false);
-  const [vozKey, setVozKey] = useState(true);
-  const [vozRef, setVozRef] = useState('');
-  const [vozNombre, setVozNombre] = useState('');
-  const [vozItems, setVozItems] = useState<Creacion[]>([]);
-  const [vozText, setVozText] = useState('');
-  const [vozGen, setVozGen] = useState(false);
-  const [vozMsg, setVozMsg] = useState('');
-  const [vozErr, setVozErr] = useState('');
-  const [vozGuardado, setVozGuardado] = useState(false);
+  // ----- Voz (Fish Audio): la sección vive en <VozEstudio />; acá solo el aviso de "creando" -----
+  const [vozTrabajo, setVozTrabajo] = useState('');
 
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -188,19 +181,6 @@ export default function Estudio() {
     })();
   }, []);
 
-  // Carga la sección de voz la primera vez que se abre.
-  useEffect(() => {
-    if (vista !== 'voz' || vozCargada) return;
-    (async () => {
-      try {
-        const d = await fetch('/api/voz').then((r) => r.json());
-        setVozKey(!!d.configured);
-        setVozRef(d.voz?.reference_id ?? '');
-        setVozNombre(d.voz?.nombre ?? '');
-        if (Array.isArray(d.items)) setVozItems(d.items);
-      } catch { /* */ } finally { setVozCargada(true); }
-    })();
-  }, [vista, vozCargada]);
 
   const busy = phase === 'creating' || phase === 'polling';
   const vestidoActual = vestidos.find((v) => v.id === vestidoSel) ?? null;
@@ -682,29 +662,8 @@ export default function Estudio() {
     try { await fetch(`/api/videos?url=${encodeURIComponent(v.url)}`, { method: 'DELETE' }); } catch { /* */ }
   }
 
-  async function guardarVoz() {
-    setVozErr('');
-    try {
-      const res = await fetch('/api/voz', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reference_id: vozRef.trim(), nombre: vozNombre.trim() }) });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setVozErr(d.error ?? 'No se pudo guardar.'); return; }
-      setVozGuardado(true); setTimeout(() => setVozGuardado(false), 1500);
-    } catch { setVozErr('No se pudo conectar.'); }
-  }
-  async function generarVoz() {
-    if (vozGen || !vozText.trim()) return;
-    setVozErr(''); setVozGen(true); setVozMsg('Generando la voz… (unos segundos)');
-    try {
-      const res = await fetch('/api/voz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: vozText.trim() }) });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok || !d.url) { setVozErr(d.error ?? 'No se pudo generar.'); setVozGen(false); setVozMsg(''); return; }
-      setVozItems((prev) => [{ id: d.url as string, url: d.url as string, ts: Date.now() }, ...prev]);
-      setVozGen(false); setVozMsg('');
-    } catch { setVozErr('No se pudo conectar.'); setVozGen(false); setVozMsg(''); }
-  }
-  async function borrarAudio(a: Creacion) {
-    if (typeof window !== 'undefined' && !window.confirm('¿Eliminar este audio?')) return;
-    setVozItems((prev) => prev.filter((x) => x.id !== a.id));
-    try { await fetch(`/api/voz?url=${encodeURIComponent(a.url)}`, { method: 'DELETE' }); } catch { /* */ }
+  async function guardarVozModelo(v: VozModelo | undefined) {
+    await guardarPersonaje({ ...personaje, voz: v });
   }
 
   const salir = () => fetch('/api/logout', { method: 'POST' }).then(() => location.reload());
@@ -1052,56 +1011,8 @@ export default function Estudio() {
           </>
         ) : vista === 'voz' ? (
           <>
-            <h1 className="h1" style={{ marginBottom: 10 }}>🎙️ Voz de tu modelo</h1>
-            {!vozCargada ? (
-              <p className="sub">Cargando…</p>
-            ) : (
-              <>
-                {!vozKey ? (
-                  <div className="panel" style={{ marginBottom: 16, borderColor: '#f3cfcb', background: 'var(--err-soft)' }}>
-                    <div className="h2" style={{ marginBottom: 6 }}>Falta activar la voz</div>
-                    <p className="sub" style={{ marginTop: 0 }}>Para que funcione, creá una cuenta gratis en <b>fish.audio</b>, conseguí tu <b>API key</b> y cargala en <b>Vercel</b> como variable <b>FISH_AUDIO_API_KEY</b>.</p>
-                    <p className="sub" style={{ marginBottom: 0 }}>En Vercel: <b>Settings → Environment Variables → Add New</b> → nombre <b>FISH_AUDIO_API_KEY</b>, pegás la clave, <b>Save</b>, y después <b>Redeploy</b>. ¡Nunca la pegues acá en el chat!</p>
-                  </div>
-                ) : null}
-
-                <div className="panel" style={{ marginBottom: 16 }}>
-                  <div className="h2" style={{ marginBottom: 6 }}>Identidad de voz</div>
-                  <p className="sub" style={{ marginTop: 0 }}>Elegí o cloná una voz en <b>fish.audio</b>, copiá el <b>ID del modelo de voz</b> y pegalo acá. Esa va a ser la voz fija de tu modelo.</p>
-                  <label style={{ fontSize: 13, fontWeight: 700, display: 'block' }}>ID de la voz (reference_id)
-                    <input className="input" value={vozRef} onChange={(e) => setVozRef(e.target.value)} placeholder="Ej: 7f3a9c… (lo copiás de fish.audio)" style={{ display: 'block', marginTop: 6, width: '100%', boxSizing: 'border-box' }} />
-                  </label>
-                  <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginTop: 12 }}>Nombre (opcional)
-                    <input className="input" value={vozNombre} onChange={(e) => setVozNombre(e.target.value)} placeholder="Ej: Voz de Luna" style={{ display: 'block', marginTop: 6, width: 260, maxWidth: '100%' }} />
-                  </label>
-                  <button className="btn-grad" style={{ marginTop: 12 }} onClick={guardarVoz}>{vozGuardado ? 'Guardado ✓' : 'Guardar identidad de voz'}</button>
-                  <p className="sub" style={{ marginBottom: 0, marginTop: 10, fontSize: 12 }}>💡 Si dejás el ID vacío, usa una voz por defecto de Fish Audio.</p>
-                </div>
-
-                <div className="panel" style={{ marginBottom: 16 }}>
-                  <div className="h2" style={{ marginBottom: 6 }}>Generar audio</div>
-                  <textarea className="textarea" value={vozText} onChange={(e) => setVozText(e.target.value)} placeholder="Escribí lo que querés que diga tu modelo…" style={{ height: 110 }} />
-                  <button className={`btn-grad shine ${vozGen ? 'busy' : ''}`} style={{ marginTop: 10 }} disabled={vozGen || !vozText.trim()} onClick={generarVoz}>{vozGen ? 'Generando…' : '🎙️ Generar voz'}</button>
-                  {vozMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{vozMsg}</p> : null}
-                  {vozErr ? <p className="errbox" style={{ margin: '10px 0 0' }}>{vozErr}</p> : null}
-                </div>
-
-                <div className="h2" style={{ marginBottom: 10 }}>Mis audios ({vozItems.length})</div>
-                {vozItems.length === 0 ? (
-                  <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no generaste audios.</p></div>
-                ) : (
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    {vozItems.map((a) => (
-                      <div key={a.id} className="panel" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
-                        <audio src={a.url} controls preload="metadata" style={{ flex: 1, minWidth: 0 }} />
-                        <a className="btn-soft" href={a.url} target="_blank" rel="noreferrer">⬇</a>
-                        <button className="btn-soft" onClick={() => borrarAudio(a)}>🗑️</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+            <h1 className="h1" style={{ marginBottom: 10 }}>🎙️ Voz de {personaje.nombre || 'tu modelo'}</h1>
+            <VozEstudio key={personaje.id} modeloNombre={personaje.nombre} voz={personaje.voz} onGuardarVoz={guardarVozModelo} onTrabajo={setVozTrabajo} />
           </>
         ) : (
           /* ----- GALERÍA ----- */
@@ -1173,7 +1084,7 @@ export default function Estudio() {
           busy ? `${statusMsg || 'Creando tus fotos…'} (${resultUrls.length}/${totalGen})` : '',
           haciendoVideo ? (vidMsg || 'Creando tu video…') : '',
           mejorando ? (upMsg || 'Mejorando la calidad…') : '',
-          vozGen ? 'Generando la voz…' : '',
+          vozTrabajo,
         ].filter(Boolean);
         return trabajos.length ? (
           <div className="genfloat" role="status" aria-live="polite">

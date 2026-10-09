@@ -1,16 +1,12 @@
 import { NextResponse } from 'next/server';
 
+import { errorFish, fishKey, idVozValido } from '@/lib/fish';
 import { uploadPublic, listPublic, removeObject, readJson, writeJson } from '@/lib/storage';
 
 export const runtime = 'nodejs';
 
 /** Identidad de voz guardada del personaje (modelo de voz de Fish Audio). */
 type VozCfg = { reference_id?: string; nombre?: string };
-
-function fishKey(): string {
-  // Acepta el nombre estándar y también "fishapi" (como lo cargó el usuario).
-  return process.env.FISH_AUDIO_API_KEY || process.env.fishapi || process.env.FISHAPI || '';
-}
 
 /** Estado + voz guardada + audios generados. */
 export async function GET() {
@@ -40,13 +36,14 @@ export async function POST(request: Request) {
   if (!key) {
     return NextResponse.json({ error: 'Falta la clave de Fish Audio (FISH_AUDIO_API_KEY). Cargala en Vercel.' }, { status: 400 });
   }
-  const body = (await request.json().catch(() => null)) as { text?: string } | null;
+  const body = (await request.json().catch(() => null)) as { text?: string; ref?: string } | null;
   const text = typeof body?.text === 'string' ? body.text.trim().slice(0, 4000) : '';
   if (!text) return NextResponse.json({ error: 'Escribí el texto que querés que diga.' }, { status: 400 });
 
-  const voz = await readJson<VozCfg>('voz', {});
+  // La voz de la modelo elegida; si no tiene, la voz guardada de antes (si hay).
+  const ref = idVozValido(body?.ref) ? body!.ref : (await readJson<VozCfg>('voz', {})).reference_id;
   const payload: Record<string, unknown> = { text, format: 'mp3', mp3_bitrate: 128 };
-  if (voz.reference_id) payload.reference_id = voz.reference_id;
+  if (ref) payload.reference_id = ref;
 
   let res: Response;
   try {
@@ -61,11 +58,7 @@ export async function POST(request: Request) {
   }
 
   if (!res.ok) {
-    const detalle = await res.text().catch(() => '');
-    if (res.status === 401) return NextResponse.json({ error: 'La clave de Fish Audio no es válida.' }, { status: 502 });
-    if (res.status === 402 || res.status === 403) return NextResponse.json({ error: 'Te quedaste sin crédito en Fish Audio (o el plan no lo permite).' }, { status: 502 });
-    if (res.status === 422) return NextResponse.json({ error: 'El ID de voz no es válido o el texto tiene un problema. Revisá la identidad de voz.' }, { status: 502 });
-    return NextResponse.json({ error: `Fish Audio devolvió un error (${res.status}). ${detalle.slice(0, 160)}` }, { status: 502 });
+    return NextResponse.json({ error: errorFish(res.status, await res.text().catch(() => '')) }, { status: 502 });
   }
 
   const bytes = new Uint8Array(await res.arrayBuffer());
