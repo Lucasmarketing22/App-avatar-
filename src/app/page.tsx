@@ -9,7 +9,8 @@ import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
-type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string };
+type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string };
+type FotoCuerpo = 'entero' | 'medio';
 const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
@@ -55,6 +56,7 @@ export default function Estudio() {
   const [resultUrls, setResultUrls] = useState<string[]>([]);
 
   const [subiendoCara, setSubiendoCara] = useState(false);
+  const [subiendoCuerpo, setSubiendoCuerpo] = useState<FotoCuerpo | ''>('');
   const [subiendoVestido, setSubiendoVestido] = useState(false);
   const [subiendoGal, setSubiendoGal] = useState<Record<string, boolean>>({});
   const [cargando, setCargando] = useState(true);
@@ -201,6 +203,9 @@ export default function Estudio() {
     ? (creaciones.find((c) => c.url === resultUrls[0]) ?? { id: resultUrls[0], url: resultUrls[0], ts: Date.now() })
     : (creaciones[0] ?? null);
   const modeloLabel = MODELOS.find((m) => m.id === modelo)?.label ?? 'Nano Banana';
+  // Motion: fotos propias de la modelo (cuerpo y cara) y la que coincide con el encuadre del video.
+  const misFotos = [personaje.entero, personaje.medio, ...personaje.refs].filter((u): u is string => !!u);
+  const fotoDelEncuadre = mEncuadre === 'cara' ? personaje.refs[0] : mEncuadre === 'medio' ? personaje.medio : mEncuadre === 'entero' ? personaje.entero : undefined;
 
   function elegirPieza(catKey: string, id: string) {
     setSel((s) => ({ ...s, [catKey]: s[catKey] === id ? undefined : id }));
@@ -246,6 +251,16 @@ export default function Estudio() {
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo subir la foto.'); } finally { setSubiendoCara(false); }
   }
   async function quitarCara(url: string) { await guardarPersonaje({ ...personaje, refs: personaje.refs.filter((u) => u !== url) }); }
+
+  /** Fotos del cuerpo de la modelo (cuerpo entero / medio cuerpo): una por cuadro. */
+  async function onSubirCuerpo(tipo: FotoCuerpo, e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    setError(''); setSubiendoCuerpo(tipo);
+    try { await guardarPersonaje({ ...personaje, [tipo]: await subir(f, 'personaje') }); }
+    catch (err) { setError(err instanceof Error ? err.message : 'No se pudo subir la foto.'); } finally { setSubiendoCuerpo(''); }
+  }
+  async function quitarCuerpo(tipo: FotoCuerpo) { await guardarPersonaje({ ...personaje, [tipo]: undefined }); }
 
   async function onSubirVestido(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []); e.target.value = '';
@@ -363,11 +378,14 @@ export default function Estudio() {
       const item = (galerias[g.key] ?? []).find((i) => i.id === galSel[g.key]);
       if (item) refsExtra.push({ url: item.url, hint: g.hint });
     }
-    const imageUrls = [...editImgs, ...personaje.refs, ...refsExtra.map((r) => r.url)];
+    // Foto del cuerpo de la modelo (preferimos cuerpo entero): solo para la figura.
+    const fotoCuerpo = personaje.entero || personaje.medio || '';
+    const imageUrls = [...editImgs, ...personaje.refs, ...(fotoCuerpo ? [fotoCuerpo] : []), ...refsExtra.map((r) => r.url)];
     if (!imageUrls.length) { setError('Subí al menos una imagen: el personaje (cara) o una referencia.'); setPhase('error'); return; }
     const faceHint = personaje.refs.length ? ["One or more reference images show the woman's face and identity; keep her face exactly."] : [];
+    const figuraHint = fotoCuerpo ? ["One reference image shows her body: keep exactly the same body shape, curves and proportions as in that image. Do NOT copy its clothing, pose or plain background."] : [];
     const cuerpoHint = pistaCuerpo(personaje.cuerpo);
-    const hints = [...faceHint, ...(cuerpoHint ? [cuerpoHint] : []), ...refsExtra.map((r) => r.hint)];
+    const hints = [...faceHint, ...figuraHint, ...(cuerpoHint ? [cuerpoHint] : []), ...refsExtra.map((r) => r.hint)];
     const texto = [editPrompt.trim(), extra.trim()].filter(Boolean).join('. ');
     const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel });
     lanzar(prompt, imageUrls, { aspect, modelo });
@@ -563,7 +581,8 @@ export default function Estudio() {
     costoPrevio.current = 0;
     const instr = mTxt.trim();
     let foto = mFoto;
-    const deLaFoto = modelas.find((m) => m.refs.some((u) => creaciones.find((c) => c.url === mFoto)?.refs?.includes(u)));
+    const deLaFoto = modelas.find((m) => m.entero === mFoto || m.medio === mFoto || m.refs.includes(mFoto))
+      ?? modelas.find((m) => m.refs.some((u) => creaciones.find((c) => c.url === mFoto)?.refs?.includes(u)));
     const modeloFoto = deLaFoto ?? personaje;
     try {
       // Paso 1 (si hay instrucciones o se pidió adaptar el encuadre): foto nueva del avatar.
@@ -870,6 +889,11 @@ export default function Estudio() {
                     <input type="checkbox" checked={mAdaptar} onChange={(e) => setMAdaptar(e.target.checked)} style={{ width: 18, height: 18 }} />
                     ✨ Adaptar mi foto a ese encuadre (cuesta 1 foto)
                   </label>
+                  {fotoDelEncuadre && mFoto !== fotoDelEncuadre ? (
+                    <button className="btn-soft" style={{ marginTop: 8 }} onClick={() => { setMFoto(fotoDelEncuadre); setMAdaptar(false); }}>
+                      👉 Usar la foto de {mEncuadre === 'cara' ? 'la cara' : mEncuadre === 'medio' ? 'medio cuerpo' : 'cuerpo entero'} de {personaje.nombre || 'tu modelo'}
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 <div className="mtip" style={{ marginBottom: 12 }}>📐 Primero indicá arriba cómo se ve la persona en el video (cara, medio cuerpo o cuerpo entero) y te digo qué foto elegir.</div>
@@ -880,7 +904,7 @@ export default function Estudio() {
                   <span style={{ fontSize: 20, color: 'var(--rosa)' }}>＋</span>
                   <span className="sub" style={{ fontSize: 11, marginTop: 2, textAlign: 'center' }}>{mSubiendoFoto ? 'Subiendo…' : 'Subir foto'}</span>
                 </label>
-                {(mFoto && !creaciones.some((c) => c.url === mFoto) ? [mFoto, ...creaciones.map((c) => c.url)] : creaciones.map((c) => c.url)).map((u) => (
+                {Array.from(new Set([...misFotos, ...(mFoto ? [mFoto] : []), ...creaciones.map((c) => c.url)])).map((u) => (
                   <button key={u} className={`mfoto ${mFoto === u ? 'on' : ''}`} onClick={() => setMFoto(u)}>
                     <Image src={u} alt="" fill sizes="90px" />
                     {mFoto === u ? <span className="ck">✓</span> : null}
@@ -1053,6 +1077,7 @@ export default function Estudio() {
       {/* ===== MODALES ===== */}
       {abierto === 'personaje' ? (
         <Modal title={personaje.nombre ? `Modelo: ${personaje.nombre}` : 'Tu modelo'} onClose={() => setAbierto(null)}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>🙂 Cara</div>
           <p className="sub" style={hintS}>La cara que se mantiene igual en todas las fotos (subí 1 a 3).</p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             {personaje.refs.map((url) => (
@@ -1068,6 +1093,30 @@ export default function Estudio() {
                 <span className="sub" style={{ fontSize: 12, marginTop: 4, textAlign: 'center' }}>{subiendoCara ? 'Subiendo…' : 'Subir foto'}</span>
               </label>
             ) : null}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 16, marginBottom: 2 }}>👗 Cuerpo</div>
+          <p className="sub" style={hintS}>Su figura completa: así el cuerpo sale igual en todas las fotos. En Motion las podés elegir con un toque.</p>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {([['entero', 'Cuerpo entero'], ['medio', 'Medio cuerpo']] as const).map(([tipo, label]) => {
+              const url = personaje[tipo];
+              return (
+                <div key={tipo} style={{ width: 96 }}>
+                  {url ? (
+                    <div style={{ position: 'relative', width: 96, height: 120 }}>
+                      <Image src={url} alt={label} fill sizes="96px" style={{ objectFit: 'cover', borderRadius: 12, border: '1px solid var(--line)' }} />
+                      <button className="xbtn" onClick={() => quitarCuerpo(tipo)}>×</button>
+                    </div>
+                  ) : (
+                    <label className="upload-tile" style={{ width: 96, height: 120 }}>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => onSubirCuerpo(tipo, e)} style={{ display: 'none' }} />
+                      <span style={{ fontSize: 24, color: 'var(--rosa)' }}>＋</span>
+                      <span className="sub" style={{ fontSize: 12, marginTop: 4, textAlign: 'center' }}>{subiendoCuerpo === tipo ? 'Subiendo…' : 'Subir foto'}</span>
+                    </label>
+                  )}
+                  <span className="sub" style={{ display: 'block', fontSize: 12, fontWeight: 700, marginTop: 4, textAlign: 'center' }}>{label}</span>
+                </div>
+              );
+            })}
           </div>
           <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginTop: 16 }}>
             Nombre (opcional)
