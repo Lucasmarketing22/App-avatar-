@@ -5,7 +5,9 @@ import { readJson, writeJson } from '@/lib/storage';
 export const runtime = 'nodejs';
 
 /** Una modelo (personaje): su nombre, 1 a 3 fotos de la cara y (opcional) fotos del cuerpo. */
-export type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string };
+/** Voz fija de la modelo (un modelo de voz de Fish Audio). */
+export type VozModelo = { ref: string; nombre?: string; muestra?: string };
+export type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; voz?: VozModelo };
 /** Todas las modelos + cuál está elegida para crear. */
 export type Modelos = { activo: string; lista: Personaje[] };
 
@@ -26,11 +28,16 @@ function limpiar(p: unknown): Personaje | null {
   const url = (u: unknown) => (typeof u === 'string' && u.startsWith('http') ? u : '');
   const entero = url(o.entero);
   const medio = url(o.medio);
+  const v = o.voz as Partial<VozModelo> | undefined;
+  const voz: VozModelo | null = v && typeof v.ref === 'string' && /^[A-Za-z0-9_-]{6,80}$/.test(v.ref)
+    ? { ref: v.ref, nombre: typeof v.nombre === 'string' ? v.nombre.trim().slice(0, 80) : '', muestra: url(v.muestra) }
+    : null;
   return {
     id, nombre, refs,
     ...(cuerpo ? { cuerpo } : {}),
     ...(entero ? { entero } : {}),
     ...(medio ? { medio } : {}),
+    ...(voz ? { voz } : {}),
   };
 }
 
