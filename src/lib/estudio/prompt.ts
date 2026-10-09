@@ -142,3 +142,19 @@ export function componerSesion(toma: string, conCaras: boolean): string {
   ];
   return partes.join(' ');
 }
+
+/**
+ * Motion con instrucciones: antes del video se crea una foto NUEVA del avatar
+ * (image 1) con el cambio pedido (vestuario, pelo…), manteniendo cara, pose y
+ * encuadre para que sirva de cuadro inicial del video.
+ */
+export function componerCambioAvatar(instrucciones: string, conCaras: boolean): string {
+  return [
+    'Photorealistic edit of image 1.',
+    'Keep EXACTLY the same woman: same face, identity, bone structure, skin tone, freckles, eye color and natural features.',
+    conCaras ? 'The other reference images show her face and identity; keep her face exactly the same.' : '',
+    'Keep the same pose, body position, framing, camera angle and composition as image 1, so it can be used as the first frame of a video.',
+    `Apply ONLY this change and keep everything else unchanged: ${instrucciones.trim()}.`,
+    REALISMO,
+  ].filter(Boolean).join(' ');
+}
