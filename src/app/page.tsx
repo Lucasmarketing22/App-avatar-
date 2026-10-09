@@ -662,7 +662,7 @@ export default function Estudio() {
         setMFoto(nueva);
       }
       setVidMsg(`🕺 ${pasoPrevio ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
-      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo }) });
+      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: escenaActiva ? 'video' : mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
       pollVideo(data.taskId, 0);
@@ -1009,13 +1009,20 @@ export default function Estudio() {
               <div className="h2" style={{ marginBottom: 2 }}>4. Opciones</div>
               {mModo === 'mover' ? (
                 <>
-                  <div className="aplbl" style={{ marginTop: 12 }}>Encuadre</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button className={`opt ${mOri === 'video' ? 'on' : ''}`} onClick={() => setMOri('video')}>Como en el video · hasta 30 s</button>
-                    <button className={`opt ${mOri === 'image' ? 'on' : ''}`} onClick={() => setMOri('image')}>Como en la foto · hasta 10 s</button>
-                  </div>
-                  <p className="sub" style={{ fontSize: 12, margin: '6px 0 0' }}>Para bailes y trends: “Como en el video”. Para un gesto con el fondo de tu foto: “Como en la foto”.</p>
-                  <div className="aplbl">Calidad</div>
+                  {escenaActiva ? null : (
+                    <>
+                      <div className="aplbl" style={{ marginTop: 12 }}>Movimiento del cuerpo</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button className={`opt ${mOri === 'video' ? 'on' : ''}`} onClick={() => setMOri('video')}>Seguir el video ⭐</button>
+                        <button className={`opt ${mOri === 'image' ? 'on' : ''}`} onClick={() => setMOri('image')}>Quedarse como en la foto</button>
+                      </div>
+                      <p className="sub" style={{ fontSize: 12, margin: '6px 0 0' }}>
+                        <b>Seguir el video</b> (recomendado): tu modelo gira, se acuesta o se da vuelta igual que la persona del video. Hasta 30 s.<br />
+                        <b>Quedarse como en la foto</b>: mantiene la postura y hacia dónde mira en tu foto, y solo copia gestos chicos. Hasta 10 s.
+                      </p>
+                    </>
+                  )}
+                  <div className="aplbl" style={escenaActiva ? { marginTop: 12 } : undefined}>Calidad</div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button className={`opt ${mCal === '720p' ? 'on' : ''}`} onClick={() => setMCal('720p')}>720p · más barato</button>
                     <button className={`opt ${mCal === '1080p' ? 'on' : ''}`} onClick={() => setMCal('1080p')}>1080p · más nítido</button>
@@ -1033,7 +1040,7 @@ export default function Estudio() {
             </div>
 
             {mPesado ? <p className="errbox" style={{ margin: '0 0 10px' }}>Para “Reemplazar en el video” el video tiene que pesar hasta 10 MB (este pesa {mVideo?.mb.toFixed(1)} MB). Recortalo o usá “Mover mi foto”.</p> : null}
-            {mModo === 'mover' && mOri === 'image' && mVideo && mVideo.dur > 10 ? <p className="sub" style={{ fontSize: 12, margin: '0 0 10px' }}>⚠️ Con “Como en la foto” el video sale de 10 segundos como máximo.</p> : null}
+            {mModo === 'mover' && mOri === 'image' && !escenaActiva && mVideo && mVideo.dur > 10 ? <p className="sub" style={{ fontSize: 12, margin: '0 0 10px' }}>⚠️ Con “Quedarse como en la foto” el video sale de 10 segundos como máximo.</p> : null}
             <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || (!mEncuadre && !escenaActiva) || !!haciendoVideo || mSubiendo > 0 || mPesado || mCuadroEstado === 'sacando'} onClick={generarMotion}>
               {haciendoVideo === 'motion' ? 'Creando video…' : mModo === 'reemplazar' ? '🔁 Reemplazar con mi modelo' : '🕺 Generar video con movimiento'}
             </button>
