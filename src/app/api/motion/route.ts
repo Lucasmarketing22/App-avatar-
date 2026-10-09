@@ -17,7 +17,9 @@ export const runtime = 'nodejs';
 const PROMPT_MOVER =
   'The woman from the reference image performs exactly the same movements, gestures, timing and facial expressions as the person in the reference video. ' +
   'Keep her face, identity, hairstyle, body shape and outfit exactly as in the reference image. ' +
-  'Realistic, natural and fluid human motion, correct anatomy and hands, real skin texture, stable face without flicker or distortion.';
+  'Keep the background, location and lighting of the reference image. ' +
+  'Realistic, natural and fluid human motion, correct anatomy and hands, real skin texture, stable face without flicker or distortion. ' +
+  'It must look like real, unedited smartphone video footage, not AI: natural skin with pores, no smoothing, no plastic or waxy look.';
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as

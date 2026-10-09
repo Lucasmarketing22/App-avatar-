@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
-import { componerCambioAvatar, componerSesion, componerUnificado, pistaCuerpo, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
+import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
@@ -105,6 +105,11 @@ export default function Estudio() {
   // Cómo se ve la persona en el video de referencia (para que la foto coincida).
   const [mEncuadre, setMEncuadre] = useState<Encuadre | ''>('');
   const [mAdaptar, setMAdaptar] = useState(false);
+  // "Mismo escenario que el video": cuadro del video original + si se usa.
+  const [mEscena, setMEscena] = useState(true);
+  const [mCuadro, setMCuadro] = useState('');
+  const [mCuadroAsp, setMCuadroAsp] = useState(''); // formato del video (9:16, 16:9…)
+  const [mCuadroEstado, setMCuadroEstado] = useState<'' | 'sacando' | 'error'>('');
   const [mVideo, setMVideo] = useState<{ url: string; dur: number; mb: number } | null>(null);
   const [mFoto, setMFoto] = useState<string | null>(null);
   const [mOri, setMOri] = useState<'video' | 'image'>('video');
@@ -506,6 +511,49 @@ export default function Estudio() {
       v.src = u;
     });
   }
+  /** Toma un cuadro del principio del video (en el celu, sin subir nada) como JPG. */
+  function cuadroDe(file: File): Promise<{ blob: Blob; w: number; h: number } | null> {
+    return new Promise((resolve) => {
+      const u = URL.createObjectURL(file);
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
+      let listo = false;
+      const fin = (r: { blob: Blob; w: number; h: number } | null) => { if (listo) return; listo = true; clearTimeout(t); URL.revokeObjectURL(u); resolve(r); };
+      const t = setTimeout(() => fin(null), 15000);
+      v.onloadedmetadata = () => { v.currentTime = Math.min(0.3, (v.duration || 1) / 4); };
+      v.onseeked = () => {
+        try {
+          const w = v.videoWidth, h = v.videoHeight;
+          if (!w || !h) { fin(null); return; }
+          const k = Math.min(1, 1440 / Math.max(w, h));
+          const c = document.createElement('canvas');
+          c.width = Math.round(w * k); c.height = Math.round(h * k);
+          c.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height);
+          c.toBlob((b) => fin(b ? { blob: b, w, h } : null), 'image/jpeg', 0.92);
+        } catch { fin(null); }
+      };
+      v.onerror = () => fin(null);
+      v.src = u; v.load();
+    });
+  }
+  async function sacarCuadro(f: File) {
+    setMCuadro(''); setMCuadroAsp(''); setMCuadroEstado('sacando');
+    try {
+      const r = await cuadroDe(f);
+      if (!r) { setMCuadroEstado('error'); return; }
+      setMCuadroAsp(aspectoMasCercano(r.w, r.h));
+      setMCuadro(await subir(new File([r.blob], 'cuadro.jpg', { type: 'image/jpeg' }), 'refs'));
+      setMCuadroEstado('');
+    } catch { setMCuadroEstado('error'); }
+  }
+  /** Por si el celu no deja sacar el cuadro solo (o querés otro momento): subir una captura. */
+  async function onSubirCuadro(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    setMCuadroEstado('sacando'); setMCuadroAsp('');
+    try { setMCuadro(await subir(f, 'refs')); setMCuadroEstado(''); } catch { setMCuadroEstado('error'); }
+  }
   async function onSubirVideoMotion(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; e.target.value = '';
     if (!f) return;
@@ -515,6 +563,7 @@ export default function Estudio() {
     if (dur && dur < 3) { setMError('El video tiene que durar al menos 3 segundos.'); return; }
     if (dur > 30.5) { setMError(`El video dura ${Math.round(dur)} segundos y el máximo es 30. Recortalo y volvé a subirlo.`); return; }
     setMSubiendo(1);
+    sacarCuadro(f); // en paralelo con la subida
     // El aviso de progreso puede llegar DESPUÉS de terminar la subida: lo
     // ignoramos para que no quede trabado en "Subiendo…".
     let terminado = false;
@@ -545,6 +594,7 @@ export default function Estudio() {
   }
   // "Reemplazar en el video" (Wan) acepta videos de hasta 10 MB.
   const mPesado = mModo === 'reemplazar' && !!mVideo && mVideo.mb > 10;
+  const escenaActiva = mModo === 'mover' && mEscena && !!mCuadro;
   function elegirModoMotion(m: 'mover' | 'reemplazar') {
     setMModo(m); setMError('');
     setMCal('720p');
@@ -555,11 +605,7 @@ export default function Estudio() {
     if (c?.aspect) return Promise.resolve(c.aspect);
     return new Promise((resolve) => {
       const im = new window.Image();
-      im.onload = () => {
-        const r = im.naturalWidth / Math.max(1, im.naturalHeight);
-        const ops: [string, number][] = [['9:16', 9 / 16], ['3:4', 3 / 4], ['1:1', 1], ['4:3', 4 / 3], ['16:9', 16 / 9]];
-        resolve(ops.reduce((a, b) => (Math.abs(b[1] - r) < Math.abs(a[1] - r) ? b : a))[0]);
-      };
+      im.onload = () => resolve(aspectoMasCercano(im.naturalWidth, im.naturalHeight));
       im.onerror = () => resolve('3:4');
       im.src = url;
     });
@@ -578,7 +624,7 @@ export default function Estudio() {
   }
 
   async function generarMotion() {
-    if (haciendoVideo || !mVideo || !mFoto || mPesado || !mEncuadre) return;
+    if (haciendoVideo || !mVideo || !mFoto || mPesado || (!mEncuadre && !escenaActiva)) return;
     setMError(''); setError(''); setCostoMsg(''); setHaciendoVideo('motion');
     costoPrevio.current = 0;
     const instr = mTxt.trim();
@@ -587,13 +633,23 @@ export default function Estudio() {
       ?? modelas.find((m) => m.refs.some((u) => creaciones.find((c) => c.url === mFoto)?.refs?.includes(u)));
     const modeloFoto = deLaFoto ?? personaje;
     try {
-      // Paso 1 (si hay instrucciones o se pidió adaptar el encuadre): foto nueva del avatar.
-      if (instr || mAdaptar) {
-        setVidMsg(`✍️ Paso 1 de 2: preparando la foto de tu avatar${mAdaptar ? ' con el encuadre del video' : ''}${instr ? ' con los cambios' : ''}… (~1 min)`);
+      // Paso 1: foto nueva del avatar. Con "mismo escenario": en el lugar, postura
+      // y luz del cuadro del video. Si no: con los cambios pedidos / el encuadre.
+      const pasoPrevio = escenaActiva || !!instr || mAdaptar;
+      if (pasoPrevio) {
         const caras = modeloFoto.refs;
-        const prompt = componerCambioAvatar(instr, caras.length > 0, { cuerpo: modeloFoto.cuerpo, encuadre: mAdaptar ? mEncuadre : undefined });
-        const imageUrls = [mFoto, ...caras];
-        const asp = await aspectoDe(mFoto);
+        let prompt: string; let imageUrls: string[]; let asp: string;
+        if (escenaActiva) {
+          setVidMsg(`🛏️ Paso 1 de 2: poniendo a ${modeloFoto.nombre || 'tu modelo'} en el escenario del video${instr ? ' con los cambios' : ''}… (~1 min)`);
+          prompt = componerEscena(instr, true, modeloFoto.cuerpo);
+          imageUrls = [mCuadro, ...(caras.length ? caras : [mFoto])];
+          asp = mCuadroAsp || await aspectoDe(mCuadro);
+        } else {
+          setVidMsg(`✍️ Paso 1 de 2: preparando la foto de tu avatar${mAdaptar ? ' con el encuadre del video' : ''}${instr ? ' con los cambios' : ''}… (~1 min)`);
+          prompt = componerCambioAvatar(instr, caras.length > 0, { cuerpo: modeloFoto.cuerpo, encuadre: mAdaptar && mEncuadre ? mEncuadre : undefined });
+          imageUrls = [mFoto, ...caras];
+          asp = await aspectoDe(mFoto);
+        }
         const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: asp, modelo: 'seedream' }) });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.taskId) throw new Error(data.error ?? 'No se pudo crear la foto con los cambios.');
@@ -605,7 +661,7 @@ export default function Estudio() {
         fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: nueva, prompt, modelo: 'seedream', refs: imageUrls, aspect: asp, credits: hecha.credits }) }).catch(() => undefined);
         setMFoto(nueva);
       }
-      setVidMsg(`🕺 ${instr || mAdaptar ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
+      setVidMsg(`🕺 ${pasoPrevio ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
       const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
@@ -859,7 +915,7 @@ export default function Estudio() {
                   <div className="mvid-info">
                     <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b> · <b>{mVideo.mb.toFixed(1)} MB</b></span>
                     <button className="btn-grad" style={{ height: 40, padding: '0 14px', fontSize: 13 }} onClick={() => copiarLink(mVideo.url)}>{linkCopiado ? '¡Link copiado! ✓' : '📋 Copiar link del video'}</button>
-                    <button className="btn-soft" onClick={() => setMVideo(null)}>Cambiar video</button>
+                    <button className="btn-soft" onClick={() => { setMVideo(null); setMCuadro(''); setMCuadroEstado(''); }}>Cambiar video</button>
                   </div>
                 </div>
               ) : null}
@@ -883,8 +939,36 @@ export default function Estudio() {
             <div className="panel" style={{ marginBottom: 14 }}>
               <div className="h2" style={{ marginBottom: 4 }}>2. 👩 Imagen de tu avatar</div>
               <p className="sub" style={{ marginTop: 0, marginBottom: 6, color: 'var(--ink)', fontWeight: 600 }}>Acá va la foto de tu modelo: ella es la que va a aparecer en el video.</p>
-              <p className="sub" style={hintS}>Elegí una con el mismo encuadre que el video (cuerpo entero si el video es de cuerpo entero).</p>
-              {mEncuadre ? (
+              {mModo === 'mover' && mVideo ? (
+                <div className={`mescena ${mEscena ? 'on' : ''}`}>
+                  <label className="mescena-ck">
+                    <input type="checkbox" checked={mEscena} onChange={(e) => setMEscena(e.target.checked)} style={{ width: 20, height: 20 }} />
+                    <span>🛏️ <b>Mismo escenario que el video</b> <span className="sub" style={{ fontSize: 12 }}>(cuesta 1 foto)</span></span>
+                  </label>
+                  <div className="mescena-body">
+                    {mCuadro ? (
+                      <span className="mescena-th"><Image src={mCuadro} alt="cuadro del video" fill sizes="64px" /></span>
+                    ) : null}
+                    <div style={{ minWidth: 0 }}>
+                      <p className="sub" style={{ margin: 0, fontSize: 12 }}>
+                        {mCuadroEstado === 'sacando' ? 'Tomando un cuadro del video…'
+                          : mCuadroEstado === 'error' || !mCuadro ? 'No pude tomar el cuadro del video solo. Subí una captura de pantalla del video (del principio) y listo.'
+                          : `Primero se crea una foto de ${personaje.nombre || 'tu modelo'} en este mismo lugar, postura, ropa y luz, y después se anima. Así no sale con el fondo de tu foto.`}
+                      </p>
+                      <label className="btn-soft" style={{ display: 'inline-block', marginTop: 6, fontSize: 12, padding: '6px 10px', cursor: 'pointer' }}>
+                        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onSubirCuadro} style={{ display: 'none' }} />
+                        {mCuadro ? '🔄 Usar otra captura' : '📷 Subir captura'}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {escenaActiva ? (
+                <p className="sub" style={hintS}>De esta foto se toma la modelo (su cara y su figura). El lugar, la postura y la ropa salen del video.</p>
+              ) : (
+                <p className="sub" style={hintS}>Elegí una con el mismo encuadre que el video (cuerpo entero si el video es de cuerpo entero).</p>
+              )}
+              {escenaActiva ? null : mEncuadre ? (
                 <div className="mtip" style={{ marginBottom: 12 }}>
                   📐 Tu video es de <b>{mEncuadre === 'cara' ? 'primer plano de la cara' : mEncuadre === 'medio' ? 'medio cuerpo' : 'cuerpo entero'}</b>: elegí una foto de tu avatar <b>igual</b>. Si no tenés una así, activá esto y la app la prepara antes del video:
                   <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, fontWeight: 700, cursor: 'pointer' }}>
@@ -950,11 +1034,11 @@ export default function Estudio() {
 
             {mPesado ? <p className="errbox" style={{ margin: '0 0 10px' }}>Para “Reemplazar en el video” el video tiene que pesar hasta 10 MB (este pesa {mVideo?.mb.toFixed(1)} MB). Recortalo o usá “Mover mi foto”.</p> : null}
             {mModo === 'mover' && mOri === 'image' && mVideo && mVideo.dur > 10 ? <p className="sub" style={{ fontSize: 12, margin: '0 0 10px' }}>⚠️ Con “Como en la foto” el video sale de 10 segundos como máximo.</p> : null}
-            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || !mEncuadre || !!haciendoVideo || mSubiendo > 0 || mPesado} onClick={generarMotion}>
+            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || (!mEncuadre && !escenaActiva) || !!haciendoVideo || mSubiendo > 0 || mPesado || mCuadroEstado === 'sacando'} onClick={generarMotion}>
               {haciendoVideo === 'motion' ? 'Creando video…' : mModo === 'reemplazar' ? '🔁 Reemplazar con mi modelo' : '🕺 Generar video con movimiento'}
             </button>
-            {!haciendoVideo && (!mVideo || !mFoto || !mEncuadre) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta: {[!mVideo ? 'subir el video a recrear' : '', !mEncuadre ? 'indicar cómo se ve la persona en el video' : '', !mFoto ? 'elegir la imagen de tu avatar' : ''].filter(Boolean).join(', ')}.</p> : null}
-            {!haciendoVideo ? <p className="costo">{costoMotionTexto(costoDe(mModo === 'reemplazar' ? `wan/2-2-animate-replace|${mCal}` : `kling-3.0/motion-control|${mCal}`), mTxt.trim() || mAdaptar ? costoDe(claveFoto('seedream')) : null, !!mTxt.trim() || mAdaptar)}</p> : null}
+            {!haciendoVideo && (!mVideo || !mFoto || (!mEncuadre && !escenaActiva)) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta: {[!mVideo ? 'subir el video a recrear' : '', !mEncuadre && !escenaActiva ? 'indicar cómo se ve la persona en el video' : '', !mFoto ? 'elegir la imagen de tu avatar' : ''].filter(Boolean).join(', ')}.</p> : null}
+            {!haciendoVideo ? <p className="costo">{costoMotionTexto(costoDe(mModo === 'reemplazar' ? `wan/2-2-animate-replace|${mCal}` : `kling-3.0/motion-control|${mCal}`), mTxt.trim() || mAdaptar || escenaActiva ? costoDe(claveFoto('seedream')) : null, !!mTxt.trim() || mAdaptar || escenaActiva)}</p> : null}
             {vidMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
             {mError || error ? <p className="errbox" style={{ marginTop: 10 }}>{mError || error}</p> : null}
             <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos. ⏳ Los videos se borran solos a los 3 días: descargalos antes.</p>
@@ -1282,6 +1366,13 @@ function Generando({ texto, extra }: { texto: string; extra?: string }) {
       </div>
     </div>
   );
+}
+
+/** Formato soportado más parecido a un ancho × alto. */
+function aspectoMasCercano(w: number, h: number): string {
+  const r = w / Math.max(1, h);
+  const ops: [string, number][] = [['9:16', 9 / 16], ['3:4', 3 / 4], ['1:1', 1], ['4:3', 4 / 3], ['16:9', 16 / 9]];
+  return ops.reduce((a, b) => (Math.abs(b[1] - r) < Math.abs(a[1] - r) ? b : a))[0];
 }
 
 function fmtBytes(n: number): string {
