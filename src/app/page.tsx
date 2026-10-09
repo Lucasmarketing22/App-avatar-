@@ -50,6 +50,7 @@ export default function Estudio() {
 
   const [aspect, setAspect] = useState('3:4');
   const [cantidad, setCantidad] = useState(2);
+  const [totalGen, setTotalGen] = useState(0); // cuántas fotos se están creando ahora
   const [phase, setPhase] = useState<Phase>('idle');
   const [statusMsg, setStatusMsg] = useState('');
   const [error, setError] = useState('');
@@ -312,6 +313,7 @@ export default function Estudio() {
     pollTimers.current.forEach(clearTimeout); pollTimers.current.clear();
     setPhase('creating'); setStatusMsg('Enviando el pedido a la IA…');
     const prompts = Array.isArray(prompt) ? prompt : Array.from({ length: Math.max(1, Math.min(4, cantidad)) }, () => prompt);
+    setTotalGen(prompts.length);
     const tareas: { id: string; prompt: string }[] = [];
     let ultimoError = '';
     // Los pedidos salen todos a la vez (antes iban de a uno).
@@ -764,7 +766,7 @@ export default function Estudio() {
               </div>
               <div className="aria-pfoot">
                 <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generarUnificado} disabled={!puedeCrear} style={{ width: '100%' }}>
-                  {busy ? `Generando… ${resultUrls.length}/${cantidad}` : '✨ Generar imagen'}
+                  {busy ? `Generando… ${resultUrls.length}/${totalGen}` : '✨ Generar imagen'}
                 </button>
                 {!busy && !puedeCrear ? <p className="sub" style={{ margin: '8px 0 0', fontSize: 12 }}>Subí la cara del personaje o una referencia.</p> : null}
                 {!busy ? <p className="costo">{costoTexto(costoDe(claveFoto(modelo)), cantidad, 'foto')}</p> : null}
@@ -778,7 +780,7 @@ export default function Estudio() {
             <div className="aria-main">
               <div className="aria-preview">
                 {busy ? (
-                  <div className="pv"><div className="sk" /></div>
+                  <div className="pv"><div className="sk" /><div className="pv-gen"><Generando texto={`Creando… ${resultUrls.length}/${totalGen}`} /></div></div>
                 ) : previewActual ? (
                   <div>
                     <div className="pv result-pop" onClick={() => openResult(previewActual.url)} style={{ cursor: 'pointer' }}>
@@ -1074,6 +1076,21 @@ export default function Estudio() {
         <div className="rr"><span>{creaciones.length} creaciones</span><span>{videos.length} videos</span><span>● API en vivo</span></div>
       </div>
 
+      {/* ===== CREANDO: aviso flotante con el círculo girando, en cualquier pantalla ===== */}
+      {(() => {
+        const trabajos = [
+          busy ? `${statusMsg || 'Creando tus fotos…'} (${resultUrls.length}/${totalGen})` : '',
+          haciendoVideo ? (vidMsg || 'Creando tu video…') : '',
+          mejorando ? (upMsg || 'Mejorando la calidad…') : '',
+          vozGen ? 'Generando la voz…' : '',
+        ].filter(Boolean);
+        return trabajos.length ? (
+          <div className="genfloat" role="status" aria-live="polite">
+            <Generando texto={trabajos[0]} extra={trabajos.length > 1 ? `y ${trabajos.length - 1} más en curso` : undefined} />
+          </div>
+        ) : null;
+      })()}
+
       {/* ===== MODALES ===== */}
       {abierto === 'personaje' ? (
         <Modal title={personaje.nombre ? `Modelo: ${personaje.nombre}` : 'Tu modelo'} onClose={() => setAbierto(null)}>
@@ -1249,6 +1266,24 @@ export default function Estudio() {
 /* ---------- Espacio de almacenamiento ---------- */
 // Plan gratis (Hobby) de Vercel Blob: 1 GB. Si pasás a Pro son 5 GB: cambiar acá.
 const LIMITE_ESPACIO = 1024 * 1024 * 1024;
+/** Círculo girando + texto + tiempo transcurrido, mientras algo se está creando. */
+function Generando({ texto, extra }: { texto: string; extra?: string }) {
+  const [seg, setSeg] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSeg((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="gen">
+      <span className="gen-ring" aria-hidden />
+      <div className="gen-tx">
+        <b>{texto}</b>
+        <span>{extra ? `${extra} · ` : ''}{Math.floor(seg / 60)}:{String(seg % 60).padStart(2, '0')}</span>
+      </div>
+    </div>
+  );
+}
+
 function fmtBytes(n: number): string {
   if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toLocaleString('es-AR', { maximumFractionDigits: 2 })} GB`;
   return `${Math.round(n / 1024 ** 2).toLocaleString('es-AR')} MB`;
