@@ -119,6 +119,24 @@ export function componerUnificado(opts: {
 }
 
 /**
+ * Contextura del personaje (ej: "100-60-95, curvilínea"). Las curvas van solo
+ * en el cuerpo: si no se aclara, la IA tiende a redondearle también la cara.
+ */
+export function pistaCuerpo(cuerpo?: string): string {
+  const c = (cuerpo ?? '').trim();
+  if (!c) return '';
+  return `Her body shape and measurements must be exactly: ${c}. Apply these proportions ONLY to her body; her face must stay exactly the same as in the face reference images (do not make the face rounder, wider or fuller).`;
+}
+
+/** Encuadres para adaptar la foto del avatar al video de Motion. */
+export const ENCUADRES = {
+  cara: 'a close-up portrait framing her face, neck and shoulders, looking at the camera',
+  medio: 'a medium shot from the waist up',
+  entero: 'a full-body shot from head to toes, standing, with some space around her',
+} as const;
+export type Encuadre = keyof typeof ENCUADRES;
+
+/**
  * Sesión de fotos: a partir de una foto ya creada (image 1), otras tomas del
  * MISMO set — mismo escenario, luz, ropa y peinado — cambiando pose y encuadre.
  * Cada toma es un pedido distinto para que las fotos salgan variadas.
@@ -130,7 +148,7 @@ export const TOMAS_SESION: string[] = [
   'a medium shot of her sitting or leaning on something in the same place, relaxed pose, looking away from the camera',
 ];
 
-export function componerSesion(toma: string, conCaras: boolean): string {
+export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string): string {
   const partes: string[] = [
     'Photorealistic photoshoot continuation. Image 1 is a photo from an ongoing photo session.',
     'Keep EXACTLY the same location, background and setting, the same lighting, weather and time of day, and the same outfit (every garment, color, fabric, pattern and accessory) and the same hairstyle and makeup as in image 1.',
@@ -138,9 +156,10 @@ export function componerSesion(toma: string, conCaras: boolean): string {
       ? "The other reference images show the woman's face and identity: keep her face exactly the same (same face, bone structure, skin tone, freckles, eye color and natural features)."
       : 'Keep the woman exactly the same person as in image 1 (same face, bone structure, skin tone, freckles, eye color and natural features).',
     `Create a NEW, different photo from this same session: ${toma}. Do not copy the pose, angle or framing of image 1.`,
+    pistaCuerpo(cuerpo),
     REALISMO,
   ];
-  return partes.join(' ');
+  return partes.filter(Boolean).join(' ');
 }
 
 /**
@@ -148,13 +167,21 @@ export function componerSesion(toma: string, conCaras: boolean): string {
  * (image 1) con el cambio pedido (vestuario, pelo…), manteniendo cara, pose y
  * encuadre para que sirva de cuadro inicial del video.
  */
-export function componerCambioAvatar(instrucciones: string, conCaras: boolean): string {
+export function componerCambioAvatar(
+  instrucciones: string,
+  conCaras: boolean,
+  extra?: { cuerpo?: string; encuadre?: Encuadre },
+): string {
+  const instr = instrucciones.trim();
   return [
     'Photorealistic edit of image 1.',
     'Keep EXACTLY the same woman: same face, identity, bone structure, skin tone, freckles, eye color and natural features.',
     conCaras ? 'The other reference images show her face and identity; keep her face exactly the same.' : '',
-    'Keep the same pose, body position, framing, camera angle and composition as image 1, so it can be used as the first frame of a video.',
-    `Apply ONLY this change and keep everything else unchanged: ${instrucciones.trim()}.`,
+    extra?.encuadre
+      ? `Reframe the photo as ${ENCUADRES[extra.encuadre]}, keeping the same outfit, hair and setting style, so it can be used as the first frame of a video with that framing.`
+      : 'Keep the same pose, body position, framing, camera angle and composition as image 1, so it can be used as the first frame of a video.',
+    instr ? `Apply ONLY this change and keep everything else unchanged: ${instr}.` : '',
+    pistaCuerpo(extra?.cuerpo),
     REALISMO,
   ].filter(Boolean).join(' ');
 }

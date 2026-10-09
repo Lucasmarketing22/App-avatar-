@@ -90,3 +90,30 @@ export async function writeJson(name: string, value: unknown): Promise<{ ok: boo
     return { ok: false, error: e instanceof Error ? e.message : 'No se pudo guardar.' };
   }
 }
+
+/**
+ * Cuánto ocupa todo el almacenamiento, en bytes, total y por carpeta
+ * (results, videos, motion, voces, config…). Recorre todas las páginas.
+ */
+export async function usoAlmacenamiento(): Promise<{ total: number; carpetas: Record<string, number>; archivos: number } | null> {
+  if (!configured()) return null;
+  try {
+    const carpetas: Record<string, number> = {};
+    let total = 0;
+    let archivos = 0;
+    let cursor: string | undefined;
+    do {
+      const res = await list({ cursor, limit: 1000 });
+      for (const b of res.blobs) {
+        const carpeta = b.pathname.split('/')[0] || 'otros';
+        carpetas[carpeta] = (carpetas[carpeta] ?? 0) + b.size;
+        total += b.size;
+        archivos += 1;
+      }
+      cursor = res.hasMore ? res.cursor : undefined;
+    } while (cursor);
+    return { total, carpetas, archivos };
+  } catch {
+    return null;
+  }
+}

@@ -4,12 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
-import { componerCambioAvatar, componerSesion, componerUnificado, TOMAS_SESION } from '@/lib/estudio/prompt';
+import { componerCambioAvatar, componerSesion, componerUnificado, pistaCuerpo, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
-type Personaje = { id: string; nombre: string; refs: string[] };
+type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string };
 const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
@@ -73,6 +73,12 @@ export default function Estudio() {
   const [saldo, setSaldo] = useState<number | null>(null);
   const [costos, setCostos] = useState<Record<string, { credits: number }>>({});
   const [costoMsg, setCostoMsg] = useState('');
+  const [espacio, setEspacio] = useState<{ total: number; carpetas: Record<string, number>; archivos: number } | null>(null);
+  // Al entrar a la Galería consultamos cuánto espacio se está usando.
+  useEffect(() => {
+    if (vista !== 'galeria') return;
+    fetch('/api/espacio').then((r) => (r.ok ? r.json() : null)).then((d) => { if (d && typeof d.total === 'number') setEspacio(d); }).catch(() => undefined);
+  }, [vista, creaciones.length, videos.length]);
   async function cargarSaldo() {
     try {
       const d = await fetch('/api/saldo').then((r) => r.json());
@@ -93,6 +99,9 @@ export default function Estudio() {
   }
   // Motion control: video de referencia + foto de la modelo.
   const [mModo, setMModo] = useState<'mover' | 'reemplazar'>('mover');
+  // Cómo se ve la persona en el video de referencia (para que la foto coincida).
+  const [mEncuadre, setMEncuadre] = useState<Encuadre | ''>('');
+  const [mAdaptar, setMAdaptar] = useState(false);
   const [mVideo, setMVideo] = useState<{ url: string; dur: number; mb: number } | null>(null);
   const [mFoto, setMFoto] = useState<string | null>(null);
   const [mOri, setMOri] = useState<'video' | 'image'>('video');
@@ -357,7 +366,8 @@ export default function Estudio() {
     const imageUrls = [...editImgs, ...personaje.refs, ...refsExtra.map((r) => r.url)];
     if (!imageUrls.length) { setError('Subí al menos una imagen: el personaje (cara) o una referencia.'); setPhase('error'); return; }
     const faceHint = personaje.refs.length ? ["One or more reference images show the woman's face and identity; keep her face exactly."] : [];
-    const hints = [...faceHint, ...refsExtra.map((r) => r.hint)];
+    const cuerpoHint = pistaCuerpo(personaje.cuerpo);
+    const hints = [...faceHint, ...(cuerpoHint ? [cuerpoHint] : []), ...refsExtra.map((r) => r.hint)];
     const texto = [editPrompt.trim(), extra.trim()].filter(Boolean).join('. ');
     const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel });
     lanzar(prompt, imageUrls, { aspect, modelo });
@@ -381,11 +391,12 @@ export default function Estudio() {
   function sesionDeFotos(c: Creacion) {
     if (busy) return;
     const deLaFoto = modelas.find((m) => m.refs.some((u) => c.refs?.includes(u)));
-    const caras = (deLaFoto ?? personaje).refs;
+    const modeloFoto = deLaFoto ?? personaje;
+    const caras = modeloFoto.refs;
     const a = c.aspect || aspect;
     setLightbox(null); setVista('crear'); setAspect(a);
     lanzar(
-      TOMAS_SESION.map((t) => componerSesion(t, caras.length > 0)),
+      TOMAS_SESION.map((t) => componerSesion(t, caras.length > 0, modeloFoto.cuerpo)),
       [c.url, ...caras],
       { aspect: a, modelo },
       `📸 Sesión de fotos: generando ${TOMAS_SESION.length} tomas del mismo set… (puede tardar ~1 minuto)`,
@@ -547,18 +558,19 @@ export default function Estudio() {
   }
 
   async function generarMotion() {
-    if (haciendoVideo || !mVideo || !mFoto || mPesado) return;
+    if (haciendoVideo || !mVideo || !mFoto || mPesado || !mEncuadre) return;
     setMError(''); setError(''); setCostoMsg(''); setHaciendoVideo('motion');
     costoPrevio.current = 0;
     const instr = mTxt.trim();
     let foto = mFoto;
+    const deLaFoto = modelas.find((m) => m.refs.some((u) => creaciones.find((c) => c.url === mFoto)?.refs?.includes(u)));
+    const modeloFoto = deLaFoto ?? personaje;
     try {
-      // Paso 1 (solo si hay instrucciones): foto nueva del avatar con el cambio.
-      if (instr) {
-        setVidMsg('✍️ Paso 1 de 2: creando la foto de tu avatar con los cambios… (~1 min)');
-        const deLaFoto = modelas.find((m) => m.refs.some((u) => creaciones.find((c) => c.url === mFoto)?.refs?.includes(u)));
-        const caras = (deLaFoto ?? personaje).refs;
-        const prompt = componerCambioAvatar(instr, caras.length > 0);
+      // Paso 1 (si hay instrucciones o se pidió adaptar el encuadre): foto nueva del avatar.
+      if (instr || mAdaptar) {
+        setVidMsg(`✍️ Paso 1 de 2: preparando la foto de tu avatar${mAdaptar ? ' con el encuadre del video' : ''}${instr ? ' con los cambios' : ''}… (~1 min)`);
+        const caras = modeloFoto.refs;
+        const prompt = componerCambioAvatar(instr, caras.length > 0, { cuerpo: modeloFoto.cuerpo, encuadre: mAdaptar ? mEncuadre : undefined });
         const imageUrls = [mFoto, ...caras];
         const asp = await aspectoDe(mFoto);
         const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: asp, modelo: 'seedream' }) });
@@ -572,8 +584,8 @@ export default function Estudio() {
         fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: nueva, prompt, modelo: 'seedream', refs: imageUrls, aspect: asp, credits: hecha.credits }) }).catch(() => undefined);
         setMFoto(nueva);
       }
-      setVidMsg(`🕺 ${instr ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
-      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: mOri, calidad: mCal }) });
+      setVidMsg(`🕺 ${instr || mAdaptar ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
+      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
       pollVideo(data.taskId, 0);
@@ -830,6 +842,12 @@ export default function Estudio() {
                   </div>
                 </div>
               ) : null}
+              <div className="aplbl" style={{ marginTop: 14 }}>¿Cómo se ve la persona en el video?</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className={`opt ${mEncuadre === 'cara' ? 'on' : ''}`} onClick={() => setMEncuadre('cara')}>😊 Primer plano (cara)</button>
+                <button className={`opt ${mEncuadre === 'medio' ? 'on' : ''}`} onClick={() => setMEncuadre('medio')}>👚 Medio cuerpo</button>
+                <button className={`opt ${mEncuadre === 'entero' ? 'on' : ''}`} onClick={() => setMEncuadre('entero')}>💃 Cuerpo entero</button>
+              </div>
               {mVideo ? (
                 <input className="input" readOnly value={mVideo.url} onFocus={(e) => e.currentTarget.select()} aria-label="Link del video" style={{ width: '100%', boxSizing: 'border-box', marginTop: 10, fontSize: 11, height: 34 }} />
               ) : (
@@ -845,6 +863,17 @@ export default function Estudio() {
               <div className="h2" style={{ marginBottom: 4 }}>2. 👩 Imagen de tu avatar</div>
               <p className="sub" style={{ marginTop: 0, marginBottom: 6, color: 'var(--ink)', fontWeight: 600 }}>Acá va la foto de tu modelo: ella es la que va a aparecer en el video.</p>
               <p className="sub" style={hintS}>Elegí una con el mismo encuadre que el video (cuerpo entero si el video es de cuerpo entero).</p>
+              {mEncuadre ? (
+                <div className="mtip" style={{ marginBottom: 12 }}>
+                  📐 Tu video es de <b>{mEncuadre === 'cara' ? 'primer plano de la cara' : mEncuadre === 'medio' ? 'medio cuerpo' : 'cuerpo entero'}</b>: elegí una foto de tu avatar <b>igual</b>. Si no tenés una así, activá esto y la app la prepara antes del video:
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, fontWeight: 700, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={mAdaptar} onChange={(e) => setMAdaptar(e.target.checked)} style={{ width: 18, height: 18 }} />
+                    ✨ Adaptar mi foto a ese encuadre (cuesta 1 foto)
+                  </label>
+                </div>
+              ) : (
+                <div className="mtip" style={{ marginBottom: 12 }}>📐 Primero indicá arriba cómo se ve la persona en el video (cara, medio cuerpo o cuerpo entero) y te digo qué foto elegir.</div>
+              )}
               <div className="mfotos">
                 <label className="upload-tile mfoto-add">
                   <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onSubirFotoMotion} style={{ display: 'none' }} />
@@ -895,11 +924,11 @@ export default function Estudio() {
 
             {mPesado ? <p className="errbox" style={{ margin: '0 0 10px' }}>Para “Reemplazar en el video” el video tiene que pesar hasta 10 MB (este pesa {mVideo?.mb.toFixed(1)} MB). Recortalo o usá “Mover mi foto”.</p> : null}
             {mModo === 'mover' && mOri === 'image' && mVideo && mVideo.dur > 10 ? <p className="sub" style={{ fontSize: 12, margin: '0 0 10px' }}>⚠️ Con “Como en la foto” el video sale de 10 segundos como máximo.</p> : null}
-            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || !!haciendoVideo || mSubiendo > 0 || mPesado} onClick={generarMotion}>
+            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || !mEncuadre || !!haciendoVideo || mSubiendo > 0 || mPesado} onClick={generarMotion}>
               {haciendoVideo === 'motion' ? 'Creando video…' : mModo === 'reemplazar' ? '🔁 Reemplazar con mi modelo' : '🕺 Generar video con movimiento'}
             </button>
-            {!haciendoVideo && (!mVideo || !mFoto) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta {!mVideo && !mFoto ? 'subir el video a recrear y elegir la imagen de tu avatar' : !mVideo ? 'subir el video a recrear' : 'elegir la imagen de tu avatar'}.</p> : null}
-            {!haciendoVideo ? <p className="costo">{costoMotionTexto(costoDe(mModo === 'reemplazar' ? `wan/2-2-animate-replace|${mCal}` : `kling-3.0/motion-control|${mCal}`), mTxt.trim() ? costoDe(claveFoto('seedream')) : null, !!mTxt.trim())}</p> : null}
+            {!haciendoVideo && (!mVideo || !mFoto || !mEncuadre) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta: {[!mVideo ? 'subir el video a recrear' : '', !mEncuadre ? 'indicar cómo se ve la persona en el video' : '', !mFoto ? 'elegir la imagen de tu avatar' : ''].filter(Boolean).join(', ')}.</p> : null}
+            {!haciendoVideo ? <p className="costo">{costoMotionTexto(costoDe(mModo === 'reemplazar' ? `wan/2-2-animate-replace|${mCal}` : `kling-3.0/motion-control|${mCal}`), mTxt.trim() || mAdaptar ? costoDe(claveFoto('seedream')) : null, !!mTxt.trim() || mAdaptar)}</p> : null}
             {vidMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
             {mError || error ? <p className="errbox" style={{ marginTop: 10 }}>{mError || error}</p> : null}
             <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos. ⏳ Los videos se borran solos a los 3 días: descargalos antes.</p>
@@ -961,6 +990,7 @@ export default function Estudio() {
           /* ----- GALERÍA ----- */
           <>
             <h1 className="h1" style={{ marginBottom: 10 }}>Mis creaciones</h1>
+            {espacio ? <MedidorEspacio uso={espacio} /> : null}
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               <button className={`opt ${galTab === 'fotos' ? 'on' : ''}`} onClick={() => setGalTab('fotos')}>🖼️ Fotos ({creaciones.length})</button>
               <button className={`opt ${galTab === 'videos' ? 'on' : ''}`} onClick={() => setGalTab('videos')}>🎬 Videos ({videos.length})</button>
@@ -1042,6 +1072,11 @@ export default function Estudio() {
           <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginTop: 16 }}>
             Nombre (opcional)
             <input className="input" value={personaje.nombre} onChange={(e) => { const v = e.target.value; setModelas((ms) => ms.map((m) => (m.id === personaje.id ? { ...m, nombre: v } : m))); }} onBlur={() => guardarPersonaje(personaje)} placeholder="Ej: Luna" style={{ display: 'block', marginTop: 6, width: 220, maxWidth: '100%' }} />
+          </label>
+          <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginTop: 14 }}>
+            Contextura / medidas
+            <input className="input" value={personaje.cuerpo ?? ''} onChange={(e) => { const v = e.target.value; setModelas((ms) => ms.map((m) => (m.id === personaje.id ? { ...m, cuerpo: v } : m))); }} onBlur={() => guardarPersonaje(personaje)} placeholder="Ej: 100-60-95, curvilínea, reloj de arena" style={{ display: 'block', marginTop: 6, width: '100%', boxSizing: 'border-box' }} />
+            <span className="sub" style={{ display: 'block', fontSize: 12, fontWeight: 400, marginTop: 4 }}>Se respeta en todas las fotos y videos de esta modelo. La cara no se toca: las medidas van solo al cuerpo.</span>
           </label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18 }}>
             <button className="btn-soft" onClick={nuevaModelo}>＋ Agregar otra modelo</button>
@@ -1159,6 +1194,38 @@ export default function Estudio() {
         </div>
       ) : null}
     </main>
+  );
+}
+
+/* ---------- Espacio de almacenamiento ---------- */
+// Plan gratis (Hobby) de Vercel Blob: 1 GB. Si pasás a Pro son 5 GB: cambiar acá.
+const LIMITE_ESPACIO = 1024 * 1024 * 1024;
+function fmtBytes(n: number): string {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toLocaleString('es-AR', { maximumFractionDigits: 2 })} GB`;
+  return `${Math.round(n / 1024 ** 2).toLocaleString('es-AR')} MB`;
+}
+function MedidorEspacio({ uso }: { uso: { total: number; carpetas: Record<string, number> } }) {
+  const pct = Math.min(100, (uso.total / LIMITE_ESPACIO) * 100);
+  const c = uso.carpetas;
+  const grupos: [string, number][] = [
+    ['Fotos', c.results ?? 0],
+    ['Videos', c.videos ?? 0],
+    ['Videos de referencia', c.motion ?? 0],
+    ['Audios', c.voces ?? 0],
+  ];
+  const otros = uso.total - grupos.reduce((a, [, v]) => a + v, 0);
+  grupos.push(['Referencias y otros', Math.max(0, otros)]);
+  const nivel = pct >= 90 ? 'alto' : pct >= 70 ? 'medio' : 'ok';
+  return (
+    <div className={`espacio ${nivel}`}>
+      <div className="esp-top">
+        <span>💾 Espacio usado: <b>{fmtBytes(uso.total)}</b> de {fmtBytes(LIMITE_ESPACIO)}</span>
+        <b>{Math.round(pct)}%</b>
+      </div>
+      <div className="esp-barra"><span style={{ width: `${pct}%` }} /></div>
+      <div className="esp-det">{grupos.filter(([, v]) => v > 0).map(([k, v]) => `${k}: ${fmtBytes(v)}`).join(' · ')}</div>
+      {nivel !== 'ok' ? <div className="esp-aviso">{nivel === 'alto' ? '⚠️ Casi lleno: si pasás el límite, Vercel bloquea el almacenamiento. Borrá lo que no uses o pasá a Pro.' : '👀 Pasaste el 70%: borrá fotos o videos que no uses para liberar espacio.'}</div> : null}
+    </div>
   );
 }
 

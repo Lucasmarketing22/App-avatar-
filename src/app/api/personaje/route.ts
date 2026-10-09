@@ -5,7 +5,7 @@ import { readJson, writeJson } from '@/lib/storage';
 export const runtime = 'nodejs';
 
 /** Una modelo (personaje): su nombre y 1 a 3 fotos de la cara. */
-export type Personaje = { id: string; nombre: string; refs: string[] };
+export type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string };
 /** Todas las modelos + cuál está elegida para crear. */
 export type Modelos = { activo: string; lista: Personaje[] };
 
@@ -20,7 +20,9 @@ function limpiar(p: unknown): Personaje | null {
   const refs = Array.isArray(o.refs)
     ? o.refs.filter((u): u is string => typeof u === 'string' && u.startsWith('http')).slice(0, 3)
     : [];
-  return { id, nombre, refs };
+  // Contextura / medidas (ej: "100-60-95, curvilínea"). Se suma a cada prompt.
+  const cuerpo = typeof o.cuerpo === 'string' ? o.cuerpo.trim().slice(0, 200) : '';
+  return cuerpo ? { id, nombre, refs, cuerpo } : { id, nombre, refs };
 }
 
 export async function GET() {
