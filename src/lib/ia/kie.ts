@@ -67,7 +67,7 @@ export async function createTask(
 
 export type TaskStatus =
   | { state: 'running' }
-  | { state: 'success'; imageUrl: string; credits?: number }
+  | { state: 'success'; imageUrl: string; credits?: number; costoClave?: string }
   | { state: 'fail'; error: string };
 
 /** Consulta el estado de una tarea. */
@@ -84,7 +84,7 @@ export async function getTask(taskId: string): Promise<TaskStatus> {
   }
 
   const data = (await res.json().catch(() => null)) as
-    | { data?: { state?: string; resultJson?: string; failCode?: string; failMsg?: string; creditsConsumed?: number } }
+    | { data?: { state?: string; resultJson?: string; failCode?: string; failMsg?: string; creditsConsumed?: number; model?: string; param?: string } }
     | null;
   const d = data?.data;
   if (!d) return { state: 'running' };
@@ -98,7 +98,7 @@ export async function getTask(taskId: string): Promise<TaskStatus> {
       url = '';
     }
     if (!url) return { state: 'fail', error: 'La generación terminó pero no vino la imagen.' };
-    return { state: 'success', imageUrl: url, credits: d.creditsConsumed };
+    return { state: 'success', imageUrl: url, credits: d.creditsConsumed, costoClave: claveDeCosto(d.model, d.param) };
   }
 
   if (d.state === 'fail') {
@@ -140,4 +140,34 @@ function friendlyFail(failMsg?: string): string {
     return 'Se tardó demasiado. Probá de nuevo.';
   }
   return failMsg ? `La generación falló: ${failMsg}` : 'La generación falló. Probá de nuevo.';
+}
+
+/**
+ * Clave para recordar cuánto cuesta cada tipo de generación: modelo + su
+ * calidad (mode / resolution / quality). Ej: "seedream/4.5-edit|basic",
+ * "kling-3.0/motion-control|720p". La app arma la misma clave para estimar.
+ */
+export function claveDeCosto(model?: string, param?: string): string | undefined {
+  if (!model) return undefined;
+  let calidad = '';
+  try {
+    const p = JSON.parse(param ?? '{}') as { input?: unknown };
+    const input = (typeof p.input === 'string' ? JSON.parse(p.input) : p.input) as Record<string, unknown> | undefined;
+    const v = input?.mode ?? input?.resolution ?? input?.quality;
+    if (typeof v === 'string') calidad = v;
+  } catch { /* sin calidad */ }
+  return `${model}|${calidad}`;
+}
+
+/** Saldo de créditos de la cuenta de Kie (null si no se pudo consultar). */
+export async function getCredits(): Promise<number | null> {
+  if (!process.env.KIE_API_KEY) return null;
+  try {
+    const res = await fetch(`${BASE}/chat/credit`, { headers: authHeaders(), cache: 'no-store' });
+    const data = (await res.json().catch(() => null)) as { code?: number; data?: unknown } | null;
+    const n = Number(data?.data);
+    return res.ok && Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
 }

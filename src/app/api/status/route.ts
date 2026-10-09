@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { getTask } from '@/lib/ia/kie';
 import { aplicarGrano } from '@/lib/grain';
 import { uploadPublic } from '@/lib/storage';
+import { registrarCosto } from '@/lib/costos';
 
 export const runtime = 'nodejs';
 // La consulta es rápida (no espera minutos): el navegador la repite cada pocos
@@ -28,6 +29,9 @@ export async function GET(request: Request) {
   // días). Si algo falla al guardar, igual mostramos la de Kie.
   // Detectamos si el resultado es video (mp4) o imagen, por la URL o el
   // content-type, y lo guardamos en la carpeta correcta.
+  // Guardamos cuánto costó este tipo de generación (para estimar las próximas).
+  await registrarCosto(task.costoClave, task.credits).catch(() => undefined);
+
   const esVideoUrl = /\.(mp4|webm|mov)(\?|$)/i.test(task.imageUrl);
   try {
     const r = await fetch(task.imageUrl, { cache: 'no-store' });
