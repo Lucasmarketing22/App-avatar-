@@ -4,8 +4,8 @@ import { readJson, writeJson } from '@/lib/storage';
 
 export const runtime = 'nodejs';
 
-/** Una modelo (personaje): su nombre y 1 a 3 fotos de la cara. */
-export type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string };
+/** Una modelo (personaje): su nombre, 1 a 3 fotos de la cara y (opcional) fotos del cuerpo. */
+export type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string };
 /** Todas las modelos + cuál está elegida para crear. */
 export type Modelos = { activo: string; lista: Personaje[] };
 
@@ -22,7 +22,16 @@ function limpiar(p: unknown): Personaje | null {
     : [];
   // Contextura / medidas (ej: "100-60-95, curvilínea"). Se suma a cada prompt.
   const cuerpo = typeof o.cuerpo === 'string' ? o.cuerpo.trim().slice(0, 200) : '';
-  return cuerpo ? { id, nombre, refs, cuerpo } : { id, nombre, refs };
+  // Fotos del cuerpo (cuerpo entero / medio cuerpo): referencia de la figura.
+  const url = (u: unknown) => (typeof u === 'string' && u.startsWith('http') ? u : '');
+  const entero = url(o.entero);
+  const medio = url(o.medio);
+  return {
+    id, nombre, refs,
+    ...(cuerpo ? { cuerpo } : {}),
+    ...(entero ? { entero } : {}),
+    ...(medio ? { medio } : {}),
+  };
 }
 
 export async function GET() {
