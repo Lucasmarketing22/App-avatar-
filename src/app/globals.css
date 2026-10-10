@@ -373,3 +373,9 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .vz-ejemplos { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .vz-ej { text-align: left; font-size: 12px; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
 .vz-ej:hover { border-color: var(--rosa); background: var(--rosa-soft); }
+
+/* ---------- Publicar en redes ---------- */
+.pub-ov { z-index: 120; }
+.pub-media { display: flex; justify-content: center; background: var(--surface-2); border-radius: 14px; overflow: hidden; margin-bottom: 4px; }
+.pub-media img, .pub-media video { display: block; max-width: 100%; max-height: 200px; object-fit: contain; }
+.pub-btn { position: absolute; left: 8px; bottom: 44px; z-index: 2; border: none; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: #fff; background: linear-gradient(135deg, var(--rosa), var(--violeta)); box-shadow: var(--sh-rosa); cursor: pointer; }

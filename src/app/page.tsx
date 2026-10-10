@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
+import Publicar from '@/components/Publicar';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
 
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
@@ -65,6 +66,7 @@ export default function Estudio() {
   const [cargando, setCargando] = useState(true);
 
   const [videos, setVideos] = useState<Creacion[]>([]);
+  const [publicar, setPublicar] = useState<{ url: string; tipo: 'foto' | 'video'; prompt?: string } | null>(null);
   const [galTab, setGalTab] = useState<'fotos' | 'videos'>('fotos');
 
   const [abierto, setAbierto] = useState<string | null>(null);
@@ -803,6 +805,7 @@ export default function Estudio() {
                       <div className="cap">Tu creación{previewActual.modelo ? ` · ${MODELOS.find((m) => m.id === previewActual.modelo)?.label ?? ''}` : ''}</div>
                     </div>
                     <div className="pvactions">
+                      <button className="btn-soft" onClick={() => setPublicar({ url: previewActual.url, tipo: 'foto', prompt: previewActual.prompt })}>📤 Publicar</button>
                       <a className="btn-soft" href={previewActual.url} target="_blank" rel="noreferrer">⬇ Descargar</a>
                       <button className="btn-soft" disabled={!!mejorando} onClick={() => mejorar(previewActual)}>{mejorando ? 'Mejorando…' : '🔎 Mejorar'}</button>
                       {previewActual.prompt && previewActual.refs?.length ? <button className="btn-soft" onClick={() => variar(previewActual)}>🔁 Variar</button> : null}
@@ -1053,6 +1056,7 @@ export default function Estudio() {
                       <video src={v.url} controls playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       <span className="vence">⏳ {venceEn(v.ts)}</span>
                       <button className="xbtn" title="Eliminar" onClick={() => borrarVideo(v)}>🗑️</button>
+                      <button className="pub-btn" onClick={() => setPublicar({ url: v.url, tipo: 'video', prompt: v.prompt })}>📤 Publicar</button>
                     </div>
                   ))}
                 </div>
@@ -1092,6 +1096,8 @@ export default function Estudio() {
           </div>
         ) : null;
       })()}
+
+      {publicar ? <Publicar url={publicar.url} tipo={publicar.tipo} prompt={publicar.prompt} nombre={personaje.nombre} onClose={() => setPublicar(null)} /> : null}
 
       {/* ===== MODALES ===== */}
       {abierto === 'personaje' ? (
@@ -1227,6 +1233,9 @@ export default function Estudio() {
                 </button>
               </div>
             ) : null}
+            <button className="btn-grad shine" style={{ width: '100%', marginTop: 12 }} onClick={() => setPublicar({ url: lightbox.url, tipo: 'foto', prompt: lightbox.prompt })}>
+              📤 Publicar en redes
+            </button>
             <div className="lb-row">
               <a className="btn-ghost" href={lightbox.url} target="_blank" rel="noreferrer">⬇ Descargar</a>
               <button className="btn-ghost" disabled={!!mejorando} onClick={() => { const c = lightbox; setLightbox(null); setVista('galeria'); setGalTab('fotos'); if (c) mejorar(c); }}>
