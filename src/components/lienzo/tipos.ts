@@ -1,7 +1,7 @@
 /** Tipos, cajas disponibles y medidas del lienzo de nodos. */
 
-export type Dato = 'video' | 'imagen' | 'texto';
-export type TipoNodo = 'video' | 'captura' | 'modelo' | 'vestuario' | 'escena' | 'peinado' | 'pose' | 'imagen' | 'prompt' | 'foto' | 'motion' | 'resultado';
+export type Dato = 'video' | 'imagen' | 'texto' | 'audio';
+export type TipoNodo = 'video' | 'captura' | 'modelo' | 'vestuario' | 'escena' | 'peinado' | 'pose' | 'imagen' | 'prompt' | 'audio' | 'foto' | 'motion' | 'hablar' | 'resultado';
 
 export type Puerto = { id: string; label: string; acepta: Dato[]; multi?: boolean };
 export type DefNodo = { titulo: string; icono: string; desc: string; entradas: Puerto[]; salida: Dato | null; ia?: boolean };
@@ -20,6 +20,7 @@ export const DEF: Record<TipoNodo, DefNodo> = {
   pose: { titulo: 'Pose', icono: '🤸', desc: 'Pose o gesto de tu galería', entradas: [], salida: 'imagen' },
   imagen: { titulo: 'Imagen', icono: '🖼️', desc: 'Cualquier foto de referencia', entradas: [], salida: 'imagen' },
   prompt: { titulo: 'Prompt', icono: '✍️', desc: 'Instrucciones con texto', entradas: [], salida: 'texto' },
+  audio: { titulo: 'Audio', icono: '🎵', desc: 'Una voz: audio o video (se saca el sonido)', entradas: [], salida: 'audio' },
   foto: {
     titulo: 'Foto IA', icono: '✨', desc: 'Crea la imagen con todo lo conectado', ia: true,
     entradas: [{ id: 'imgs', label: 'Imágenes', acepta: ['imagen'], multi: true }, { id: 'txt', label: 'Instrucciones', acepta: ['texto'], multi: true }],
@@ -30,10 +31,15 @@ export const DEF: Record<TipoNodo, DefNodo> = {
     entradas: [{ id: 'imagen', label: 'Imagen inicial', acepta: ['imagen'] }, { id: 'video', label: 'Video', acepta: ['video'] }, { id: 'txt', label: 'Instrucciones', acepta: ['texto'] }],
     salida: 'video',
   },
+  hablar: {
+    titulo: 'Mila hablando', icono: '🗣️', desc: 'Foto + audio → video hablando', ia: true,
+    entradas: [{ id: 'imagen', label: 'Foto', acepta: ['imagen'] }, { id: 'audio', label: 'Audio / voz', acepta: ['audio'] }, { id: 'txt', label: 'Instrucciones', acepta: ['texto'] }],
+    salida: 'video',
+  },
   resultado: { titulo: 'Resultado', icono: '✅', desc: 'Ver, descargar y publicar', entradas: [{ id: 'in', label: 'Entrada', acepta: ['video', 'imagen'] }], salida: null },
 };
 
-export const ORDEN_MENU: TipoNodo[] = ['video', 'captura', 'modelo', 'vestuario', 'escena', 'peinado', 'pose', 'imagen', 'prompt', 'foto', 'motion', 'resultado'];
+export const ORDEN_MENU: TipoNodo[] = ['video', 'captura', 'modelo', 'vestuario', 'escena', 'peinado', 'pose', 'imagen', 'prompt', 'audio', 'foto', 'motion', 'hablar', 'resultado'];
 
 // Medidas fijas: así la posición de cada "enchufe" se calcula sin medir el DOM.
 export const ANCHO = 236;
