@@ -610,6 +610,7 @@ export default function Lienzo(props: Props) {
                   correrMotion={() => correrMotion(n.id)}
                   onPublicar={onPublicar}
                   onGuardar={onGuardar}
+                  conectadaASalida={edges.some((e) => e.de === n.id)}
                 />
               </div>
             </div>
@@ -651,6 +652,7 @@ function CuerpoNodo(p: {
   correrMotion: () => void;
   onPublicar: (url: string, tipo: 'foto' | 'video') => void;
   onGuardar: (url: string, tipo: 'foto' | 'video') => void;
+  conectadaASalida: boolean;
 }) {
   const { n, setData } = p;
   const d = n.data;
@@ -718,6 +720,7 @@ function CuerpoNodo(p: {
                 ))}
               </div>
               <a className="lz-link" href={(d.ultimo as string) || res[0]} target="_blank" rel="noreferrer">Ver la última en grande ↗</a>
+              {typeof d.credits === 'number' ? <p className="lz-nota">La última costó {fmt(d.credits as number)} créditos · {res.length} foto{res.length > 1 ? 's' : ''} creada{res.length > 1 ? 's' : ''} en esta caja.</p> : null}
               {!d.elegida ? <p className="lz-nota">👆 Tocá la que quieras usar para <b>aprobarla</b>: esa pasa a la caja siguiente.</p> : null}
             </>
           ) : null}
@@ -759,7 +762,15 @@ function CuerpoNodo(p: {
           <p className="lz-nota">{!imgOk ? 'Falta la imagen inicial (aprobada). ' : ''}{!vid ? 'Falta el video. ' : ''}Último video: {costoTxt(p.costo(clave))}</p>
           {corriendo ? <p className="lz-nota">Tarda unos minutos. Podés seguir usando la app.</p> : null}
           {err}
-          {typeof d.resultado === 'string' && d.resultado ? <video className="lz-vid" src={d.resultado} controls playsInline preload="metadata" /> : null}
+          {typeof d.resultado === 'string' && d.resultado ? (
+            p.conectadaASalida
+              // Es el MISMO video que muestra la caja Resultado (no se cobró dos veces).
+              ? <p className="lz-ok-txt">✅ Video listo{typeof d.credits === 'number' ? ` · costó ${fmt(d.credits as number)} créditos` : ''}. Lo ves en la caja <b>Resultado</b>.</p>
+              : <>
+                  <video className="lz-vid" src={d.resultado} controls playsInline preload="metadata" />
+                  {typeof d.credits === 'number' ? <p className="lz-nota">Costó {fmt(d.credits as number)} créditos.</p> : null}
+                </>
+          ) : null}
         </>
       );
     }
