@@ -20,7 +20,8 @@ export async function POST(request: Request) {
       onBeforeGenerateToken: async (pathname) => {
         if (!pathname.startsWith('motion/')) throw new Error('Carpeta no permitida.');
         return {
-          allowedContentTypes: ['video/mp4', 'video/quicktime', 'video/webm'],
+          // Videos (Motion) y audios (voz para "Mila hablando").
+          allowedContentTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/ogg', 'audio/webm'],
           maximumSizeInBytes: 100 * 1024 * 1024,
           addRandomSuffix: true,
         };

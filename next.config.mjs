@@ -7,6 +7,7 @@ const nextConfig = {
     serverComponentsExternalPackages: ['ffmpeg-static'],
     outputFileTracingIncludes: {
       '/api/sin-audio': ['./node_modules/ffmpeg-static/ffmpeg'],
+      '/api/extraer-audio': ['./node_modules/ffmpeg-static/ffmpeg'],
     },
   },
   images: {

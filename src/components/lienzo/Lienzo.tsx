@@ -33,9 +33,17 @@ type Props = {
 type Salida =
   | { tipo: 'video'; url: string; mb?: number; dur?: number }
   | { tipo: 'imagen'; items: { url: string; rol: RolImagen }[]; asp?: string; cuerpo?: string }
-  | { tipo: 'texto'; texto: string };
+  | { tipo: 'texto'; texto: string }
+  | { tipo: 'audio'; url: string; dur?: number };
 
-const COLOR: Record<Dato, string> = { video: '#f0a33c', imagen: '#d6457f', texto: '#7a5af0' };
+const COLOR: Record<Dato, string> = { video: '#f0a33c', imagen: '#d6457f', texto: '#7a5af0', audio: '#1fa463' };
+// "Mila hablando": motores de Kie y su precio por segundo de audio (créditos).
+const HABLAR = [
+  { id: 'kling-std', label: 'Kling Avatar ⭐', desc: '720p · buena calidad', porSeg: 8, maxSeg: 300 },
+  { id: 'kling-pro', label: 'Kling Avatar Pro', desc: '1080p · la mejor calidad', porSeg: 16, maxSeg: 300 },
+  { id: 'inf-480', label: 'InfiniteTalk 480p', desc: 'El más barato · audio hasta 15 s', porSeg: 3, maxSeg: 15 },
+  { id: 'inf-720', label: 'InfiniteTalk 720p', desc: 'Audio hasta 15 s', porSeg: 12, maxSeg: 15 },
+];
 const FOTO_MODELOS = [
   { id: 'seedream', label: 'Seedream 4.5 ⭐' },
   { id: 'nanopro', label: 'Nano Banana Pro' },
@@ -220,7 +228,8 @@ export default function Lienzo(props: Props) {
       case 'imagen': return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: 'imagen' }] } : null;
       case 'prompt': return typeof d.texto === 'string' && d.texto.trim() ? { tipo: 'texto', texto: d.texto } : null;
       case 'foto': return typeof d.elegida === 'string' && d.elegida ? { tipo: 'imagen', items: [{ url: d.elegida, rol: 'base' }], asp: d.asp as string } : null;
-      case 'motion': return typeof d.resultado === 'string' && d.resultado ? { tipo: 'video', url: d.resultado } : null;
+      case 'motion': case 'hablar': return typeof d.resultado === 'string' && d.resultado ? { tipo: 'video', url: d.resultado } : null;
+      case 'audio': return typeof d.url === 'string' && d.url ? { tipo: 'audio', url: d.url, dur: d.dur as number } : null;
       default: return null;
     }
   }
@@ -319,6 +328,30 @@ export default function Lienzo(props: Props) {
     }
   }
 
+  /* ----- correr "Mila hablando" ----- */
+  async function correrHablar(id: string) {
+    const n = nodesRef.current.find((x) => x.id === id);
+    if (!n || n.data.estado === 'corriendo') return;
+    const img = entradas(id, 'imagen').map(salidaDe).find((s) => s?.tipo === 'imagen') as Extract<Salida, { tipo: 'imagen' }> | undefined;
+    const aud = entradas(id, 'audio').map(salidaDe).find((s) => s?.tipo === 'audio') as Extract<Salida, { tipo: 'audio' }> | undefined;
+    const txt = entradas(id, 'txt').map(salidaDe).flatMap((s) => (s && s.tipo === 'texto' ? [s.texto] : [])).join('. ');
+    if (!img?.items[0]) { setData(id, { error: 'Conectá una foto (por ejemplo una aprobada en Foto IA, o la caja Modelo).' }); return; }
+    if (!aud) { setData(id, { error: 'Conectá una caja Audio con la voz.' }); return; }
+    const motor = (n.data.motor as string) || 'kling-std';
+    const def = HABLAR.find((h) => h.id === motor) ?? HABLAR[0];
+    if ((aud.dur ?? 0) > def.maxSeg) { setData(id, { error: `${def.label} acepta audios de hasta ${def.maxSeg} s (el tuyo dura ${Math.round(aud.dur ?? 0)} s). Usá Kling Avatar o recortá el audio.` }); return; }
+    setData(id, { estado: 'corriendo', error: '' });
+    try {
+      const res = await fetch('/api/hablar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: img.items[0].url, audioUrl: aud.url, motor, prompt: txt }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.taskId) throw new Error(d.error ?? 'No se pudo crear el video.');
+      setData(id, { taskId: d.taskId });
+      await terminarMotion(id, d.taskId);
+    } catch (e) {
+      if (vivo.current) setData(id, { estado: '', taskId: '', error: e instanceof Error ? e.message : 'Error.' });
+    }
+  }
+
   // Si la app se cerró con algo corriendo, lo seguimos esperando al volver.
   const retomado = useRef(false);
   useEffect(() => {
@@ -329,7 +362,7 @@ export default function Lienzo(props: Props) {
       const t = n.data.taskId as string;
       if (!t) { setData(n.id, { estado: '' }); continue; }
       if (n.tipo === 'foto' && n.data.pend) terminarFoto(n.id, t, n.data.pend as { prompt: string; imageUrls: string[]; aspect: string; modelo: string });
-      else if (n.tipo === 'motion') terminarMotion(n.id, t);
+      else if (n.tipo === 'motion' || n.tipo === 'hablar') terminarMotion(n.id, t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargado]);
@@ -348,6 +381,7 @@ export default function Lienzo(props: Props) {
       tipo === 'modelo' ? { modeloId: activoId, cuerpo: true }
         : tipo === 'foto' ? { modelo: 'seedream', aspect: 'auto' }
           : tipo === 'motion' ? { motor: 'kling3', calidad: '720p', orientacion: 'video' }
+            : tipo === 'hablar' ? { motor: 'kling-std' }
             : tipo === 'prompt' ? { texto: '' } : {};
     setNodes((ns) => [...ns, { id: nuevoId(tipo.slice(0, 3)), tipo, x: c.x + off, y: c.y + off, data }]);
     setMenu(false);
@@ -608,6 +642,7 @@ export default function Lienzo(props: Props) {
                   claveFoto={claveFoto}
                   correrFoto={() => correrFoto(n.id)}
                   correrMotion={() => correrMotion(n.id)}
+                  correrHablar={() => correrHablar(n.id)}
                   onPublicar={onPublicar}
                   onGuardar={onGuardar}
                   conectadaASalida={edges.some((e) => e.de === n.id)}
@@ -650,6 +685,7 @@ function CuerpoNodo(p: {
   claveFoto: (modelo: string) => string;
   correrFoto: () => void;
   correrMotion: () => void;
+  correrHablar: () => void;
   onPublicar: (url: string, tipo: 'foto' | 'video') => void;
   onGuardar: (url: string, tipo: 'foto' | 'video') => void;
   conectadaASalida: boolean;
@@ -723,6 +759,42 @@ function CuerpoNodo(p: {
               {typeof d.credits === 'number' ? <p className="lz-nota">La última costó {fmt(d.credits as number)} créditos · {res.length} foto{res.length > 1 ? 's' : ''} creada{res.length > 1 ? 's' : ''} en esta caja.</p> : null}
               {!d.elegida ? <p className="lz-nota">👆 Tocá la que quieras usar para <b>aprobarla</b>: esa pasa a la caja siguiente.</p> : null}
             </>
+          ) : null}
+        </>
+      );
+    }
+    case 'audio': return <CajaAudio d={d} set={set} />;
+    case 'hablar': {
+      const corriendo = d.estado === 'corriendo';
+      const motor = (d.motor as string) || 'kling-std';
+      const def = HABLAR.find((h) => h.id === motor) ?? HABLAR[0];
+      const aud = p.entradas('audio').map(p.salidaDe)[0];
+      const dur = aud?.tipo === 'audio' ? aud.dur ?? 0 : 0;
+      const imgOk = !!p.entradas('imagen').map(p.salidaDe)[0];
+      const estimado = dur ? Math.ceil(dur) * def.porSeg : null;
+      return (
+        <>
+          <div className="lz-lista">
+            {HABLAR.map((h) => (
+              <button key={h.id} className={`lz-opc ${motor === h.id ? 'on' : ''}`} onClick={() => set({ motor: h.id })}>
+                <b>{h.label}</b><span>{h.desc} · {h.porSeg} cr/s</span>
+              </button>
+            ))}
+          </div>
+          {dur > def.maxSeg ? <p className="lz-err">Tu audio dura {Math.round(dur)} s y este acepta hasta {def.maxSeg} s.</p> : null}
+          <button className={`btn-grad lz-run ${corriendo ? 'busy' : ''}`} disabled={corriendo || !imgOk || !aud} onClick={p.correrHablar}>
+            {corriendo ? <><span className="gen-ring lz-ring" /> Creando video…</> : '▶ Crear video hablando'}
+          </button>
+          <p className="lz-nota">
+            {!imgOk ? 'Falta la foto. ' : ''}{!aud ? 'Falta el audio. ' : ''}
+            {estimado !== null ? `≈ ${estimado} créditos (≈ US$ ${(estimado * 0.005).toFixed(2).replace('.', ',')}) por ${Math.ceil(dur)} s de audio.` : `${def.porSeg} créditos por segundo de audio.`}
+          </p>
+          {corriendo ? <p className="lz-nota">Tarda unos minutos. Podés seguir usando la app.</p> : null}
+          {err}
+          {typeof d.resultado === 'string' && d.resultado ? (
+            p.conectadaASalida
+              ? <p className="lz-ok-txt">✅ Video listo{typeof d.credits === 'number' ? ` · costó ${fmt(d.credits as number)} créditos` : ''}. Lo ves en la caja <b>Resultado</b>.</p>
+              : <><video className="lz-vid" src={d.resultado} controls playsInline preload="metadata" />{typeof d.credits === 'number' ? <p className="lz-nota">Costó {fmt(d.credits as number)} créditos.</p> : null}</>
           ) : null}
         </>
       );
@@ -921,6 +993,69 @@ function CajaElegirImagen({ d, set, opciones, vacio }: { d: Record<string, unkno
             <button key={u} className={`lz-th ${u === url ? 'on' : ''}`} onClick={() => { set({ url: u, error: '' }); setVer(false); }}>
               <Image src={u} alt="" fill sizes="70px" />
             </button>
+          ))}
+        </div>
+      ) : null}
+      {typeof d.error === 'string' && d.error ? <p className="lz-err">{d.error}</p> : null}
+    </>
+  );
+}
+
+function CajaAudio({ d, set }: { d: Record<string, unknown>; set: (p: Record<string, unknown>) => void }) {
+  const [sub, setSub] = useState(0);
+  const [sacando, setSacando] = useState(false);
+  const [mis, setMis] = useState<{ url: string; ts: number }[] | null>(null);
+  const [ver, setVer] = useState(false);
+  const url = typeof d.url === 'string' ? d.url : '';
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    if (f.size > 100 * 1024 * 1024) { set({ error: 'El archivo pesa más de 100 MB.' }); return; }
+    setSub(1);
+    let fin = false;
+    try {
+      const ext = (f.name.split('.').pop() || 'mp4').toLowerCase();
+      const tipo = f.type || (ext === 'mov' ? 'video/quicktime' : ext === 'mp3' ? 'audio/mpeg' : ext === 'm4a' ? 'audio/mp4' : ext === 'wav' ? 'audio/wav' : 'video/mp4');
+      const blob = await upload(`motion/voz.${ext}`, f, {
+        access: 'public', handleUploadUrl: '/api/upload-video', contentType: tipo, multipart: f.size > 8 * 1024 * 1024,
+        onUploadProgress: (pr) => { if (!fin) setSub(Math.min(99, Math.max(1, Math.round(pr.percentage)))); },
+      });
+      fin = true; setSub(0); setSacando(true);
+      // Sea video (ej. de Flow) o audio: el servidor saca la voz y la deja en MP3.
+      const res = await fetch('/api/extraer-audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: blob.url }) });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok || !r.url) throw new Error(r.error ?? 'No se pudo sacar el audio.');
+      set({ url: r.url, dur: r.dur, nombre: f.name, error: '' });
+    } catch (er) {
+      set({ error: er instanceof Error && er.message ? er.message : 'No se pudo subir.' });
+    } finally { fin = true; setSub(0); setSacando(false); }
+  }
+  async function abrirMis() {
+    setVer((x) => !x);
+    if (mis) return;
+    try { const r = await fetch('/api/voz').then((x) => x.json()); setMis(Array.isArray(r.items) ? r.items : []); } catch { setMis([]); }
+  }
+  function elegir(u: string) {
+    const a = new Audio(); a.preload = 'metadata';
+    a.onloadedmetadata = () => set({ url: u, dur: Number.isFinite(a.duration) ? a.duration : 0, nombre: 'De Mis audios', error: '' });
+    a.onerror = () => set({ url: u, dur: 0, nombre: 'De Mis audios', error: '' });
+    a.src = u; setVer(false);
+  }
+  return (
+    <>
+      {url ? <audio className="lz-aud" src={url} controls preload="metadata" /> : <p className="lz-nota">Subí un <b>audio</b> o un <b>video</b> (por ejemplo de Flow con Mila hablando): la app le saca la voz.</p>}
+      {url ? <p className="lz-nota">{typeof d.nombre === 'string' ? d.nombre : 'Audio'}{typeof d.dur === 'number' && d.dur ? ` · ${Math.round(d.dur as number)} s` : ''}</p> : null}
+      <div className="lz-dos">
+        <label className="btn-soft lz-file" style={{ marginTop: 0 }}>
+          <input type="file" accept="audio/*,video/mp4,video/quicktime,video/webm" onChange={onFile} style={{ display: 'none' }} disabled={sub > 0 || sacando} />
+          {sacando ? '🎵 Sacando la voz…' : sub ? `Subiendo… ${sub}%` : url ? '🔄 Cambiar' : '⬆ Subir'}
+        </label>
+        <button className="btn-soft" onClick={abrirMis}>{ver ? 'Cerrar' : 'Mis audios'}</button>
+      </div>
+      {ver ? (
+        <div className="lz-mis">
+          {mis === null ? <p className="lz-nota">Cargando…</p> : !mis.length ? <p className="lz-nota">Todavía no tenés audios en la sección Voz.</p> : mis.slice(0, 12).map((a) => (
+            <button key={a.url} className="lz-opc" onClick={() => elegir(a.url)}><b>🎵 Audio del {new Date(a.ts).toLocaleDateString()}</b><span>Tocá para usarlo</span></button>
           ))}
         </div>
       ) : null}
