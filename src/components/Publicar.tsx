@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
+import { linkDescarga } from '@/components/Guardar';
 import { armarTexto, type Red } from '@/lib/estudio/textos';
 
 /**
@@ -87,7 +88,7 @@ export default function Publicar(props: { url: string; tipo: 'foto' | 'video'; p
             {estado === 'cargando' ? `Preparando ${tipo === 'video' ? 'el video' : 'la foto'}…` : estado === 'error' ? 'No se pudo preparar el archivo' : '📤 Compartir'}
           </button>
           <p className="sub" style={{ fontSize: 12, margin: '6px 0 0', textAlign: 'center' }}>Se abre el menú del celu: elegí TikTok, Instagram o LeadConnector.</p>
-          <a className="btn-ghost" href={url} target="_blank" rel="noreferrer" style={{ display: 'block', textAlign: 'center', marginTop: 8 }}>⬇ Descargar</a>
+          <a className="btn-ghost" href={linkDescarga(url)} download style={{ display: 'block', textAlign: 'center', marginTop: 8 }}>⬇ Descargar</a>
           {aviso ? <p className="costo ok" style={{ marginTop: 10 }}>{aviso}</p> : null}
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, fontSize: 13, cursor: 'pointer' }}>
             <input type="checkbox" checked={ia} onChange={(e) => setIa(e.target.checked)} style={{ width: 18, height: 18 }} />

@@ -397,7 +397,7 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .lz-nodo { position: absolute; left: 0; top: 0; background: var(--surface); border: 1.5px solid var(--line); border-radius: 16px; box-shadow: 0 6px 20px rgba(35,20,40,.10); cursor: default; }
 .lz-nodo.ia { border-color: #d9c9f7; }
 .lz-nodo.corre { border-color: var(--violeta); box-shadow: 0 0 0 3px rgba(109,71,232,.18), 0 6px 20px rgba(35,20,40,.10); }
-.lz-cab { position: relative; height: 40px; display: flex; align-items: center; gap: 7px; padding: 0 34px 0 12px; border-bottom: 1px solid var(--line); cursor: grab; font-size: 14px; border-radius: 15px 15px 0 0; background: var(--surface-2); }
+.lz-cab { position: relative; height: 40px; display: flex; align-items: center; gap: 7px; padding: 0 60px 0 12px; border-bottom: 1px solid var(--line); cursor: grab; font-size: 14px; border-radius: 15px 15px 0 0; background: var(--surface-2); }
 .lz-cab b { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lz-x { position: absolute; right: 18px; top: 9px; width: 22px; height: 22px; border-radius: 999px; border: none; background: transparent; color: var(--muted); font-size: 18px; line-height: 20px; cursor: pointer; padding: 0; }
 .lz-out { position: absolute; right: -11px; top: 9px; width: 22px; height: 22px; border-radius: 999px; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: crosshair; }
@@ -444,3 +444,8 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .lz-menu-it:hover { border-color: var(--rosa); background: var(--rosa-soft); }
 .lz-menu-ic { font-size: 22px; width: 36px; text-align: center; }
 .lz-tag { font-style: normal; font-size: 10px; font-weight: 800; color: #fff; background: var(--violeta); border-radius: 999px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+.pub-btn.dl { left: auto; right: 8px; background: rgba(20,12,24,.72); box-shadow: none; }
+
+.lz-x.dup { right: 42px; font-size: 15px; }
+.lz-barra2 { position: absolute; top: 54px; left: 10px; right: 10px; z-index: 5; display: flex; gap: 6px; align-items: center; }
+.lz-sel { flex: 1; min-width: 0; height: 36px; padding: 0 10px; font-size: 13px; font-weight: 700; background: var(--surface); }

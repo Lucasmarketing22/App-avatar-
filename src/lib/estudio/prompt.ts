@@ -206,7 +206,7 @@ export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?
 }
 
 /** Rol de cada imagen que entra a una caja "Foto IA" del lienzo. */
-export type RolImagen = 'captura' | 'base' | 'cara' | 'cuerpo' | 'vestuario' | 'imagen';
+export type RolImagen = 'captura' | 'base' | 'cara' | 'cuerpo' | 'vestuario' | 'escena' | 'peinado' | 'pose' | 'imagen';
 
 /**
  * Lienzo, caja "Foto IA": arma el prompt según qué cajas tiene conectadas.
@@ -235,6 +235,12 @@ export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: 
   if (cuerpos.length) partes.push(`${lista(cuerpos)} show her body: keep exactly that body shape, curves and proportions (do not copy its clothes, pose or background).`);
   const vest = nums('vestuario');
   if (vest.length) partes.push(`${lista(vest)} show an outfit: dress her in exactly that outfit (same garments, colors, fabric, fit and details).`);
+  const esc = nums('escena');
+  if (esc.length) partes.push(`${lista(esc)} show a place: put her in that same setting, background and lighting${captura.length ? ' (this replaces the background of the video frame, but keep the pose and framing of the frame)' : ''}.`);
+  const pein = nums('peinado');
+  if (pein.length) partes.push(`${lista(pein)} show a hairstyle: give her exactly that hairstyle (cut, length, volume, updo or parting), keeping her own hair color.`);
+  const pose = nums('pose');
+  if (pose.length) partes.push(`${lista(pose)} show a pose: make her do that same body pose, gesture and hand position${captura.length ? ' (this replaces the pose of the video frame)' : ''}.`);
   const extras = nums('imagen');
   if (extras.length) partes.push(`${lista(extras)} are extra references: use what the instructions say about them.`);
 

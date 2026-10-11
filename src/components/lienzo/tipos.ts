@@ -1,7 +1,7 @@
 /** Tipos, cajas disponibles y medidas del lienzo de nodos. */
 
 export type Dato = 'video' | 'imagen' | 'texto';
-export type TipoNodo = 'video' | 'captura' | 'modelo' | 'vestuario' | 'imagen' | 'prompt' | 'foto' | 'motion' | 'resultado';
+export type TipoNodo = 'video' | 'captura' | 'modelo' | 'vestuario' | 'escena' | 'peinado' | 'pose' | 'imagen' | 'prompt' | 'foto' | 'motion' | 'resultado';
 
 export type Puerto = { id: string; label: string; acepta: Dato[]; multi?: boolean };
 export type DefNodo = { titulo: string; icono: string; desc: string; entradas: Puerto[]; salida: Dato | null; ia?: boolean };
@@ -15,6 +15,9 @@ export const DEF: Record<TipoNodo, DefNodo> = {
   captura: { titulo: 'Captura', icono: '📸', desc: 'Un momento exacto del video', entradas: [{ id: 'video', label: 'Video', acepta: ['video'] }], salida: 'imagen' },
   modelo: { titulo: 'Modelo', icono: '👩', desc: 'Cara y cuerpo de tu modelo', entradas: [], salida: 'imagen' },
   vestuario: { titulo: 'Vestuario', icono: '👗', desc: 'Ropa para ponerle', entradas: [], salida: 'imagen' },
+  escena: { titulo: 'Escena', icono: '🏞️', desc: 'Lugar / fondo de tu galería', entradas: [], salida: 'imagen' },
+  peinado: { titulo: 'Peinado', icono: '💇', desc: 'Peinado de tu galería', entradas: [], salida: 'imagen' },
+  pose: { titulo: 'Pose', icono: '🤸', desc: 'Pose o gesto de tu galería', entradas: [], salida: 'imagen' },
   imagen: { titulo: 'Imagen', icono: '🖼️', desc: 'Cualquier foto de referencia', entradas: [], salida: 'imagen' },
   prompt: { titulo: 'Prompt', icono: '✍️', desc: 'Instrucciones con texto', entradas: [], salida: 'texto' },
   foto: {
@@ -30,7 +33,7 @@ export const DEF: Record<TipoNodo, DefNodo> = {
   resultado: { titulo: 'Resultado', icono: '✅', desc: 'Ver, descargar y publicar', entradas: [{ id: 'in', label: 'Entrada', acepta: ['video', 'imagen'] }], salida: null },
 };
 
-export const ORDEN_MENU: TipoNodo[] = ['video', 'captura', 'modelo', 'vestuario', 'imagen', 'prompt', 'foto', 'motion', 'resultado'];
+export const ORDEN_MENU: TipoNodo[] = ['video', 'captura', 'modelo', 'vestuario', 'escena', 'peinado', 'pose', 'imagen', 'prompt', 'foto', 'motion', 'resultado'];
 
 // Medidas fijas: así la posición de cada "enchufe" se calcula sin medir el DOM.
 export const ANCHO = 236;

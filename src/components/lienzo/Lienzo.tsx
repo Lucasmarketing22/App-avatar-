@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
+import { quitarSonido } from '@/lib/cliente/video';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ANCHO, DEF, ORDEN_MENU, nuevoId, plantillaMotionExacto, yEntrada, ySalida,
@@ -17,12 +18,14 @@ type Props = {
   activoId: string;
   vestidos: { id: string; url: string; nombre?: string }[];
   galeria: { url: string }[];
+  galerias: Record<string, { url: string }[]>;
   costo: (clave: string) => number | null;
   claveFoto: (modelo: string) => string;
   onCreacion: (c: { url: string; prompt: string; modelo: string; refs: string[]; aspect: string; credits?: number }) => void;
   onVideo: (url: string) => void;
   onTrabajo: (msg: string) => void;
   onPublicar: (url: string, tipo: 'foto' | 'video') => void;
+  onGuardar: (url: string, tipo: 'foto' | 'video') => void;
   onSaldo: () => void;
 };
 
@@ -39,7 +42,9 @@ const FOTO_MODELOS = [
   { id: 'nano', label: 'Nano Banana' },
 ];
 const FORMATOS = ['auto', '9:16', '3:4', '1:1', '16:9'];
-const ORDEN_ROL: RolImagen[] = ['captura', 'base', 'cara', 'cuerpo', 'vestuario', 'imagen'];
+const ORDEN_ROL: RolImagen[] = ['captura', 'base', 'cara', 'cuerpo', 'vestuario', 'escena', 'peinado', 'pose', 'imagen'];
+// Caja → galería de la app de donde se eligen las imágenes.
+const GALERIA_DE: Partial<Record<TipoNodo, string>> = { escena: 'escenas', peinado: 'peinados', pose: 'poses' };
 const MAX_IMAGENES = 8;
 
 const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -74,14 +79,16 @@ function metaVideo(file: File): Promise<number> {
 
 /* ===================== Lienzo ===================== */
 export default function Lienzo(props: Props) {
-  const { modelas, activoId, vestidos, galeria, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onSaldo } = props;
+  const { modelas, activoId, vestidos, galeria, galerias, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
   const [nodes, setNodes] = useState<Nodo[]>([]);
   const [edges, setEdges] = useState<Cable[]>([]);
-  const [view, setView] = useState<Vista>({ x: 20, y: 70, z: 0.8 });
+  const [view, setView] = useState<Vista>({ x: 20, y: 110, z: 0.8 });
   const [cargado, setCargado] = useState(false);
   const [menu, setMenu] = useState(false);
   const [conectando, setConectando] = useState<{ de: string; x: number; y: number } | null>(null);
   const [guardado, setGuardado] = useState<'' | 'guardando' | 'ok' | 'error'>('');
+  const [lista, setLista] = useState<{ id: string; nombre: string }[]>([]);
+  const [lienzoId, setLienzoId] = useState('principal');
 
   const cont = useRef<HTMLDivElement | null>(null);
   const vivo = useRef(true);
@@ -102,25 +109,84 @@ export default function Lienzo(props: Props) {
     (async () => {
       try {
         const d = await fetch('/api/lienzo').then((r) => r.json());
-        if (Array.isArray(d.nodes)) setNodes(d.nodes);
-        if (Array.isArray(d.edges)) setEdges(d.edges);
-        if (d.view && typeof d.view.z === 'number') setView(d.view);
+        aplicar(d);
       } catch { /* */ } finally { setCargado(true); }
     })();
     return () => { vivo.current = false; };
   }, []);
 
-  useEffect(() => {
-    if (!cargado) return;
+  function aplicar(d: { id?: string; lista?: { id: string; nombre: string }[]; nodes?: Nodo[]; edges?: Cable[]; view?: Vista }) {
+    if (Array.isArray(d.lista)) setLista(d.lista);
+    if (typeof d.id === 'string') setLienzoId(d.id);
+    setNodes(Array.isArray(d.nodes) ? d.nodes : []);
+    setEdges(Array.isArray(d.edges) ? d.edges : []);
+    setView(d.view && typeof d.view.z === 'number' ? d.view : { x: 20, y: 110, z: 0.8 });
+  }
+  async function guardarAhora(id: string, ns: Nodo[], es: Cable[], v: Vista) {
     setGuardado('guardando');
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch('/api/lienzo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes, edges, view }) });
-        setGuardado(res.ok ? 'ok' : 'error');
-      } catch { setGuardado('error'); }
-    }, 900);
+    try {
+      const res = await fetch('/api/lienzo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, nodes: ns, edges: es, view: v }) });
+      setGuardado(res.ok ? 'ok' : 'error');
+    } catch { setGuardado('error'); }
+  }
+  // Autoguardado (cada cambio, con una pausita).
+  const cambiando = useRef(false);
+  useEffect(() => {
+    if (!cargado || cambiando.current) return;
+    setGuardado('guardando');
+    const t = setTimeout(() => guardarAhora(lienzoId, nodes, edges, view), 900);
     return () => clearTimeout(t);
-  }, [nodes, edges, view, cargado]);
+  }, [nodes, edges, view, cargado, lienzoId]);
+
+  /* ----- varios lienzos ----- */
+  const ocupado = () => nodesRef.current.some((n) => n.data.estado === 'corriendo');
+  async function guardarLista(nueva: { id: string; nombre: string }[], activo: string) {
+    setLista(nueva);
+    await fetch('/api/lienzo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lista: nueva, activo }) }).catch(() => undefined);
+  }
+  async function abrirLienzo(id: string, listaNueva = lista) {
+    if (id === lienzoId) return;
+    if (ocupado()) { window.alert('Esperá a que termine lo que se está creando en este lienzo.'); return; }
+    cambiando.current = true;
+    try {
+      await guardarAhora(lienzoId, nodesRef.current, edgesRef.current, viewRef.current);
+      await guardarLista(listaNueva, id);
+      const d = await fetch(`/api/lienzo?id=${encodeURIComponent(id)}`).then((r) => r.json()).catch(() => ({}));
+      aplicar({ ...d, id, lista: listaNueva });
+    } finally { cambiando.current = false; }
+  }
+  async function nuevoLienzo() {
+    const nombre = window.prompt('Nombre del lienzo nuevo (ej: Bailes, Cama, Gym):', `Lienzo ${lista.length + 1}`);
+    if (nombre === null) return;
+    const id = `l${Date.now().toString(36)}`;
+    const nueva = [...lista, { id, nombre: nombre.trim() || `Lienzo ${lista.length + 1}` }];
+    if (ocupado()) { window.alert('Esperá a que termine lo que se está creando en este lienzo.'); return; }
+    cambiando.current = true;
+    try {
+      await guardarAhora(lienzoId, nodesRef.current, edgesRef.current, viewRef.current);
+      await guardarLista(nueva, id);
+      aplicar({ id, lista: nueva, nodes: [], edges: [] });
+    } finally { cambiando.current = false; }
+  }
+  async function renombrar() {
+    const actual = lista.find((x) => x.id === lienzoId);
+    const nombre = window.prompt('Nuevo nombre del lienzo:', actual?.nombre ?? '');
+    if (!nombre || !nombre.trim()) return;
+    await guardarLista(lista.map((x) => (x.id === lienzoId ? { ...x, nombre: nombre.trim().slice(0, 40) } : x)), lienzoId);
+  }
+  async function borrarLienzo() {
+    if (lista.length < 2) { window.alert('Tiene que quedar al menos un lienzo.'); return; }
+    const actual = lista.find((x) => x.id === lienzoId);
+    if (!window.confirm(`¿Borrar el lienzo “${actual?.nombre ?? ''}”? Las fotos y videos creados quedan en tu galería.`)) return;
+    const nueva = lista.filter((x) => x.id !== lienzoId);
+    cambiando.current = true;
+    try {
+      await guardarAhora(lienzoId, [], [], { x: 20, y: 110, z: 0.8 });
+      await guardarLista(nueva, nueva[0].id);
+      const d = await fetch(`/api/lienzo?id=${encodeURIComponent(nueva[0].id)}`).then((r) => r.json()).catch(() => ({}));
+      aplicar({ ...d, id: nueva[0].id, lista: nueva });
+    } finally { cambiando.current = false; }
+  }
 
   /* ----- aviso flotante "creando" ----- */
   useEffect(() => {
@@ -149,6 +215,8 @@ export default function Lienzo(props: Props) {
         return { tipo: 'imagen', items, cuerpo: m.cuerpo };
       }
       case 'vestuario': return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: 'vestuario' }] } : null;
+      case 'escena': case 'peinado': case 'pose':
+        return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: n.tipo }] } : null;
       case 'imagen': return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: 'imagen' }] } : null;
       case 'prompt': return typeof d.texto === 'string' && d.texto.trim() ? { tipo: 'texto', texto: d.texto } : null;
       case 'foto': return typeof d.elegida === 'string' && d.elegida ? { tipo: 'imagen', items: [{ url: d.elegida, rol: 'base' }], asp: d.asp as string } : null;
@@ -290,6 +358,16 @@ export default function Lienzo(props: Props) {
     setNodes((ns) => ns.filter((x) => x.id !== id));
     setEdges((es) => es.filter((e) => e.de !== id && e.a !== id));
   }
+  /** Copia una caja (con sus ajustes y los cables que le llegan) para probar variantes. */
+  function duplicar(id: string) {
+    const n = nodesRef.current.find((x) => x.id === id);
+    if (!n) return;
+    const nid = nuevoId(n.tipo.slice(0, 3));
+    const { estado: _e, taskId: _t, pend: _p, error: _er, resultados: _r, elegida: _el, ultimo: _u, resultado: _res, ...data } = n.data;
+    void _e; void _t; void _p; void _er; void _r; void _el; void _u; void _res;
+    setNodes((ns) => [...ns, { ...n, id: nid, x: n.x + 30, y: n.y + 40, data }]);
+    setEdges((es) => [...es, ...es.filter((e) => e.a === id).map((e) => ({ ...e, id: nuevoId('e'), a: nid }))]);
+  }
   function usarPlantilla() {
     if (nodesRef.current.length && !window.confirm('¿Reemplazar lo que hay en el lienzo por la plantilla "Motion exacto"?')) return;
     const p = plantillaMotionExacto(activoId);
@@ -298,11 +376,11 @@ export default function Lienzo(props: Props) {
   }
   function encuadrar(ns = nodesRef.current) {
     const r = cont.current?.getBoundingClientRect();
-    if (!r || !ns.length) { setView({ x: 20, y: 70, z: 0.8 }); return; }
+    if (!r || !ns.length) { setView({ x: 20, y: 110, z: 0.8 }); return; }
     const minX = Math.min(...ns.map((n) => n.x)), minY = Math.min(...ns.map((n) => n.y));
     const maxX = Math.max(...ns.map((n) => n.x + ANCHO)), maxY = Math.max(...ns.map((n) => n.y + 320));
-    const z = Math.max(0.2, Math.min(1, Math.min((r.width - 40) / (maxX - minX), (r.height - 110) / (maxY - minY))));
-    setView({ z, x: (r.width - (maxX - minX) * z) / 2 - minX * z, y: 70 - minY * z });
+    const z = Math.max(0.2, Math.min(1, Math.min((r.width - 40) / (maxX - minX), (r.height - 150) / (maxY - minY))));
+    setView({ z, x: (r.width - (maxX - minX) * z) / 2 - minX * z, y: 110 - minY * z });
   }
   function zoom(f: number) {
     const r = cont.current?.getBoundingClientRect();
@@ -461,6 +539,14 @@ export default function Lienzo(props: Props) {
         <button className="lz-ic" onClick={() => zoom(1.2)} aria-label="Acercar">＋</button>
         <button className="lz-ic" onClick={() => encuadrar()} aria-label="Ver todo">⤢</button>
       </div>
+      <div className="lz-barra2" data-ui>
+        <select className="input lz-sel" value={lienzoId} onChange={(e) => abrirLienzo(e.target.value)} aria-label="Elegir lienzo">
+          {(lista.length ? lista : [{ id: 'principal', nombre: 'Mi lienzo' }]).map((x) => <option key={x.id} value={x.id}>📁 {x.nombre}</option>)}
+        </select>
+        <button className="lz-ic" onClick={nuevoLienzo} aria-label="Lienzo nuevo" title="Lienzo nuevo">＋</button>
+        <button className="lz-ic" onClick={renombrar} aria-label="Renombrar" title="Renombrar">✏️</button>
+        <button className="lz-ic" onClick={borrarLienzo} aria-label="Borrar lienzo" title="Borrar lienzo">🗑️</button>
+      </div>
       <div className="lz-guardado" data-ui>{guardado === 'guardando' ? 'Guardando…' : guardado === 'ok' ? '✓ Guardado' : guardado === 'error' ? '⚠️ No se guardó' : ''}</div>
 
       {cargado && !nodes.length ? (
@@ -494,6 +580,7 @@ export default function Lienzo(props: Props) {
             <div key={n.id} className={`lz-nodo ${def.ia ? 'ia' : ''} ${corriendo ? 'corre' : ''}`} style={{ transform: `translate(${n.x}px, ${n.y}px)`, width: ANCHO }}>
               <div className="lz-cab" data-drag={n.id}>
                 <span>{def.icono}</span><b>{def.titulo}</b>
+                <button className="lz-x dup" data-ui onClick={() => duplicar(n.id)} aria-label="Duplicar caja" title="Duplicar">⧉</button>
                 <button className="lz-x" data-ui onClick={() => borrarNodo(n.id)} aria-label="Borrar caja">×</button>
                 {def.salida ? <span className="lz-out" data-out={n.id} style={{ background: COLOR[def.salida] }} title="Arrastrá para conectar" /> : null}
               </div>
@@ -514,6 +601,7 @@ export default function Lienzo(props: Props) {
                   modelas={modelas}
                   vestidos={vestidos}
                   galeria={galeria}
+                  galerias={galerias}
                   entradas={(p) => entradas(n.id, p, nodes, edges)}
                   salidaDe={salidaDe}
                   costo={costo}
@@ -521,6 +609,7 @@ export default function Lienzo(props: Props) {
                   correrFoto={() => correrFoto(n.id)}
                   correrMotion={() => correrMotion(n.id)}
                   onPublicar={onPublicar}
+                  onGuardar={onGuardar}
                 />
               </div>
             </div>
@@ -553,6 +642,7 @@ function CuerpoNodo(p: {
   modelas: ModeloLz[];
   vestidos: { id: string; url: string; nombre?: string }[];
   galeria: { url: string }[];
+  galerias: Record<string, { url: string }[]>;
   entradas: (puerto: string) => Nodo[];
   salidaDe: (n: Nodo) => Salida | null;
   costo: (clave: string) => number | null;
@@ -560,6 +650,7 @@ function CuerpoNodo(p: {
   correrFoto: () => void;
   correrMotion: () => void;
   onPublicar: (url: string, tipo: 'foto' | 'video') => void;
+  onGuardar: (url: string, tipo: 'foto' | 'video') => void;
 }) {
   const { n, setData } = p;
   const d = n.data;
@@ -589,6 +680,11 @@ function CuerpoNodo(p: {
       );
     }
     case 'vestuario': return <CajaElegirImagen d={d} set={set} opciones={p.vestidos.map((v) => v.url)} vacio="Elegí un vestuario o subí uno" />;
+    case 'escena': case 'peinado': case 'pose': {
+      const op = (p.galerias[GALERIA_DE[n.tipo] ?? ''] ?? []).map((g) => g.url);
+      const nombre = n.tipo === 'escena' ? 'una escena' : n.tipo === 'peinado' ? 'un peinado' : 'una pose';
+      return <CajaElegirImagen d={d} set={set} opciones={op} vacio={op.length ? `Elegí ${nombre} de tu galería o subí una foto` : `Subí una foto con ${nombre} (o cargalas en Crear → galerías)`} />;
+    }
     case 'imagen': return <CajaElegirImagen d={d} set={set} opciones={p.galeria.slice(0, 18).map((g) => g.url)} vacio="Subí una foto o elegila de tu galería" />;
     case 'prompt':
       return <textarea className="textarea lz-input" value={(d.texto as string) ?? ''} onChange={(e) => set({ texto: e.target.value })} placeholder="Ej: con el pelo recogido, mirando a cámara, sonriendo" style={{ height: 90 }} />;
@@ -676,7 +772,7 @@ function CuerpoNodo(p: {
         <>
           {esVideo ? <video className="lz-vid" src={url} controls playsInline preload="metadata" /> : <span className="lz-big"><Image src={url} alt="" fill sizes="230px" /></span>}
           <div className="lz-dos" style={{ marginTop: 8 }}>
-            <a className="btn-soft" href={url} target="_blank" rel="noreferrer" style={{ textAlign: 'center' }}>⬇ Descargar</a>
+            <button className="btn-soft" onClick={() => p.onGuardar(url, esVideo ? 'video' : 'foto')}>⬇ Guardar</button>
             <button className="btn-grad" onClick={() => p.onPublicar(url, esVideo ? 'video' : 'foto')}>📤 Publicar</button>
           </div>
         </>
@@ -688,7 +784,9 @@ function CuerpoNodo(p: {
 
 function CajaVideo({ d, set }: { d: Record<string, unknown>; set: (p: Record<string, unknown>) => void }) {
   const [sub, setSub] = useState(0);
+  const [quitando, setQuitando] = useState(false);
   const [roto, setRoto] = useState(false);
+  const sinSonido = d.conSonido !== true;
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; e.target.value = '';
     if (!f) return;
@@ -706,7 +804,14 @@ function CajaVideo({ d, set }: { d: Record<string, unknown>; set: (p: Record<str
         onUploadProgress: (pr) => { if (!fin) setSub(Math.min(99, Math.max(1, Math.round(pr.percentage)))); },
       });
       fin = true;
-      set({ url: blob.url, dur, mb: f.size / (1024 * 1024), error: '' });
+      let final = { url: blob.url, mb: f.size / (1024 * 1024), mudo: false, error: '' };
+      if (sinSonido) {
+        setSub(0); setQuitando(true);
+        try { const r = await quitarSonido(blob.url); final = { url: r.url, mb: r.mb || final.mb, mudo: true, error: '' }; }
+        catch (er) { final.error = `Se subió CON sonido: ${er instanceof Error ? er.message : 'no se pudo quitar'}.`; }
+        finally { setQuitando(false); }
+      }
+      set({ url: final.url, dur, mb: final.mb, mudo: final.mudo, error: final.error });
     } catch (er) {
       set({ error: er instanceof Error && er.message ? `No se pudo subir: ${er.message}` : 'No se pudo subir el video.' });
     } finally { fin = true; setSub(0); }
@@ -717,10 +822,11 @@ function CajaVideo({ d, set }: { d: Record<string, unknown>; set: (p: Record<str
       {url && !roto ? <video className="lz-vid" src={url} controls muted playsInline preload="metadata" onError={() => setRoto(true)} /> : null}
       {roto ? <p className="lz-err">Este video ya se borró (duran 3 días). Subilo de nuevo.</p> : null}
       <label className="btn-soft lz-file">
-        <input type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={onFile} style={{ display: 'none' }} disabled={sub > 0} />
-        {sub ? `Subiendo… ${sub}%` : url ? '🔄 Cambiar video' : '⬆ Subir video'}
+        <input type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={onFile} style={{ display: 'none' }} disabled={sub > 0 || quitando} />
+        {quitando ? '🔇 Quitando el sonido…' : sub ? `Subiendo… ${sub}%` : url ? '🔄 Cambiar video' : '⬆ Subir video'}
       </label>
-      {url && typeof d.dur === 'number' ? <p className="lz-nota">{Math.round(d.dur as number)} s · {fmt((d.mb as number) ?? 0)} MB</p> : <p className="lz-nota">De 3 a 30 segundos. Una sola persona, bien visible.</p>}
+      <label className="lz-ck"><input type="checkbox" checked={sinSonido} onChange={(e) => set({ conSonido: !e.target.checked })} /> 🔇 Quitar el sonido al subir</label>
+      {url && typeof d.dur === 'number' ? <p className="lz-nota">{Math.round(d.dur as number)} s · {fmt((d.mb as number) ?? 0)} MB{d.mudo ? ' · 🔇 sin sonido' : ''}</p> : <p className="lz-nota">De 3 a 30 segundos. Una sola persona, bien visible.</p>}
       {typeof d.error === 'string' && d.error ? <p className="lz-err">{d.error}</p> : null}
     </>
   );

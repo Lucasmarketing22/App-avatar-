@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
+import Guardar from '@/components/Guardar';
 import Lienzo from '@/components/lienzo/Lienzo';
 import Publicar from '@/components/Publicar';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
+import { quitarSonido } from '@/lib/cliente/video';
 
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
@@ -68,6 +70,7 @@ export default function Estudio() {
 
   const [videos, setVideos] = useState<Creacion[]>([]);
   const [publicar, setPublicar] = useState<{ url: string; tipo: 'foto' | 'video'; prompt?: string } | null>(null);
+  const [guardar, setGuardar] = useState<{ url: string; tipo: 'foto' | 'video' } | null>(null);
   const [galTab, setGalTab] = useState<'fotos' | 'videos'>('fotos');
 
   const [abierto, setAbierto] = useState<string | null>(null);
@@ -115,7 +118,9 @@ export default function Estudio() {
   const [mCuadro, setMCuadro] = useState('');
   const [mCuadroAsp, setMCuadroAsp] = useState(''); // formato del video (9:16, 16:9…)
   const [mCuadroEstado, setMCuadroEstado] = useState<'' | 'sacando' | 'error'>('');
-  const [mVideo, setMVideo] = useState<{ url: string; dur: number; mb: number } | null>(null);
+  const [mVideo, setMVideo] = useState<{ url: string; dur: number; mb: number; mudo?: boolean } | null>(null);
+  const [mSinSonido, setMSinSonido] = useState(true); // quitarle la música al subir (derechos de autor)
+  const [mQuitando, setMQuitando] = useState(false);
   const [mFoto, setMFoto] = useState<string | null>(null);
   const [mOri, setMOri] = useState<'video' | 'image'>('video');
   const [mCal, setMCal] = useState<'480p' | '720p' | '1080p'>('720p');
@@ -566,7 +571,14 @@ export default function Estudio() {
         onUploadProgress: (p) => { if (!terminado) setMSubiendo(Math.min(99, Math.max(1, Math.round(p.percentage)))); },
       });
       terminado = true;
-      setMVideo({ url: blob.url, dur, mb: f.size / (1024 * 1024) });
+      let final = { url: blob.url, mb: f.size / (1024 * 1024), mudo: false };
+      if (mSinSonido) {
+        setMQuitando(true);
+        try { const r = await quitarSonido(blob.url); final = { url: r.url, mb: r.mb || final.mb, mudo: true }; }
+        catch (err) { setMError(`El video se subió, pero CON sonido: ${err instanceof Error ? err.message : 'no se pudo quitar'}.`); }
+        finally { setMQuitando(false); }
+      }
+      setMVideo({ url: final.url, dur, mb: final.mb, mudo: final.mudo });
     } catch (err) {
       setMError(err instanceof Error && err.message ? `No se pudo subir el video: ${err.message}` : 'No se pudo subir el video. Probá de nuevo.');
     } finally { terminado = true; setMSubiendo(0); }
@@ -812,7 +824,7 @@ export default function Estudio() {
                     </div>
                     <div className="pvactions">
                       <button className="btn-soft" onClick={() => setPublicar({ url: previewActual.url, tipo: 'foto', prompt: previewActual.prompt })}>📤 Publicar</button>
-                      <a className="btn-soft" href={previewActual.url} target="_blank" rel="noreferrer">⬇ Descargar</a>
+                      <button className="btn-soft" onClick={() => setGuardar({ url: previewActual.url, tipo: 'foto' })}>⬇ Guardar</button>
                       <button className="btn-soft" disabled={!!mejorando} onClick={() => mejorar(previewActual)}>{mejorando ? 'Mejorando…' : '🔎 Mejorar'}</button>
                       {previewActual.prompt && previewActual.refs?.length ? <button className="btn-soft" onClick={() => variar(previewActual)}>🔁 Variar</button> : null}
                     </div>
@@ -881,7 +893,7 @@ export default function Estudio() {
                 <div className="mvid">
                   <video src={mVideo.url} controls playsInline preload="metadata" />
                   <div className="mvid-info">
-                    <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b> · <b>{mVideo.mb.toFixed(1)} MB</b></span>
+                    <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b> · <b>{mVideo.mb.toFixed(1)} MB</b>{mVideo.mudo ? ' · 🔇 sin sonido' : ''}</span>
                     <button className="btn-grad" style={{ height: 40, padding: '0 14px', fontSize: 13 }} onClick={() => copiarLink(mVideo.url)}>{linkCopiado ? '¡Link copiado! ✓' : '📋 Copiar link del video'}</button>
                     <button className="btn-soft" onClick={() => { setMVideo(null); setMCuadro(''); setMCuadroEstado(''); }}>Cambiar video</button>
                   </div>
@@ -896,11 +908,17 @@ export default function Estudio() {
               {mVideo ? (
                 <input className="input" readOnly value={mVideo.url} onFocus={(e) => e.currentTarget.select()} aria-label="Link del video" style={{ width: '100%', boxSizing: 'border-box', marginTop: 10, fontSize: 11, height: 34 }} />
               ) : (
-                <label className="upload-tile mup">
-                  <input type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={onSubirVideoMotion} disabled={mSubiendo > 0} style={{ display: 'none' }} />
-                  <span style={{ fontSize: 26, color: 'var(--rosa)' }}>＋</span>
-                  <span className="sub" style={{ fontSize: 13, marginTop: 4 }}>{mSubiendo ? `Subiendo… ${mSubiendo}%` : 'Subir video'}</span>
-                </label>
+                <>
+                  <label className="upload-tile mup">
+                    <input type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={onSubirVideoMotion} disabled={mSubiendo > 0 || mQuitando} style={{ display: 'none' }} />
+                    <span style={{ fontSize: 26, color: 'var(--rosa)' }}>＋</span>
+                    <span className="sub" style={{ fontSize: 13, marginTop: 4 }}>{mQuitando ? '🔇 Quitando el sonido…' : mSubiendo ? `Subiendo… ${mSubiendo}%` : 'Subir video'}</span>
+                  </label>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={mSinSonido} onChange={(e) => setMSinSonido(e.target.checked)} style={{ width: 18, height: 18 }} />
+                    🔇 Quitarle el sonido al subirlo (recomendado: evita música con derechos de autor)
+                  </label>
+                </>
               )}
             </div>
 
@@ -1065,6 +1083,7 @@ export default function Estudio() {
                       <span className="vence">⏳ {venceEn(v.ts)}</span>
                       <button className="xbtn" title="Eliminar" onClick={() => borrarVideo(v)}>🗑️</button>
                       <button className="pub-btn" onClick={() => setPublicar({ url: v.url, tipo: 'video', prompt: v.prompt })}>📤 Publicar</button>
+                      <button className="pub-btn dl" onClick={() => setGuardar({ url: v.url, tipo: 'video' })}>⬇ Guardar</button>
                     </div>
                   ))}
                 </div>
@@ -1080,6 +1099,7 @@ export default function Estudio() {
               activoId={personaje.id}
               vestidos={vestidos}
               galeria={creaciones}
+              galerias={galerias}
               costo={costoDe}
               claveFoto={(m) => claveFoto(m as ModeloId)}
               onCreacion={(c) => {
@@ -1089,6 +1109,7 @@ export default function Estudio() {
               onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
               onTrabajo={setLienzoTrabajo}
               onPublicar={(url, tipo) => setPublicar({ url, tipo })}
+              onGuardar={(url, tipo) => setGuardar({ url, tipo })}
               onSaldo={cargarSaldo}
             />
           </div>
@@ -1127,6 +1148,7 @@ export default function Estudio() {
         ) : null;
       })()}
 
+      {guardar ? <Guardar url={guardar.url} tipo={guardar.tipo} onClose={() => setGuardar(null)} /> : null}
       {publicar ? <Publicar url={publicar.url} tipo={publicar.tipo} prompt={publicar.prompt} nombre={personaje.nombre} onClose={() => setPublicar(null)} /> : null}
 
       {/* ===== MODALES ===== */}
@@ -1267,7 +1289,7 @@ export default function Estudio() {
               📤 Publicar en redes
             </button>
             <div className="lb-row">
-              <a className="btn-ghost" href={lightbox.url} target="_blank" rel="noreferrer">⬇ Descargar</a>
+              <button className="btn-ghost" onClick={() => setGuardar({ url: lightbox.url, tipo: 'foto' })}>⬇ Guardar</button>
               <button className="btn-ghost" disabled={!!mejorando} onClick={() => { const c = lightbox; setLightbox(null); setVista('galeria'); setGalTab('fotos'); if (c) mejorar(c); }}>
                 {mejorando ? 'Mejorando…' : '🔎 Mejorar'}
               </button>
