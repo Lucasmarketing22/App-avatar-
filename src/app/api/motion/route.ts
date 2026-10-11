@@ -6,8 +6,9 @@ export const runtime = 'nodejs';
 
 /**
  * Motion control, dos modos (como las plataformas de motion control):
- *  - 'mover' (Kling 3.0 Motion Control): la modelo de la FOTO hace los mismos
- *    movimientos que la persona del VIDEO.
+ *  - 'mover' (Kling 3.0 Motion Control, o Kling 2.6 con motor 'kling26': más
+ *    barato, hasta 10 s): la modelo de la FOTO hace los mismos movimientos que
+ *    la persona del VIDEO.
  *    orientacion 'video' = sigue el encuadre del video (hasta 30 s);
  *    'image' = respeta el encuadre de la foto (hasta 10 s).
  *  - 'reemplazar' (Wan 2.2 Animate Replace): deja el video original (lugar,
@@ -23,7 +24,7 @@ const PROMPT_MOVER =
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { modo?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string }
+    | { modo?: string; motor?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string }
     | null;
 
   const imageUrl = typeof body?.imageUrl === 'string' && body.imageUrl.startsWith('http') ? body.imageUrl : '';
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
     (body?.prompt ?? '').trim(),
   ].filter(Boolean).join(' ');
   const result = await createTask(
-    'kling-3.0/motion-control',
+    body?.motor === 'kling26' ? 'kling-2.6/motion-control' : 'kling-3.0/motion-control',
     {
       prompt: (extra ? `${PROMPT_MOVER} ${extra}` : PROMPT_MOVER).slice(0, 2500),
       input_urls: [imageUrl],

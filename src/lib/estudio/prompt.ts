@@ -204,3 +204,43 @@ export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?
     REALISMO,
   ].filter(Boolean).join(' ');
 }
+
+/** Rol de cada imagen que entra a una caja "Foto IA" del lienzo. */
+export type RolImagen = 'captura' | 'base' | 'cara' | 'cuerpo' | 'vestuario' | 'imagen';
+
+/**
+ * Lienzo, caja "Foto IA": arma el prompt según qué cajas tiene conectadas.
+ * `roles` va en el MISMO orden que las imágenes que se mandan (image 1, 2…).
+ */
+export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: string): string {
+  const nums = (r: RolImagen) => roles.map((x, i) => (x === r ? i + 1 : 0)).filter(Boolean);
+  const lista = (ns: number[]) => (ns.length === 1 ? `Image ${ns[0]}` : `Images ${ns.join(', ')}`);
+  const partes: string[] = ['Photorealistic image.'];
+
+  const captura = nums('captura');
+  const base = nums('base');
+  if (captura.length) {
+    partes.push(`${lista(captura)} is a frame from a video: recreate EXACTLY the same body pose and position, head angle, arm and leg positions, framing, camera angle, distance, place, background and lighting, so the new photo matches that frame and can be its first frame.`);
+  }
+  if (base.length) {
+    partes.push(captura.length
+      ? `${lista(base)} is the current version of the photo: keep it as the base and only apply what the other references and instructions change.`
+      : `${lista(base)} is the photo to edit: keep everything (pose, framing, place, light, outfit) unless the other references or instructions change it.`);
+  }
+  const caras = nums('cara');
+  if (caras.length) {
+    partes.push(`${lista(caras)} show the woman's face and identity: the person in the result must be exactly her — same face, bone structure, face width, skin tone, freckles, eye color and hair. Do not alter, widen or round her face.${captura.length ? ' Nothing of the original person in the video frame may remain.' : ''}`);
+  }
+  const cuerpos = nums('cuerpo');
+  if (cuerpos.length) partes.push(`${lista(cuerpos)} show her body: keep exactly that body shape, curves and proportions (do not copy its clothes, pose or background).`);
+  const vest = nums('vestuario');
+  if (vest.length) partes.push(`${lista(vest)} show an outfit: dress her in exactly that outfit (same garments, colors, fabric, fit and details).`);
+  const extras = nums('imagen');
+  if (extras.length) partes.push(`${lista(extras)} are extra references: use what the instructions say about them.`);
+
+  const instr = textos.map((t) => t.trim()).filter(Boolean).join('. ');
+  if (instr) partes.push(`Instructions: ${instr}.`);
+  partes.push(pistaCuerpo(cuerpo));
+  partes.push(REALISMO);
+  return partes.filter(Boolean).join(' ');
+}
