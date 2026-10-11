@@ -486,3 +486,16 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .vr-big { position: relative; display: block; width: 100%; aspect-ratio: 9 / 16; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
 .vr-cap-l { display: block; text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); margin-top: 4px; }
 .vr-fotos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+
+/* ---------- Guías (❓ ¿Cómo se usa?) ---------- */
+.h1-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.h1-row .h1 { margin-right: auto; }
+.guia-btn { border: 1.5px solid #d9c9f7; background: rgba(109,71,232,.07); color: var(--violeta); border-radius: 999px; padding: 7px 12px; font-size: 13px; font-weight: 800; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.guia-btn.chico { padding: 5px 10px; font-size: 12px; }
+.guia-fila { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.guia-ov { z-index: 125; }
+.guia-play { width: 100%; margin-bottom: 12px; }
+.guia-pasos { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.guia-pasos li { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; line-height: 1.45; cursor: pointer; transition: background .2s, border-color .2s; }
+.guia-pasos li.on { border-color: var(--violeta); background: rgba(109,71,232,.08); }
+.guia-n { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: linear-gradient(135deg, var(--rosa), var(--violeta)); color: #fff; font-size: 12.5px; font-weight: 800; }

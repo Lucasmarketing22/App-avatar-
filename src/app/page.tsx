@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
 import Guardar from '@/components/Guardar';
+import Guia from '@/components/Guia';
 import Lienzo from '@/components/lienzo/Lienzo';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
@@ -738,6 +739,7 @@ export default function Estudio() {
             {/* ===== PANEL (como el "Crear Imagen" de Aria) ===== */}
             <div className="aria-panel">
               <div className="aria-pscroll">
+                <div className="guia-fila"><Guia id="crear" chico texto="Cómo crear fotos" /><Guia id="clonar" chico texto="Cómo clonar una foto" /></div>
                 <div className="apchar">
                   <div className="aplb">PERSONAJE <span className="aphint">· tocá para elegir</span></div>
                   <div className="mrow">
@@ -875,7 +877,7 @@ export default function Estudio() {
           </div>
         ) : vista === 'motion' ? (
           <>
-            <h1 className="h1" style={{ marginBottom: 6 }}>🕺 Motion control</h1>
+            <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🕺 Motion control</h1><Guia id="motion" /></div>
             <p className="sub" style={{ marginTop: 0, marginBottom: 14 }}>Copiá un baile, un trend o un gesto con tu modelo. Elegí cómo:</p>
 
             <div className="mmodos">
@@ -1043,18 +1045,18 @@ export default function Estudio() {
             <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos. ⏳ Los videos se borran solos a los 3 días: descargalos antes.</p>
           </>
         ) : vista === 'viral' ? (
-          <h1 className="h1" style={{ marginBottom: 6 }}>🔥 Recrear viral</h1>
+          <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🔥 Recrear viral</h1><Guia id="viral" /></div>
         ) : vista === 'lienzo' ? (
-          <h1 className="h1" style={{ marginBottom: 8 }}>🧩 Lienzo</h1>
+          <div className="h1-row"><h1 className="h1" style={{ marginBottom: 8 }}>🧩 Lienzo</h1><Guia id="lienzo" /></div>
         ) : vista === 'voz' ? (
           <>
-            <h1 className="h1" style={{ marginBottom: 10 }}>🎙️ Voz de {personaje.nombre || 'tu modelo'}</h1>
+            <div className="h1-row"><h1 className="h1" style={{ marginBottom: 10 }}>🎙️ Voz de {personaje.nombre || 'tu modelo'}</h1><Guia id="voz" /></div>
             <VozEstudio key={personaje.id} modeloNombre={personaje.nombre} voz={personaje.voz} onGuardarVoz={guardarVozModelo} onTrabajo={setVozTrabajo} />
           </>
         ) : (
           /* ----- GALERÍA ----- */
           <>
-            <h1 className="h1" style={{ marginBottom: 10 }}>Mis creaciones</h1>
+            <div className="h1-row"><h1 className="h1" style={{ marginBottom: 10 }}>Mis creaciones</h1><Guia id="galeria" /></div>
             {espacio ? <MedidorEspacio uso={espacio} /> : null}
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               <button className={`opt ${galTab === 'fotos' ? 'on' : ''}`} onClick={() => setGalTab('fotos')}>🖼️ Fotos ({creaciones.length})</button>
