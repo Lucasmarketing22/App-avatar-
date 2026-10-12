@@ -422,7 +422,7 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .lz-th { position: relative; display: block; width: 46px; height: 60px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--surface-2); padding: 0; cursor: pointer; }
 .lz-th img { object-fit: cover; }
 .lz-th.on { outline: 3px solid var(--rosa); outline-offset: 1px; }
-.lz-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 8px; max-height: 210px; overflow-y: auto; }
+.lz-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 8px; max-height: 210px; overflow-y: auto; padding: 4px; }
 .lz-grid .lz-th { width: 100%; height: auto; aspect-ratio: 3 / 4; }
 .lz-big { position: relative; display: block; width: 100%; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: var(--surface-2); margin-bottom: 6px; }
 .lz-big.chico { aspect-ratio: 4 / 3; }
@@ -502,3 +502,5 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .vr-subir { display: flex !important; flex-direction: column; align-items: center; justify-content: center; border-style: dashed; color: var(--rosa); cursor: pointer; }
 .vr-subir span { font-size: 22px; line-height: 1; }
 .vr-subir small { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+.vr-quitar { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border-radius: 999px; background: rgba(20,12,24,.7); color: #fff; font-size: 13px; line-height: 18px; text-align: center; }
+.vr-gal { max-height: 260px; overflow-y: auto; padding: 4px; }

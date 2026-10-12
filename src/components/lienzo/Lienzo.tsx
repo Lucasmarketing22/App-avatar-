@@ -223,6 +223,10 @@ export default function Lienzo(props: Props) {
         return { tipo: 'imagen', items, cuerpo: m.cuerpo, fijo: m.promptFijo };
       }
       case 'vestuario': return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: 'vestuario' }] } : null;
+      case 'cara': {
+        const us = Array.isArray(d.urls) ? (d.urls as string[]).filter(Boolean).slice(0, 3) : [];
+        return us.length ? { tipo: 'imagen', items: us.map((url) => ({ url, rol: 'cara' as const })) } : null;
+      }
       case 'escena': case 'peinado': case 'pose':
         return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: n.tipo }] } : null;
       case 'imagen': return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: 'imagen' }] } : null;
@@ -718,6 +722,7 @@ function CuerpoNodo(p: {
         </>
       );
     }
+    case 'cara': return <CajaCaras d={d} set={set} galeria={p.galeria} />;
     case 'vestuario': return <CajaElegirImagen d={d} set={set} opciones={p.vestidos.map((v) => v.url)} vacio="Elegí un vestuario o subí uno" />;
     case 'escena': case 'peinado': case 'pose': {
       const op = (p.galerias[GALERIA_DE[n.tipo] ?? ''] ?? []).map((g) => g.url);
@@ -1060,6 +1065,45 @@ function CajaAudio({ d, set }: { d: Record<string, unknown>; set: (p: Record<str
           ))}
         </div>
       ) : null}
+      {typeof d.error === 'string' && d.error ? <p className="lz-err">{d.error}</p> : null}
+    </>
+  );
+}
+
+function CajaCaras({ d, set, galeria }: { d: Record<string, unknown>; set: (p: Record<string, unknown>) => void; galeria: { url: string }[] }) {
+  const [subiendo, setSubiendo] = useState(false);
+  const [ver, setVer] = useState(false);
+  const urls = Array.isArray(d.urls) ? (d.urls as string[]) : [];
+  const poner = (us: string[]) => set({ urls: us.slice(-3), error: '' });
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    setSubiendo(true);
+    try { poner([...urls, await subirImagen(f)]); } catch (er) { set({ error: er instanceof Error ? er.message : 'No se pudo subir.' }); } finally { setSubiendo(false); }
+  }
+  const tocar = (u: string) => poner(urls.includes(u) ? urls.filter((x) => x !== u) : [...urls, u]);
+  return (
+    <>
+      {urls.length ? (
+        <div className="lz-thumbs">
+          {urls.map((u) => <button key={u} className="lz-th on" onClick={() => tocar(u)} title="Quitar"><Image src={u} alt="" fill sizes="60px" /></button>)}
+        </div>
+      ) : <p className="lz-nota">Sumá hasta 3 fotos donde tu modelo salió perfecta. Conectala a una <b>Foto IA</b> junto con la caja Modelo.</p>}
+      <div className="lz-dos" style={{ marginTop: 6 }}>
+        <label className="btn-soft lz-file" style={{ marginTop: 0 }}>
+          <input type="file" accept="image/*" onChange={onFile} style={{ display: 'none' }} disabled={subiendo || urls.length >= 3} />
+          {subiendo ? 'Subiendo…' : '⬆ Subir'}
+        </label>
+        {galeria.length ? <button className="btn-soft" onClick={() => setVer((x) => !x)}>{ver ? 'Cerrar' : 'Galería'}</button> : null}
+      </div>
+      {ver ? (
+        <div className="lz-grid">
+          {galeria.slice(0, 24).map((g) => (
+            <button key={g.url} className={`lz-th ${urls.includes(g.url) ? 'on' : ''}`} onClick={() => tocar(g.url)}><Image src={g.url} alt="" fill sizes="70px" /></button>
+          ))}
+        </div>
+      ) : null}
+      {urls.length ? <p className="lz-nota">Tocá una foto para quitarla. {urls.length}/3</p> : null}
       {typeof d.error === 'string' && d.error ? <p className="lz-err">{d.error}</p> : null}
     </>
   );
