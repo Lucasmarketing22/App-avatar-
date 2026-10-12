@@ -12,7 +12,7 @@ import {
 } from './tipos';
 
 /* ===================== Tipos de props ===================== */
-export type ModeloLz = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string };
+export type ModeloLz = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string };
 type Props = {
   modelas: ModeloLz[];
   activoId: string;
@@ -32,7 +32,7 @@ type Props = {
 /** Lo que "sale" de una caja hacia las cajas conectadas. */
 type Salida =
   | { tipo: 'video'; url: string; mb?: number; dur?: number }
-  | { tipo: 'imagen'; items: { url: string; rol: RolImagen }[]; asp?: string; cuerpo?: string }
+  | { tipo: 'imagen'; items: { url: string; rol: RolImagen }[]; asp?: string; cuerpo?: string; fijo?: string }
   | { tipo: 'texto'; texto: string }
   | { tipo: 'audio'; url: string; dur?: number };
 
@@ -220,7 +220,7 @@ export default function Lienzo(props: Props) {
         const items: { url: string; rol: RolImagen }[] = m.refs.map((url) => ({ url, rol: 'cara' as const }));
         const cuerpo = m.entero || m.medio;
         if (d.cuerpo !== false && cuerpo) items.push({ url: cuerpo, rol: 'cuerpo' });
-        return { tipo: 'imagen', items, cuerpo: m.cuerpo };
+        return { tipo: 'imagen', items, cuerpo: m.cuerpo, fijo: m.promptFijo };
       }
       case 'vestuario': return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: 'vestuario' }] } : null;
       case 'escena': case 'peinado': case 'pose':
@@ -258,7 +258,8 @@ export default function Lienzo(props: Props) {
     if (!items.length) { setData(id, { error: 'Conectá al menos una imagen (Captura, Modelo, Vestuario…).' }); return; }
     const textos = entradas(id, 'txt').map(salidaDe).flatMap((s) => (s && s.tipo === 'texto' ? [s.texto] : []));
     const cuerpo = sal.find((s) => s.cuerpo)?.cuerpo;
-    const prompt = componerNodoFoto(items.map((x) => x.rol), textos, cuerpo);
+    const fijo = sal.find((s) => s.fijo)?.fijo;
+    const prompt = componerNodoFoto(items.map((x) => x.rol), textos, cuerpo, fijo);
     const modelo = (n.data.modelo as string) || 'seedream';
     const formato = (n.data.aspect as string) || 'auto';
     const aspect = formato === 'auto' ? (sal.find((s) => s.asp)?.asp || '9:16') : formato;
@@ -306,7 +307,7 @@ export default function Lienzo(props: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modo: motor === 'wan' ? 'reemplazar' : 'mover', motor, imageUrl: img.items[0].url, videoUrl: vid.url,
-          orientacion: (n.data.orientacion as string) || 'video', calidad: (n.data.calidad as string) || '720p', cuerpo: m?.cuerpo, prompt: txt,
+          orientacion: (n.data.orientacion as string) || 'video', calidad: (n.data.calidad as string) || '720p', cuerpo: m?.cuerpo, fijo: m?.promptFijo, prompt: txt,
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -342,7 +343,7 @@ export default function Lienzo(props: Props) {
     if ((aud.dur ?? 0) > def.maxSeg) { setData(id, { error: `${def.label} acepta audios de hasta ${def.maxSeg} s (el tuyo dura ${Math.round(aud.dur ?? 0)} s). Usá Kling Avatar o recortá el audio.` }); return; }
     setData(id, { estado: 'corriendo', error: '' });
     try {
-      const res = await fetch('/api/hablar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: img.items[0].url, audioUrl: aud.url, motor, prompt: txt }) });
+      const res = await fetch('/api/hablar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: img.items[0].url, audioUrl: aud.url, motor, prompt: [modelas.find((x) => x.id === activoId)?.promptFijo, txt].filter(Boolean).join('. ') }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.taskId) throw new Error(d.error ?? 'No se pudo crear el video.');
       setData(id, { taskId: d.taskId });

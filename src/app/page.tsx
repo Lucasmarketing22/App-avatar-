@@ -12,12 +12,12 @@ import Viral from '@/components/Viral';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
 import { quitarSonido } from '@/lib/cliente/video';
 
-import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
+import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, pistaFija, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
-type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; voz?: VozModelo };
+type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; voz?: VozModelo; promptFijo?: string };
 type FotoCuerpo = 'entero' | 'medio';
 const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
@@ -389,7 +389,8 @@ export default function Estudio() {
     const faceHint = personaje.refs.length ? ["One or more reference images show the woman's face and identity; keep her face exactly."] : [];
     const figuraHint = fotoCuerpo ? ["One reference image shows her body: keep exactly the same body shape, curves and proportions as in that image. Do NOT copy its clothing, pose or plain background."] : [];
     const cuerpoHint = pistaCuerpo(personaje.cuerpo);
-    const hints = [...faceHint, ...figuraHint, ...(cuerpoHint ? [cuerpoHint] : []), ...refsExtra.map((r) => r.hint)];
+    const fijoHint = pistaFija(personaje.promptFijo);
+    const hints = [...faceHint, ...figuraHint, ...(cuerpoHint ? [cuerpoHint] : []), ...(fijoHint ? [fijoHint] : []), ...refsExtra.map((r) => r.hint)];
     const texto = [editPrompt.trim(), extra.trim()].filter(Boolean).join('. ');
     const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel });
     lanzar(prompt, imageUrls, { aspect, modelo });
@@ -418,7 +419,7 @@ export default function Estudio() {
     const a = c.aspect || aspect;
     setLightbox(null); setVista('crear'); setAspect(a);
     lanzar(
-      TOMAS_SESION.map((t) => componerSesion(t, caras.length > 0, modeloFoto.cuerpo)),
+      TOMAS_SESION.map((t) => componerSesion(t, caras.length > 0, modeloFoto.cuerpo, modeloFoto.promptFijo)),
       [c.url, ...caras],
       { aspect: a, modelo },
       `📸 Sesión de fotos: generando ${TOMAS_SESION.length} tomas del mismo set… (puede tardar ~1 minuto)`,
@@ -645,12 +646,12 @@ export default function Estudio() {
         let prompt: string; let imageUrls: string[]; let asp: string;
         if (escenaActiva) {
           setVidMsg(`🛏️ Paso 1 de 2: poniendo a ${modeloFoto.nombre || 'tu modelo'} en el escenario del video${instr ? ' con los cambios' : ''}… (~1 min)`);
-          prompt = componerEscena(instr, true, modeloFoto.cuerpo);
+          prompt = componerEscena(instr, true, modeloFoto.cuerpo, modeloFoto.promptFijo);
           imageUrls = [mCuadro, ...(caras.length ? caras : [mFoto])];
           asp = mCuadroAsp || await aspectoDe(mCuadro);
         } else {
           setVidMsg(`✍️ Paso 1 de 2: preparando la foto de tu avatar${mAdaptar ? ' con el encuadre del video' : ''}${instr ? ' con los cambios' : ''}… (~1 min)`);
-          prompt = componerCambioAvatar(instr, caras.length > 0, { cuerpo: modeloFoto.cuerpo, encuadre: mAdaptar && mEncuadre ? mEncuadre : undefined });
+          prompt = componerCambioAvatar(instr, caras.length > 0, { cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo, encuadre: mAdaptar && mEncuadre ? mEncuadre : undefined });
           imageUrls = [mFoto, ...caras];
           asp = await aspectoDe(mFoto);
         }
@@ -666,7 +667,7 @@ export default function Estudio() {
         setMFoto(nueva);
       }
       setVidMsg(`🕺 ${pasoPrevio ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
-      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: escenaActiva ? 'video' : mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo }) });
+      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: escenaActiva ? 'video' : mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
       pollVideo(data.taskId, 0);
@@ -1107,6 +1108,7 @@ export default function Estudio() {
             <Viral
               modelas={modelas}
               activoId={personaje.id}
+              escenas={galerias.escenas ?? []}
               costo={costoDe}
               claveFoto={(m) => claveFoto(m as ModeloId)}
               onCreacion={(c) => {
@@ -1235,6 +1237,14 @@ export default function Estudio() {
             <input className="input" value={personaje.cuerpo ?? ''} onChange={(e) => { const v = e.target.value; setModelas((ms) => ms.map((m) => (m.id === personaje.id ? { ...m, cuerpo: v } : m))); }} onBlur={() => guardarPersonaje(personaje)} placeholder="Ej: 100-60-95, curvilínea, reloj de arena" style={{ display: 'block', marginTop: 6, width: '100%', boxSizing: 'border-box' }} />
             <span className="sub" style={{ display: 'block', fontSize: 12, fontWeight: 400, marginTop: 4 }}>Se respeta en todas las fotos y videos de esta modelo. La cara no se toca: las medidas van solo al cuerpo.</span>
           </label>
+          <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginTop: 14 }}>
+            ✍️ Prompt fijo
+            <textarea className="textarea" value={personaje.promptFijo ?? ''} onChange={(e) => { const v = e.target.value; setModelas((ms) => ms.map((m) => (m.id === personaje.id ? { ...m, promptFijo: v } : m))); }} onBlur={() => guardarPersonaje(personaje)} placeholder="Ej: siempre la misma cara exacta, pelirroja con pecas, ojos verdes, cara fina; cuerpo curvilíneo 100-60-95…" style={{ display: 'block', marginTop: 6, width: '100%', boxSizing: 'border-box', height: 110, fontWeight: 400 }} />
+            <span className="sub" style={{ display: 'block', fontSize: 12, fontWeight: 400, marginTop: 4 }}>Se suma solo, con prioridad, a todo lo que crees con {personaje.nombre || 'esta modelo'}: fotos, Viral, Motion y Lienzo.</span>
+          </label>
+          {!personaje.promptFijo ? (
+            <button className="btn-soft" style={{ marginTop: 8 }} onClick={() => guardarPersonaje({ ...personaje, promptFijo: promptFijoSugerido(personaje.nombre, personaje.cuerpo) })}>✨ Usar el sugerido (y lo editás)</button>
+          ) : null}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 18 }}>
             <button className="btn-soft" onClick={nuevaModelo}>＋ Agregar otra modelo</button>
             {modelas.length > 1 ? <button className="btn-soft" onClick={borrarModelo}>🗑️ Eliminar esta modelo</button> : null}
