@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
 import {
-  aspectoMasCercano, cuadroDeArchivo, cuadroDeVideo, duracionArchivo, esperarTarea, quitarSonido, subirAMotion, subirImagen,
+  aspectoMasCercano, cuadroDeArchivo, cuadroDeVideo, duracionArchivo, esperarTarea, ponerSonido, prefSinSonido, quitarSonido, subirAMotion, subirImagen,
 } from '@/lib/cliente/video';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import { VIRALES, type TipoViral } from '@/lib/estudio/virales';
+import ElegirSonido from '@/components/ElegirSonido';
 
 type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string };
 type Props = {
@@ -61,11 +62,13 @@ export default function Viral(props: Props) {
   const eRef = useRef(e); eRef.current = e;
   const set = (p: Partial<Estado>) => setE((x) => ({ ...x, ...p }));
   const [sinSonido, setSinSonido] = useState(true);
+  useEffect(() => { setSinSonido(prefSinSonido()); }, []);
   const [subiendo, setSubiendo] = useState(0);
   const [quitando, setQuitando] = useState(false);
   const [capturando, setCapturando] = useState(false);
   const [creandoFoto, setCreandoFoto] = useState(false);
   const [creandoVideo, setCreandoVideo] = useState(false);
+  const [pegando, setPegando] = useState(false);
   const [error, setError] = useState('');
   const [t, setT] = useState(0.3);
   const [dur, setDur] = useState(0);
@@ -94,8 +97,8 @@ export default function Viral(props: Props) {
   }, [listo]);
 
   useEffect(() => {
-    onTrabajo(creandoFoto ? '🔥 Viral: creando la foto inicial…' : creandoVideo ? '🔥 Viral: creando el video…' : quitando ? '🔥 Viral: quitando el sonido…' : '');
-  }, [creandoFoto, creandoVideo, quitando, onTrabajo]);
+    onTrabajo(creandoFoto ? '🔥 Viral: creando la foto inicial…' : pegando ? '🔥 Viral: pegándole el sonido original…' : creandoVideo ? '🔥 Viral: creando el video…' : quitando ? '🔥 Viral: quitando el sonido…' : '');
+  }, [creandoFoto, creandoVideo, pegando, quitando, onTrabajo]);
 
   function empezarOtro() {
     if ((creandoFoto || creandoVideo) && !window.confirm('Hay algo creándose. ¿Empezar otro igual? (lo que termine va a aparecer en tu galería)')) return;
@@ -243,6 +246,15 @@ export default function Viral(props: Props) {
     setCreandoVideo(true);
     try {
       const r = await esperarTarea(taskId, () => vivo.current);
+      // Subido CON sonido: el video final sale con ese mismo audio.
+      const v = eRef.current.video;
+      if (v && !v.mudo) {
+        setPegando(true);
+        const c = await ponerSonido(r.url, v.url);
+        r.url = c.url;
+        if (c.error) setError(`El video quedó listo, pero sin el sonido original: ${c.error}`);
+        if (vivo.current) setPegando(false);
+      }
       set({ videoTask: '', resultado: r.url, videoCred: r.credits });
       onVideo(r.url); onSaldo();
     } catch (er) {
@@ -284,7 +296,7 @@ export default function Viral(props: Props) {
                 onLoadedMetadata={(ev) => { const v = ev.currentTarget; setDur(v.duration || 0); v.currentTime = Math.min(t, v.duration || t); }}
                 onError={() => setError('Este video ya no está (se borran a los 3 días). Subilo de nuevo.')}
               />
-              <p className="vr-nota">{Math.round(e.video.dur) || '?'} s · {fmt(e.video.mb)} MB{e.video.mudo ? ' · 🔇 sin sonido' : ''}</p>
+              <p className="vr-nota">{Math.round(e.video.dur) || '?'} s · {fmt(e.video.mb)} MB{e.video.mudo ? ' · 🔇 sin sonido' : ' · 🔊 con sonido'}</p>
               <div className="vr-tit chico">¿Desde qué momento arranca?</div>
               <input type="range" className="lz-slider" min={0} max={Math.max(0.1, dur - 0.05)} step={0.05} value={Math.min(t, dur || t)}
                 onChange={(ev) => { const x = Number(ev.target.value); setT(x); if (vidRef.current) vidRef.current.currentTime = x; }} />
@@ -306,7 +318,7 @@ export default function Viral(props: Props) {
                 <span style={{ fontSize: 28, color: 'var(--rosa)' }}>＋</span>
                 <span className="sub" style={{ fontSize: 13 }}>{quitando ? '🔇 Quitando el sonido…' : subiendo ? `Subiendo… ${subiendo}%` : 'Subir video (3 a 30 s)'}</span>
               </label>
-              <label className="vr-ck"><input type="checkbox" checked={sinSonido} onChange={(ev) => setSinSonido(ev.target.checked)} /> 🔇 Quitarle el sonido (recomendado: derechos de autor)</label>
+              <ElegirSonido sin={sinSonido} onCambio={setSinSonido} />
             </>
           )}
         </div>
@@ -436,7 +448,7 @@ export default function Viral(props: Props) {
           {e.motor === 'kling26' && e.video.dur > 10 ? <p className="lz-err">Kling 2.6 hace hasta 10 s: tu video sale cortado.</p> : null}
           {(e.tipo === 'hablando' || e.tipo === 'rostro') && e.motor !== 'wan' && e.calidad !== '1080p' ? <p className="vr-tip" style={{ marginTop: 4 }}>💡 En videos de cara, <b>1080p</b> mantiene mejor la cara de {modelo?.nombre || 'tu modelo'} (cuesta más). Si igual cambia, probá <b>Reemplazar</b>.</p> : null}
           <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo} onClick={crearVideo}>
-            {creandoVideo ? 'Creando video… (unos minutos)' : e.resultado ? '🔄 Crear otro video' : '🎬 Crear video'}
+            {pegando ? '🔊 Pegándole el sonido…' : creandoVideo ? 'Creando video… (unos minutos)' : e.resultado ? '🔄 Crear otro video' : '🎬 Crear video'}
           </button>
           <p className="vr-nota">{costoVideo === null ? 'El costo lo vas a ver después del primero con este motor.' : `Último video con este motor: ${fmt(costoVideo)} créditos (${usd(costoVideo)}).`}</p>
           {e.resultado ? (

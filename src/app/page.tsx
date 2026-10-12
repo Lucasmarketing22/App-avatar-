@@ -10,7 +10,8 @@ import Lienzo from '@/components/lienzo/Lienzo';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
-import { quitarSonido } from '@/lib/cliente/video';
+import { ponerSonido, prefSinSonido, quitarSonido } from '@/lib/cliente/video';
+import ElegirSonido from '@/components/ElegirSonido';
 
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, pistaFija, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
@@ -122,6 +123,9 @@ export default function Estudio() {
   const [mCuadroEstado, setMCuadroEstado] = useState<'' | 'sacando' | 'error'>('');
   const [mVideo, setMVideo] = useState<{ url: string; dur: number; mb: number; mudo?: boolean } | null>(null);
   const [mSinSonido, setMSinSonido] = useState(true); // quitarle la música al subir (derechos de autor)
+  useEffect(() => { setMSinSonido(prefSinSonido()); }, []);
+  // Video original subido CON sonido: al terminar, se le pega ese audio al video final.
+  const audioOriginal = useRef('');
   const [mQuitando, setMQuitando] = useState(false);
   const [mFoto, setMFoto] = useState<string | null>(null);
   const [mOri, setMOri] = useState<'video' | 'image'>('video');
@@ -468,7 +472,7 @@ export default function Estudio() {
 
   async function crearVideo(c: Creacion) {
     if (haciendoVideo) return;
-    setError(''); setHaciendoVideo(c.id); setVidMsg('Creando el video… (Veo tarda 1 a 4 minutos, no cierres)');
+    setError(''); audioOriginal.current = ''; setHaciendoVideo(c.id); setVidMsg('Creando el video… (Veo tarda 1 a 4 minutos, no cierres)');
     try {
       const res = await fetch('/api/video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrls: [c.url], prompt: motion.trim() || undefined, aspect: '9:16' }) });
       const data = await res.json().catch(() => ({}));
@@ -484,6 +488,13 @@ export default function Estudio() {
         const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
         const data = await res.json().catch(() => ({}));
         if (data.state === 'success') {
+          if (data.url && audioOriginal.current) {
+            setVidMsg('🔊 Pegándole el sonido del video original…');
+            const r = await ponerSonido(data.url as string, audioOriginal.current);
+            audioOriginal.current = '';
+            data.url = r.url;
+            if (r.error) setMError(`El video quedó listo, pero sin el sonido original: ${r.error}`);
+          }
           if (data.url) setVideos((prev) => [{ id: data.url as string, url: data.url as string, ts: Date.now() }, ...prev.filter((x) => x.url !== data.url)]);
           const extra = costoPrevio.current; costoPrevio.current = 0;
           const total = (typeof data.credits === 'number' ? data.credits : 0) + extra;
@@ -667,6 +678,7 @@ export default function Estudio() {
         setMFoto(nueva);
       }
       setVidMsg(`🕺 ${pasoPrevio ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
+      audioOriginal.current = mVideo.mudo ? '' : mVideo.url;
       const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: escenaActiva ? 'video' : mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
@@ -902,7 +914,7 @@ export default function Estudio() {
                 <div className="mvid">
                   <video src={mVideo.url} controls playsInline preload="metadata" />
                   <div className="mvid-info">
-                    <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b> · <b>{mVideo.mb.toFixed(1)} MB</b>{mVideo.mudo ? ' · 🔇 sin sonido' : ''}</span>
+                    <span>Duración: <b>{Math.round(mVideo.dur) || '?'} s</b> · <b>{mVideo.mb.toFixed(1)} MB</b>{mVideo.mudo ? ' · 🔇 sin sonido' : ' · 🔊 con sonido'}</span>
                     <button className="btn-grad" style={{ height: 40, padding: '0 14px', fontSize: 13 }} onClick={() => copiarLink(mVideo.url)}>{linkCopiado ? '¡Link copiado! ✓' : '📋 Copiar link del video'}</button>
                     <button className="btn-soft" onClick={() => { setMVideo(null); setMCuadro(''); setMCuadroEstado(''); }}>Cambiar video</button>
                   </div>
@@ -923,10 +935,7 @@ export default function Estudio() {
                     <span style={{ fontSize: 26, color: 'var(--rosa)' }}>＋</span>
                     <span className="sub" style={{ fontSize: 13, marginTop: 4 }}>{mQuitando ? '🔇 Quitando el sonido…' : mSubiendo ? `Subiendo… ${mSubiendo}%` : 'Subir video'}</span>
                   </label>
-                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={mSinSonido} onChange={(e) => setMSinSonido(e.target.checked)} style={{ width: 18, height: 18 }} />
-                    🔇 Quitarle el sonido al subirlo (recomendado: evita música con derechos de autor)
-                  </label>
+                  <ElegirSonido sin={mSinSonido} onCambio={setMSinSonido} />
                 </>
               )}
             </div>

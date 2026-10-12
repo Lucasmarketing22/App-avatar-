@@ -8,6 +8,7 @@ const nextConfig = {
     outputFileTracingIncludes: {
       '/api/sin-audio': ['./node_modules/ffmpeg-static/ffmpeg'],
       '/api/extraer-audio': ['./node_modules/ffmpeg-static/ffmpeg'],
+      '/api/con-audio': ['./node_modules/ffmpeg-static/ffmpeg'],
     },
   },
   images: {
