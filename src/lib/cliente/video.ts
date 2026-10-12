@@ -8,6 +8,28 @@ export async function quitarSonido(url: string): Promise<{ url: string; teniaAud
   return { url: d.url as string, teniaAudio: !!d.teniaAudio, mb: Number(d.mb) || 0 };
 }
 
+/**
+ * Del lado del celu: le pega al video terminado el sonido del video original
+ * (subido CON sonido). Si algo falla, devuelve el video como estaba.
+ */
+export async function ponerSonido(video: string, original: string): Promise<{ url: string; error?: string }> {
+  try {
+    const res = await fetch('/api/con-audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ video, audio: original }) });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.url) return { url: video, error: d.error ?? 'No se pudo pegar el sonido.' };
+    return { url: d.url as string };
+  } catch { return { url: video, error: 'No se pudo pegar el sonido.' }; }
+}
+
+/** Lo último que eligió: subir los videos sin sonido (true) o con sonido (false). */
+const CLAVE_SONIDO = 'musa-sonido';
+export function prefSinSonido(): boolean {
+  try { return localStorage.getItem(CLAVE_SONIDO) !== 'con'; } catch { return true; }
+}
+export function guardarPrefSonido(sin: boolean) {
+  try { localStorage.setItem(CLAVE_SONIDO, sin ? 'sin' : 'con'); } catch { /* */ }
+}
+
 /** Formato soportado más parecido a un ancho × alto. */
 export function aspectoMasCercano(w: number, h: number): string {
   const r = w / Math.max(1, h);

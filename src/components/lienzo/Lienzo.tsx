@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
-import { quitarSonido } from '@/lib/cliente/video';
+import { ponerSonido, prefSinSonido, quitarSonido } from '@/lib/cliente/video';
+import ElegirSonido from '@/components/ElegirSonido';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ANCHO, DEF, ORDEN_MENU, nuevoId, plantillaMotionExacto, yEntrada, ySalida,
@@ -31,7 +32,7 @@ type Props = {
 
 /** Lo que "sale" de una caja hacia las cajas conectadas. */
 type Salida =
-  | { tipo: 'video'; url: string; mb?: number; dur?: number }
+  | { tipo: 'video'; url: string; mb?: number; dur?: number; conSonido?: boolean }
   | { tipo: 'imagen'; items: { url: string; rol: RolImagen }[]; asp?: string; cuerpo?: string; fijo?: string }
   | { tipo: 'texto'; texto: string }
   | { tipo: 'audio'; url: string; dur?: number };
@@ -212,7 +213,7 @@ export default function Lienzo(props: Props) {
   function salidaDe(n: Nodo): Salida | null {
     const d = n.data;
     switch (n.tipo) {
-      case 'video': return typeof d.url === 'string' && d.url ? { tipo: 'video', url: d.url, mb: d.mb as number, dur: d.dur as number } : null;
+      case 'video': return typeof d.url === 'string' && d.url ? { tipo: 'video', url: d.url, mb: d.mb as number, dur: d.dur as number, conSonido: d.mudo === false } : null;
       case 'captura': return typeof d.url === 'string' && d.url ? { tipo: 'imagen', items: [{ url: d.url, rol: 'captura' }], asp: d.asp as string } : null;
       case 'modelo': {
         const m = modelas.find((x) => x.id === d.modeloId) ?? modelas.find((x) => x.id === activoId);
@@ -316,7 +317,7 @@ export default function Lienzo(props: Props) {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.taskId) throw new Error(d.error ?? 'No se pudo crear el video.');
-      setData(id, { taskId: d.taskId });
+      setData(id, { taskId: d.taskId, audioOriginal: vid.conSonido ? vid.url : '' });
       await terminarMotion(id, d.taskId);
     } catch (e) {
       if (vivo.current) setData(id, { estado: '', taskId: '', error: e instanceof Error ? e.message : 'Error.' });
@@ -325,7 +326,15 @@ export default function Lienzo(props: Props) {
   async function terminarMotion(id: string, taskId: string) {
     try {
       const r = await esperar(taskId);
-      setData(id, { estado: '', taskId: '', resultado: r.url, credits: r.credits });
+      // Video subido CON sonido: el video final sale con ese mismo audio.
+      const original = nodesRef.current.find((x) => x.id === id)?.data.audioOriginal;
+      let aviso = '';
+      if (typeof original === 'string' && original) {
+        const c = await ponerSonido(r.url, original);
+        r.url = c.url;
+        if (c.error) aviso = `El video quedó listo, pero sin el sonido original: ${c.error}`;
+      }
+      setData(id, { estado: '', taskId: '', resultado: r.url, credits: r.credits, audioOriginal: '', error: aviso });
       onVideo(r.url);
       onSaldo();
     } catch (e) {
@@ -875,7 +884,9 @@ function CajaVideo({ d, set }: { d: Record<string, unknown>; set: (p: Record<str
   const [sub, setSub] = useState(0);
   const [quitando, setQuitando] = useState(false);
   const [roto, setRoto] = useState(false);
-  const sinSonido = d.conSonido !== true;
+  const [pref, setPref] = useState(true);
+  useEffect(() => { setPref(prefSinSonido()); }, []);
+  const sinSonido = typeof d.conSonido === 'boolean' ? !d.conSonido : pref;
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0]; e.target.value = '';
     if (!f) return;
@@ -914,8 +925,8 @@ function CajaVideo({ d, set }: { d: Record<string, unknown>; set: (p: Record<str
         <input type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={onFile} style={{ display: 'none' }} disabled={sub > 0 || quitando} />
         {quitando ? '🔇 Quitando el sonido…' : sub ? `Subiendo… ${sub}%` : url ? '🔄 Cambiar video' : '⬆ Subir video'}
       </label>
-      <label className="lz-ck"><input type="checkbox" checked={sinSonido} onChange={(e) => set({ conSonido: !e.target.checked })} /> 🔇 Quitar el sonido al subir</label>
-      {url && typeof d.dur === 'number' ? <p className="lz-nota">{Math.round(d.dur as number)} s · {fmt((d.mb as number) ?? 0)} MB{d.mudo ? ' · 🔇 sin sonido' : ''}</p> : <p className="lz-nota">De 3 a 30 segundos. Una sola persona, bien visible.</p>}
+      <ElegirSonido chico sin={sinSonido} onCambio={(s) => set({ conSonido: !s })} />
+      {url && typeof d.dur === 'number' ? <p className="lz-nota">{Math.round(d.dur as number)} s · {fmt((d.mb as number) ?? 0)} MB{d.mudo ? ' · 🔇 sin sonido' : ' · 🔊 con sonido'}</p> : <p className="lz-nota">De 3 a 30 segundos. Una sola persona, bien visible.</p>}
       {typeof d.error === 'string' && d.error ? <p className="lz-err">{d.error}</p> : null}
     </>
   );
