@@ -499,3 +499,6 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .guia-pasos li { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; line-height: 1.45; cursor: pointer; transition: background .2s, border-color .2s; }
 .guia-pasos li.on { border-color: var(--violeta); background: rgba(109,71,232,.08); }
 .guia-n { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: linear-gradient(135deg, var(--rosa), var(--violeta)); color: #fff; font-size: 12.5px; font-weight: 800; }
+.vr-subir { display: flex !important; flex-direction: column; align-items: center; justify-content: center; border-style: dashed; color: var(--rosa); cursor: pointer; }
+.vr-subir span { font-size: 22px; line-height: 1; }
+.vr-subir small { font-size: 10.5px; color: var(--muted); margin-top: 3px; }

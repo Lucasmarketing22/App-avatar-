@@ -14,6 +14,7 @@ type Props = {
   modelas: Modelo[];
   activoId: string;
   escenas: { url: string }[];
+  vestidos: { url: string }[];
   costo: (clave: string) => number | null;
   claveFoto: (modelo: string) => string;
   onCreacion: (c: { url: string; prompt: string; modelo: string; refs: string[]; aspect: string; credits?: number }) => void;
@@ -33,6 +34,9 @@ type Estado = {
   fondo: 'video' | 'texto' | 'escena';
   fondoTexto: string;
   fondoUrl: string;
+  ropa: 'video' | 'vestido' | 'texto';
+  ropaUrl: string;
+  ropaTexto: string;
   fotoModelo: string;
   fotos: string[];
   elegida: string;
@@ -44,13 +48,13 @@ type Estado = {
   resultado: string;
   videoCred?: number;
 };
-const VACIO: Estado = { tipo: '', video: null, cuadro: null, instr: '', fondo: 'video', fondoTexto: '', fondoUrl: '', fotoModelo: 'seedream', fotos: [], elegida: '', fotoTask: '', motor: 'kling3', calidad: '720p', videoTask: '', resultado: '' };
+const VACIO: Estado = { tipo: '', video: null, cuadro: null, instr: '', fondo: 'video', fondoTexto: '', fondoUrl: '', ropa: 'video', ropaUrl: '', ropaTexto: '', fotoModelo: 'seedream', fotos: [], elegida: '', fotoTask: '', motor: 'kling3', calidad: '720p', videoTask: '', resultado: '' };
 const CLAVE = 'musa-viral-v1';
 const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
 
 export default function Viral(props: Props) {
-  const { modelas, activoId, escenas, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
+  const { modelas, activoId, escenas, vestidos, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
   const [e, setE] = useState<Estado>(VACIO);
   const eRef = useRef(e); eRef.current = e;
   const set = (p: Partial<Estado>) => setE((x) => ({ ...x, ...p }));
@@ -142,6 +146,14 @@ export default function Viral(props: Props) {
     try { set({ cuadro: { url: await subirImagen(f), asp: e.cuadro?.asp || '9:16', t }, fotos: [], elegida: '' }); } catch { setError('No se pudo subir la captura.'); } finally { setCapturando(false); }
   }
 
+  const [subiendoRopa, setSubiendoRopa] = useState(false);
+  async function subirRopa(ev: React.ChangeEvent<HTMLInputElement>) {
+    const f = ev.target.files?.[0]; ev.target.value = '';
+    if (!f) return;
+    setSubiendoRopa(true); setError('');
+    try { set({ ropa: 'vestido', ropaUrl: await subirImagen(f) }); } catch { setError('No se pudo subir la foto de la ropa.'); } finally { setSubiendoRopa(false); }
+  }
+
   /* ----- paso 3: foto inicial ----- */
   async function crearFoto() {
     if (!def || !e.cuadro || !modelo || creandoFoto) return;
@@ -150,16 +162,24 @@ export default function Viral(props: Props) {
     const cuerpo = modelo.entero || modelo.medio;
     if (e.fondo === 'texto' && !e.fondoTexto.trim()) { setError('Escribí qué lugar querés de fondo (o elegí "Igual al video").'); setCreandoFoto(false); return; }
     if (e.fondo === 'escena' && !e.fondoUrl) { setError('Elegí una escena de tu galería para el fondo.'); setCreandoFoto(false); return; }
+    if (e.ropa === 'vestido' && !e.ropaUrl) { setError('Elegí o subí la ropa que querés ponerle.'); setCreandoFoto(false); return; }
+    if (e.ropa === 'texto' && !e.ropaTexto.trim()) { setError('Escribí qué ropa querés (o elegí "Igual al video").'); setCreandoFoto(false); return; }
     const items: { url: string; rol: RolImagen }[] = [
       { url: e.cuadro.url, rol: 'captura' },
       ...modelo.refs.slice(0, 3).map((url) => ({ url, rol: 'cara' as const })),
       ...(def.conCuerpo && cuerpo ? [{ url: cuerpo, rol: 'cuerpo' as const }] : []),
       ...(e.fondo === 'escena' && e.fondoUrl ? [{ url: e.fondoUrl, rol: 'escena' as const }] : []),
+      ...(e.ropa === 'vestido' && e.ropaUrl ? [{ url: e.ropaUrl, rol: 'vestuario' as const }] : []),
     ];
+    const ropa = e.ropa === 'video'
+      ? 'Same outfit as the person in the video frame.'
+      : e.ropa === 'texto'
+        ? `OUTFIT CHANGE: dress her in ${e.ropaTexto.trim()} instead of the clothes of the video frame (do not keep any garment of the frame). Keep the exact pose and framing.`
+        : 'OUTFIT CHANGE: dress her in the outfit of the outfit reference image instead of the clothes of the video frame (do not keep any garment of the frame). Keep the exact pose and framing.';
     const fondo = e.fondo === 'texto'
       ? `Change ONLY the place and background to: ${e.fondoTexto.trim()} — a real, believable location. Keep EXACTLY the same pose, framing, camera angle, distance and light direction of the video frame; nothing of the original background may remain.`
       : '';
-    const prompt = componerNodoFoto(items.map((x) => x.rol), [def.pistaFoto, fondo, e.instr], modelo.cuerpo, modelo.promptFijo);
+    const prompt = componerNodoFoto(items.map((x) => x.rol), [def.pistaFoto, ropa, fondo, e.instr], modelo.cuerpo, modelo.promptFijo);
     const imageUrls = items.map((x) => x.url);
     const aspect = e.cuadro.asp || '9:16';
     try {
@@ -283,6 +303,34 @@ export default function Viral(props: Props) {
         <div className="panel vr-paso">
           <div className="vr-tit"><span className="vr-n">3</span> Foto inicial de {modelo?.nombre || 'tu modelo'}</div>
           <p className="vr-nota" style={{ marginTop: 0 }}>Se crea en la misma toma que el video. Si no te convence, creá otra antes de gastar en el video.</p>
+          <div className="vr-tit chico">👗 Ropa</div>
+          <div className="lz-chips">
+            <button className={`opt ${e.ropa === 'video' ? 'on' : ''}`} onClick={() => set({ ropa: 'video' })}>Igual al video</button>
+            <button className={`opt ${e.ropa === 'vestido' ? 'on' : ''}`} onClick={() => set({ ropa: 'vestido' })}>De mis vestidos / foto</button>
+            <button className={`opt ${e.ropa === 'texto' ? 'on' : ''}`} onClick={() => set({ ropa: 'texto' })}>Escribirla</button>
+          </div>
+          {e.ropa === 'vestido' ? (
+            <>
+              <div className="vr-fotos" style={{ marginBottom: 6 }}>
+                <label className="lz-th vr-subir" style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }}>
+                  <input type="file" accept="image/*" onChange={subirRopa} style={{ display: 'none' }} disabled={subiendoRopa} />
+                  <span>{subiendoRopa ? '…' : '＋'}</span><small>{subiendoRopa ? 'Subiendo' : 'Subir foto'}</small>
+                </label>
+                {e.ropaUrl && !vestidos.some((v) => v.url === e.ropaUrl) ? (
+                  <button className="lz-th on" style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }}><Image src={e.ropaUrl} alt="" fill sizes="80px" /></button>
+                ) : null}
+                {vestidos.slice(0, 15).map((v) => (
+                  <button key={v.url} className={`lz-th ${e.ropaUrl === v.url ? 'on' : ''}`} style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }} onClick={() => set({ ropaUrl: v.url })}>
+                    <Image src={v.url} alt="" fill sizes="80px" />
+                  </button>
+                ))}
+              </div>
+              <p className="vr-nota" style={{ marginTop: 0, marginBottom: 8 }}>Elegí uno de tus vestidos o subí una foto de la ropa (puede ser de una tienda o de otra persona).</p>
+            </>
+          ) : null}
+          {e.ropa === 'texto' ? (
+            <input className="input" value={e.ropaTexto} onChange={(ev) => set({ ropaTexto: ev.target.value })} placeholder="Ej: vestido corto rojo ajustado, top negro de encaje y jean" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }} />
+          ) : null}
           <div className="vr-tit chico">🏞️ Fondo</div>
           <div className="lz-chips">
             <button className={`opt ${e.fondo === 'video' ? 'on' : ''}`} onClick={() => set({ fondo: 'video' })}>Igual al video</button>
@@ -304,7 +352,7 @@ export default function Viral(props: Props) {
             ) : <p className="vr-nota">Todavía no tenés escenas guardadas. Cargalas en Crear → Escenas, o usá “Otro lugar”.</p>
           ) : null}
           {e.fondo !== 'video' ? <p className="vr-nota" style={{ marginTop: 0, marginBottom: 8 }}>Misma postura y encuadre, en otro lugar. El video va a salir con este fondo nuevo.</p> : null}
-          <textarea className="textarea" value={e.instr} onChange={(ev) => set({ instr: ev.target.value })} placeholder="¿Cambiar algo más? (opcional) Ej: con top rojo, pelo suelto" style={{ height: 60 }} />
+          <textarea className="textarea" value={e.instr} onChange={(ev) => set({ instr: ev.target.value })} placeholder="¿Cambiar algo más? (opcional) Ej: pelo suelto, aros dorados" style={{ height: 60 }} />
           {modelo?.promptFijo ? <p className="vr-nota">✍️ Se suma solo el <b>prompt fijo</b> de {modelo.nombre || 'tu modelo'} (cara y medidas).</p> : <p className="vr-nota">💡 Tip: cargá el <b>✍️ Prompt fijo</b> en la ficha de {modelo?.nombre || 'tu modelo'} para que siempre respete su cara y sus medidas.</p>}
           <div className="vr-fila">
             <select className="input" value={e.fotoModelo} onChange={(ev) => set({ fotoModelo: ev.target.value })} style={{ flex: 1, minWidth: 0 }}>

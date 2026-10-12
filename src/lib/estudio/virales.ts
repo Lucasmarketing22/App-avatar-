@@ -24,7 +24,7 @@ export const VIRALES: DefViral[] = [
     id: 'baile', emoji: '💃', titulo: 'Baile / trend', desc: 'Cuerpo entero, mucho movimiento',
     ejemplo: 'Bailes de TikTok, trends con pasos, caminatas',
     conCuerpo: true,
-    pistaFoto: 'Full body visible as in the frame, same stance and outfit.',
+    pistaFoto: 'Full body visible as in the frame, same stance.',
     pistaVideo: 'Copy the full-body choreography exactly: every step, arm movement, hip movement, turn and rhythm, keeping her body proportions.',
     tip: 'Que en el video se vea el cuerpo entero y una sola persona.',
   },
