@@ -1110,6 +1110,7 @@ export default function Estudio() {
               activoId={personaje.id}
               escenas={galerias.escenas ?? []}
               vestidos={vestidos}
+              galeria={creaciones}
               costo={costoDe}
               claveFoto={(m) => claveFoto(m as ModeloId)}
               onCreacion={(c) => {

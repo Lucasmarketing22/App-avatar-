@@ -15,6 +15,7 @@ type Props = {
   activoId: string;
   escenas: { url: string }[];
   vestidos: { url: string }[];
+  galeria: { url: string }[];
   costo: (clave: string) => number | null;
   claveFoto: (modelo: string) => string;
   onCreacion: (c: { url: string; prompt: string; modelo: string; refs: string[]; aspect: string; credits?: number }) => void;
@@ -37,6 +38,7 @@ type Estado = {
   ropa: 'video' | 'vestido' | 'texto';
   ropaUrl: string;
   ropaTexto: string;
+  carasExtra: string[];
   fotoModelo: string;
   fotos: string[];
   elegida: string;
@@ -48,13 +50,13 @@ type Estado = {
   resultado: string;
   videoCred?: number;
 };
-const VACIO: Estado = { tipo: '', video: null, cuadro: null, instr: '', fondo: 'video', fondoTexto: '', fondoUrl: '', ropa: 'video', ropaUrl: '', ropaTexto: '', fotoModelo: 'seedream', fotos: [], elegida: '', fotoTask: '', motor: 'kling3', calidad: '720p', videoTask: '', resultado: '' };
+const VACIO: Estado = { tipo: '', video: null, cuadro: null, instr: '', fondo: 'video', fondoTexto: '', fondoUrl: '', ropa: 'video', ropaUrl: '', ropaTexto: '', carasExtra: [], fotoModelo: 'seedream', fotos: [], elegida: '', fotoTask: '', motor: 'kling3', calidad: '720p', videoTask: '', resultado: '' };
 const CLAVE = 'musa-viral-v1';
 const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
 
 export default function Viral(props: Props) {
-  const { modelas, activoId, escenas, vestidos, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
+  const { modelas, activoId, escenas, vestidos, galeria, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
   const [e, setE] = useState<Estado>(VACIO);
   const eRef = useRef(e); eRef.current = e;
   const set = (p: Partial<Estado>) => setE((x) => ({ ...x, ...p }));
@@ -146,6 +148,17 @@ export default function Viral(props: Props) {
     try { set({ cuadro: { url: await subirImagen(f), asp: e.cuadro?.asp || '9:16', t }, fotos: [], elegida: '' }); } catch { setError('No se pudo subir la captura.'); } finally { setCapturando(false); }
   }
 
+  const [subiendoCara, setSubiendoCara] = useState(false);
+  const [verGaleria, setVerGaleria] = useState(false);
+  async function subirCaraExtra(ev: React.ChangeEvent<HTMLInputElement>) {
+    const f = ev.target.files?.[0]; ev.target.value = '';
+    if (!f) return;
+    setSubiendoCara(true); setError('');
+    try { const u = await subirImagen(f); setE((x) => ({ ...x, carasExtra: [...x.carasExtra, u].slice(-3) })); } catch { setError('No se pudo subir la foto.'); } finally { setSubiendoCara(false); }
+  }
+  function tocarCaraExtra(u: string) {
+    setE((x) => ({ ...x, carasExtra: x.carasExtra.includes(u) ? x.carasExtra.filter((y) => y !== u) : [...x.carasExtra, u].slice(-3) }));
+  }
   const [subiendoRopa, setSubiendoRopa] = useState(false);
   async function subirRopa(ev: React.ChangeEvent<HTMLInputElement>) {
     const f = ev.target.files?.[0]; ev.target.value = '';
@@ -167,6 +180,7 @@ export default function Viral(props: Props) {
     const items: { url: string; rol: RolImagen }[] = [
       { url: e.cuadro.url, rol: 'captura' },
       ...modelo.refs.slice(0, 3).map((url) => ({ url, rol: 'cara' as const })),
+      ...e.carasExtra.filter((u) => !modelo.refs.includes(u)).slice(0, 3).map((url) => ({ url, rol: 'cara' as const })),
       ...(def.conCuerpo && cuerpo ? [{ url: cuerpo, rol: 'cuerpo' as const }] : []),
       ...(e.fondo === 'escena' && e.fondoUrl ? [{ url: e.fondoUrl, rol: 'escena' as const }] : []),
       ...(e.ropa === 'vestido' && e.ropaUrl ? [{ url: e.ropaUrl, rol: 'vestuario' as const }] : []),
@@ -303,6 +317,29 @@ export default function Viral(props: Props) {
         <div className="panel vr-paso">
           <div className="vr-tit"><span className="vr-n">3</span> Foto inicial de {modelo?.nombre || 'tu modelo'}</div>
           <p className="vr-nota" style={{ marginTop: 0 }}>Se crea en la misma toma que el video. Si no te convence, creá otra antes de gastar en el video.</p>
+          <div className="vr-tit chico">🙂 Más fotos de su cara <span className="vr-nota" style={{ margin: 0, fontWeight: 600 }}>(opcional, hasta 3)</span></div>
+          <div className="vr-fotos" style={{ marginBottom: 6 }}>
+            <label className="lz-th vr-subir" style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }}>
+              <input type="file" accept="image/*" onChange={subirCaraExtra} style={{ display: 'none' }} disabled={subiendoCara || e.carasExtra.length >= 3} />
+              <span>{subiendoCara ? '…' : '＋'}</span><small>{subiendoCara ? 'Subiendo' : 'Subir'}</small>
+            </label>
+            {e.carasExtra.map((u) => (
+              <button key={u} className="lz-th on" style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }} onClick={() => tocarCaraExtra(u)} title="Quitar">
+                <Image src={u} alt="" fill sizes="80px" /><span className="vr-quitar">×</span>
+              </button>
+            ))}
+            {galeria.length ? <button className="lz-th vr-subir" style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }} onClick={() => setVerGaleria((x) => !x)}><span>🖼️</span><small>{verGaleria ? 'Cerrar' : 'Galería'}</small></button> : null}
+          </div>
+          {verGaleria ? (
+            <div className="vr-fotos vr-gal" style={{ marginBottom: 6 }}>
+              {galeria.slice(0, 24).map((g) => (
+                <button key={g.url} className={`lz-th ${e.carasExtra.includes(g.url) ? 'on' : ''}`} style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }} onClick={() => tocarCaraExtra(g.url)}>
+                  <Image src={g.url} alt="" fill sizes="80px" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <p className="vr-nota" style={{ marginTop: 0, marginBottom: 8 }}>Sumá fotos donde {modelo?.nombre || 'tu modelo'} salió perfecta: más motivos para que la IA respete su cara (además de las de su ficha).</p>
           <div className="vr-tit chico">👗 Ropa</div>
           <div className="lz-chips">
             <button className={`opt ${e.ropa === 'video' ? 'on' : ''}`} onClick={() => set({ ropa: 'video' })}>Igual al video</button>
