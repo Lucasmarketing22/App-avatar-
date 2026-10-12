@@ -9,10 +9,11 @@ import {
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import { VIRALES, type TipoViral } from '@/lib/estudio/virales';
 
-type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string };
+type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string };
 type Props = {
   modelas: Modelo[];
   activoId: string;
+  escenas: { url: string }[];
   costo: (clave: string) => number | null;
   claveFoto: (modelo: string) => string;
   onCreacion: (c: { url: string; prompt: string; modelo: string; refs: string[]; aspect: string; credits?: number }) => void;
@@ -29,6 +30,9 @@ type Estado = {
   video: { url: string; dur: number; mb: number; mudo: boolean } | null;
   cuadro: { url: string; asp: string; t: number } | null;
   instr: string;
+  fondo: 'video' | 'texto' | 'escena';
+  fondoTexto: string;
+  fondoUrl: string;
   fotoModelo: string;
   fotos: string[];
   elegida: string;
@@ -40,13 +44,13 @@ type Estado = {
   resultado: string;
   videoCred?: number;
 };
-const VACIO: Estado = { tipo: '', video: null, cuadro: null, instr: '', fotoModelo: 'seedream', fotos: [], elegida: '', fotoTask: '', motor: 'kling3', calidad: '720p', videoTask: '', resultado: '' };
+const VACIO: Estado = { tipo: '', video: null, cuadro: null, instr: '', fondo: 'video', fondoTexto: '', fondoUrl: '', fotoModelo: 'seedream', fotos: [], elegida: '', fotoTask: '', motor: 'kling3', calidad: '720p', videoTask: '', resultado: '' };
 const CLAVE = 'musa-viral-v1';
 const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
 
 export default function Viral(props: Props) {
-  const { modelas, activoId, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
+  const { modelas, activoId, escenas, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
   const [e, setE] = useState<Estado>(VACIO);
   const eRef = useRef(e); eRef.current = e;
   const set = (p: Partial<Estado>) => setE((x) => ({ ...x, ...p }));
@@ -144,12 +148,18 @@ export default function Viral(props: Props) {
     if (!modelo.refs.length) { setError(`${modelo.nombre || 'Tu modelo'} no tiene fotos de cara. Cargalas en su ficha.`); return; }
     setError(''); setCreandoFoto(true);
     const cuerpo = modelo.entero || modelo.medio;
+    if (e.fondo === 'texto' && !e.fondoTexto.trim()) { setError('Escribí qué lugar querés de fondo (o elegí "Igual al video").'); setCreandoFoto(false); return; }
+    if (e.fondo === 'escena' && !e.fondoUrl) { setError('Elegí una escena de tu galería para el fondo.'); setCreandoFoto(false); return; }
     const items: { url: string; rol: RolImagen }[] = [
       { url: e.cuadro.url, rol: 'captura' },
       ...modelo.refs.slice(0, 3).map((url) => ({ url, rol: 'cara' as const })),
       ...(def.conCuerpo && cuerpo ? [{ url: cuerpo, rol: 'cuerpo' as const }] : []),
+      ...(e.fondo === 'escena' && e.fondoUrl ? [{ url: e.fondoUrl, rol: 'escena' as const }] : []),
     ];
-    const prompt = componerNodoFoto(items.map((x) => x.rol), [def.pistaFoto, e.instr], modelo.cuerpo);
+    const fondo = e.fondo === 'texto'
+      ? `Change ONLY the place and background to: ${e.fondoTexto.trim()} — a real, believable location. Keep EXACTLY the same pose, framing, camera angle, distance and light direction of the video frame; nothing of the original background may remain.`
+      : '';
+    const prompt = componerNodoFoto(items.map((x) => x.rol), [def.pistaFoto, fondo, e.instr], modelo.cuerpo, modelo.promptFijo);
     const imageUrls = items.map((x) => x.url);
     const aspect = e.cuadro.asp || '9:16';
     try {
@@ -184,7 +194,7 @@ export default function Viral(props: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modo: e.motor === 'wan' ? 'reemplazar' : 'mover', motor: e.motor, imageUrl: e.elegida, videoUrl: e.video.url,
-          orientacion: 'video', calidad: e.calidad, cuerpo: modelo?.cuerpo, prompt: [def.pistaVideo, e.instr].filter(Boolean).join(' '),
+          orientacion: 'video', calidad: e.calidad, cuerpo: modelo?.cuerpo, fijo: modelo?.promptFijo, prompt: [def.pistaVideo, e.instr].filter(Boolean).join(' '),
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -273,7 +283,29 @@ export default function Viral(props: Props) {
         <div className="panel vr-paso">
           <div className="vr-tit"><span className="vr-n">3</span> Foto inicial de {modelo?.nombre || 'tu modelo'}</div>
           <p className="vr-nota" style={{ marginTop: 0 }}>Se crea en la misma toma que el video. Si no te convence, creá otra antes de gastar en el video.</p>
-          <textarea className="textarea" value={e.instr} onChange={(ev) => set({ instr: ev.target.value })} placeholder="¿Cambiar algo? (opcional) Ej: con top rojo, pelo suelto" style={{ height: 60 }} />
+          <div className="vr-tit chico">🏞️ Fondo</div>
+          <div className="lz-chips">
+            <button className={`opt ${e.fondo === 'video' ? 'on' : ''}`} onClick={() => set({ fondo: 'video' })}>Igual al video</button>
+            <button className={`opt ${e.fondo === 'texto' ? 'on' : ''}`} onClick={() => set({ fondo: 'texto' })}>Otro lugar</button>
+            <button className={`opt ${e.fondo === 'escena' ? 'on' : ''}`} onClick={() => set({ fondo: 'escena' })}>De mis escenas</button>
+          </div>
+          {e.fondo === 'texto' ? (
+            <input className="input" value={e.fondoTexto} onChange={(ev) => set({ fondoTexto: ev.target.value })} placeholder="Ej: dormitorio luminoso con plantas, living moderno, playa al atardecer" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }} />
+          ) : null}
+          {e.fondo === 'escena' ? (
+            escenas.length ? (
+              <div className="vr-fotos" style={{ marginBottom: 8 }}>
+                {escenas.slice(0, 16).map((g) => (
+                  <button key={g.url} className={`lz-th ${e.fondoUrl === g.url ? 'on' : ''}`} style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }} onClick={() => set({ fondoUrl: g.url })}>
+                    <Image src={g.url} alt="" fill sizes="80px" />
+                  </button>
+                ))}
+              </div>
+            ) : <p className="vr-nota">Todavía no tenés escenas guardadas. Cargalas en Crear → Escenas, o usá “Otro lugar”.</p>
+          ) : null}
+          {e.fondo !== 'video' ? <p className="vr-nota" style={{ marginTop: 0, marginBottom: 8 }}>Misma postura y encuadre, en otro lugar. El video va a salir con este fondo nuevo.</p> : null}
+          <textarea className="textarea" value={e.instr} onChange={(ev) => set({ instr: ev.target.value })} placeholder="¿Cambiar algo más? (opcional) Ej: con top rojo, pelo suelto" style={{ height: 60 }} />
+          {modelo?.promptFijo ? <p className="vr-nota">✍️ Se suma solo el <b>prompt fijo</b> de {modelo.nombre || 'tu modelo'} (cara y medidas).</p> : <p className="vr-nota">💡 Tip: cargá el <b>✍️ Prompt fijo</b> en la ficha de {modelo?.nombre || 'tu modelo'} para que siempre respete su cara y sus medidas.</p>}
           <div className="vr-fila">
             <select className="input" value={e.fotoModelo} onChange={(ev) => set({ fotoModelo: ev.target.value })} style={{ flex: 1, minWidth: 0 }}>
               <option value="seedream">Seedream 4.5 ⭐</option>
@@ -317,6 +349,7 @@ export default function Viral(props: Props) {
             {calidades.map((c) => <button key={c} className={`opt ${e.calidad === c ? 'on' : ''}`} onClick={() => set({ calidad: c })}>{c}</button>)}
           </div>
           {e.motor === 'kling26' && e.video.dur > 10 ? <p className="lz-err">Kling 2.6 hace hasta 10 s: tu video sale cortado.</p> : null}
+          {(e.tipo === 'hablando' || e.tipo === 'rostro') && e.motor !== 'wan' && e.calidad !== '1080p' ? <p className="vr-tip" style={{ marginTop: 4 }}>💡 En videos de cara, <b>1080p</b> mantiene mejor la cara de {modelo?.nombre || 'tu modelo'} (cuesta más). Si igual cambia, probá <b>Reemplazar</b>.</p> : null}
           <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo} onClick={crearVideo}>
             {creandoVideo ? 'Creando video… (unos minutos)' : e.resultado ? '🔄 Crear otro video' : '🎬 Crear video'}
           </button>

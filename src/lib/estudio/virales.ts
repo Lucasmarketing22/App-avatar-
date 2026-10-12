@@ -31,7 +31,7 @@ export const VIRALES: DefViral[] = [
   {
     id: 'hablando', emoji: '🗣️', titulo: 'Hablando a cámara', desc: 'Primer plano, del pecho para arriba',
     ejemplo: 'Selfies hablando, “el primer día para hacerte feliz” + beso',
-    conCuerpo: false,
+    conCuerpo: true,
     pistaFoto: 'Close-up selfie framing from the chest up, exactly like the frame (same phone angle and distance), natural friendly expression looking into the camera.',
     pistaVideo: 'Copy exactly her facial expressions, mouth and lip movements as if speaking, smiles, blinks, eyebrow movements, head tilts and kisses to the camera, keeping eye contact with the lens. Handheld smartphone selfie feel.',
     tip: 'Ideal: la cara bien visible y de frente. El video sale sin la voz de la chica original (después le podés sumar la de Mila o texto en pantalla).',

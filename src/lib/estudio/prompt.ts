@@ -122,6 +122,23 @@ export function componerUnificado(opts: {
  * Contextura del personaje (ej: "100-60-95, curvilínea"). Las curvas van solo
  * en el cuerpo: si no se aclara, la IA tiende a redondearle también la cara.
  */
+/** Prompt fijo de la modelo (de su ficha): se suma siempre, con prioridad. */
+export function pistaFija(texto?: string): string {
+  const t = (texto ?? '').trim();
+  return t ? `Fixed traits of this woman that must ALWAYS be respected (top priority): ${t}.` : '';
+}
+
+/** Texto sugerido para el prompt fijo (la usuaria lo puede editar). */
+export function promptFijoSugerido(nombre: string, cuerpo?: string): string {
+  const n = nombre.trim() || 'la modelo';
+  return [
+    `Siempre exactamente la misma cara de ${n} que en sus fotos de cara: mismos rasgos, misma forma y ancho de cara, mismos ojos, nariz, labios, pecas, color y largo de pelo.`,
+    'No cambiar, ensanchar ni redondear la cara.',
+    cuerpo ? `Cuerpo con estas medidas exactas: ${cuerpo}. Figura curvilínea y marcada (busto, cintura fina y cadera según las medidas); las medidas van solo al cuerpo, la cara no cambia.` : '',
+    'Piel real con poros, sin retoque.',
+  ].filter(Boolean).join(' ');
+}
+
 export function pistaCuerpo(cuerpo?: string): string {
   const c = (cuerpo ?? '').trim();
   if (!c) return '';
@@ -148,7 +165,7 @@ export const TOMAS_SESION: string[] = [
   'a medium shot of her sitting or leaning on something in the same place, relaxed pose, looking away from the camera',
 ];
 
-export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string): string {
+export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string, fijo?: string): string {
   const partes: string[] = [
     'Photorealistic photoshoot continuation. Image 1 is a photo from an ongoing photo session.',
     'Keep EXACTLY the same location, background and setting, the same lighting, weather and time of day, and the same outfit (every garment, color, fabric, pattern and accessory) and the same hairstyle and makeup as in image 1.',
@@ -157,6 +174,7 @@ export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string)
       : 'Keep the woman exactly the same person as in image 1 (same face, bone structure, skin tone, freckles, eye color and natural features).',
     `Create a NEW, different photo from this same session: ${toma}. Do not copy the pose, angle or framing of image 1.`,
     pistaCuerpo(cuerpo),
+    pistaFija(fijo),
     REALISMO,
   ];
   return partes.filter(Boolean).join(' ');
@@ -170,7 +188,7 @@ export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string)
 export function componerCambioAvatar(
   instrucciones: string,
   conCaras: boolean,
-  extra?: { cuerpo?: string; encuadre?: Encuadre },
+  extra?: { cuerpo?: string; encuadre?: Encuadre; fijo?: string },
 ): string {
   const instr = instrucciones.trim();
   return [
@@ -182,6 +200,7 @@ export function componerCambioAvatar(
       : 'Keep the same pose, body position, framing, camera angle and composition as image 1, so it can be used as the first frame of a video.',
     instr ? `Apply ONLY this change and keep everything else unchanged: ${instr}.` : '',
     pistaCuerpo(extra?.cuerpo),
+    pistaFija(extra?.fijo),
     REALISMO,
   ].filter(Boolean).join(' ');
 }
@@ -191,7 +210,7 @@ export function componerCambioAvatar(
  * original. Se recrea esa misma foto (lugar, luz, postura, ropa, encuadre)
  * pero con la cara y el cuerpo de la modelo, para usarla como primer cuadro.
  */
-export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?: string): string {
+export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?: string, fijo?: string): string {
   const instr = instrucciones.trim();
   return [
     'Image 1 is a frame taken from a video. Recreate EXACTLY this same photo: the same place, background, bed or furniture, sheets, objects, lighting, light direction, colors, time of day, camera angle, lens, distance and framing.',
@@ -201,6 +220,7 @@ export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?
       : 'Keep the same woman.',
     instr ? `Also apply this change and keep everything else unchanged: ${instr}.` : '',
     pistaCuerpo(cuerpo),
+    pistaFija(fijo),
     REALISMO,
   ].filter(Boolean).join(' ');
 }
@@ -212,7 +232,7 @@ export type RolImagen = 'captura' | 'base' | 'cara' | 'cuerpo' | 'vestuario' | '
  * Lienzo, caja "Foto IA": arma el prompt según qué cajas tiene conectadas.
  * `roles` va en el MISMO orden que las imágenes que se mandan (image 1, 2…).
  */
-export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: string): string {
+export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: string, fijo?: string): string {
   const nums = (r: RolImagen) => roles.map((x, i) => (x === r ? i + 1 : 0)).filter(Boolean);
   const lista = (ns: number[]) => (ns.length === 1 ? `Image ${ns[0]}` : `Images ${ns.join(', ')}`);
   const partes: string[] = ['Photorealistic image.'];
@@ -220,7 +240,7 @@ export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: 
   const captura = nums('captura');
   const base = nums('base');
   if (captura.length) {
-    partes.push(`${lista(captura)} is a frame from a video: recreate EXACTLY the same body pose and position, head angle, arm and leg positions, framing, camera angle, distance, place, background and lighting, so the new photo matches that frame and can be its first frame.`);
+    partes.push(`TOP PRIORITY — ${lista(captura)} is a frame from a video: the new photo must match that frame so it can be its first frame. Copy EXACTLY the same body pose and position, head angle and tilt, where she looks, arm, hand and leg positions, framing and crop, camera angle and height, distance to the camera (same size of the person in the image), place, background and lighting.`);
   }
   if (base.length) {
     partes.push(captura.length
@@ -247,6 +267,7 @@ export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: 
   const instr = textos.map((t) => t.trim()).filter(Boolean).join('. ');
   if (instr) partes.push(`Instructions: ${instr}.`);
   partes.push(pistaCuerpo(cuerpo));
+  partes.push(pistaFija(fijo));
   partes.push(REALISMO);
   return partes.filter(Boolean).join(' ');
 }

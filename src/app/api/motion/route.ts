@@ -18,13 +18,15 @@ export const runtime = 'nodejs';
 const PROMPT_MOVER =
   'The woman from the reference image performs exactly the same movements, gestures, timing and facial expressions as the person in the reference video. ' +
   'Keep her face, identity, hairstyle, body shape and outfit exactly as in the reference image. ' +
+  'IDENTITY LOCK: her face must come ONLY from the reference image and stay identical in every frame (same face shape and width, eyes, nose, lips, freckles, hair color). ' +
+  'From the reference video copy ONLY the motion, gestures and expressions — never the face, hair, skin or body of the person in the video. ' +
   'Keep the background, location and lighting of the reference image. ' +
   'Realistic, natural and fluid human motion, correct anatomy and hands, real skin texture, stable face without flicker or distortion. ' +
   'It must look like real, unedited smartphone video footage, not AI: natural skin with pores, no smoothing, no plastic or waxy look.';
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { modo?: string; motor?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string }
+    | { modo?: string; motor?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string; fijo?: string }
     | null;
 
   const imageUrl = typeof body?.imageUrl === 'string' && body.imageUrl.startsWith('http') ? body.imageUrl : '';
@@ -52,6 +54,7 @@ export async function POST(request: Request) {
   const cuerpo = (body?.cuerpo ?? '').trim().slice(0, 200);
   const extra = [
     cuerpo ? `Her body shape and measurements must stay: ${cuerpo}; her face stays exactly as in the reference image.` : '',
+    (body?.fijo ?? '').trim() ? `Fixed traits (always): ${(body?.fijo ?? '').trim().slice(0, 800)}.` : '',
     (body?.prompt ?? '').trim(),
   ].filter(Boolean).join(' ');
   const result = await createTask(
