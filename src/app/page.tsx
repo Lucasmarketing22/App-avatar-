@@ -12,6 +12,7 @@ import Viral from '@/components/Viral';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
 import { esperarTarea, prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
+import RevisarVideo from '@/components/RevisarVideo';
 
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, pistaFija, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
@@ -957,6 +958,13 @@ export default function Estudio() {
                     <button className="btn-grad" style={{ height: 40, padding: '0 14px', fontSize: 13 }} onClick={() => copiarLink(mVideo.url)}>{linkCopiado ? '¡Link copiado! ✓' : '📋 Copiar link del video'}</button>
                     <button className="btn-soft" onClick={() => { setMVideo(null); setMCuadro(''); setMCuadroEstado(''); }}>Cambiar video</button>
                   </div>
+                  <RevisarVideo
+                    video={mVideo}
+                    onRecortado={(v, c) => {
+                      setMVideo(v);
+                      if (c?.url) { setMCuadro(c.url); setMCuadroAsp(c.w && c.h ? aspectoMasCercano(c.w, c.h) : ''); setMCuadroEstado(''); }
+                    }}
+                  />
                 </div>
               ) : null}
               <div className="aplbl" style={{ marginTop: 14 }}>¿Cómo se ve la persona en el video?</div>

@@ -9,6 +9,8 @@ const nextConfig = {
       '/api/sin-audio': ['./node_modules/ffmpeg-static/ffmpeg'],
       '/api/extraer-audio': ['./node_modules/ffmpeg-static/ffmpeg'],
       '/api/status': ['./node_modules/ffmpeg-static/ffmpeg'],
+      '/api/analizar-video': ['./node_modules/ffmpeg-static/ffmpeg'],
+      '/api/recortar': ['./node_modules/ffmpeg-static/ffmpeg'],
       '/api/kie-callback': ['./node_modules/ffmpeg-static/ffmpeg'],
     },
   },

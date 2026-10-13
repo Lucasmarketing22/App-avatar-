@@ -59,8 +59,8 @@ export function plantillaMotionExacto(modeloId: string): { nodes: Nodo[]; edges:
     nodes: [
       // Columnas con aire: las cajas con video crecen hacia abajo al cargarlo.
       { id: v, tipo: 'video', x: 0, y: 0, data: {} },
-      { id: ve, tipo: 'vestuario', x: 0, y: 470, data: {} },
-      { id: p, tipo: 'prompt', x: 0, y: 820, data: { texto: '' } },
+      { id: ve, tipo: 'vestuario', x: 0, y: 800, data: {} },
+      { id: p, tipo: 'prompt', x: 0, y: 1150, data: { texto: '' } },
       { id: c, tipo: 'captura', x: 300, y: 0, data: {} },
       { id: m, tipo: 'modelo', x: 300, y: 560, data: { modeloId, cuerpo: true } },
       { id: f, tipo: 'foto', x: 610, y: 160, data: { modelo: 'seedream', aspect: 'auto' } },

@@ -6,6 +6,7 @@ import { upload } from '@vercel/blob/client';
 
 import { prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
+import RevisarVideo from '@/components/RevisarVideo';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ANCHO, DEF, ORDEN_MENU, nuevoId, plantillaMotionExacto, yEntrada, ySalida,
@@ -188,6 +189,9 @@ export default function Lienzo(props: Props) {
     } finally { cambiando.current = false; }
   }
 
+  // La última caja que se tocó queda adelante (si crece, no la tapan las de abajo).
+  const [arriba, setArriba] = useState('');
+
   /* ----- aviso flotante "creando" ----- */
   useEffect(() => {
     const corriendo = nodes.filter((n) => n.data.estado === 'corriendo');
@@ -282,6 +286,15 @@ export default function Lienzo(props: Props) {
       onSaldo();
     } catch (e) {
       if (vivo.current && !(e instanceof Error && e.message === 'cancelado')) setData(id, { estado: '', taskId: '', error: e instanceof Error ? e.message : 'Error.' });
+    }
+  }
+
+  /** Video recortado: las Capturas conectadas pasan a su primer cuadro (el video ahora arranca ahí). */
+  function recorteDeVideo(videoId: string, c: { url: string; w: number; h: number } | null) {
+    for (const e of edgesRef.current) {
+      const destino = nodesRef.current.find((x) => x.id === e.a);
+      if (e.de !== videoId || destino?.tipo !== 'captura') continue;
+      setData(destino.id, c?.url ? { url: c.url, t: 0, asp: c.w && c.h ? aspecto(c.w, c.h) : '', error: '' } : { url: '', t: 0 });
     }
   }
 
@@ -610,7 +623,7 @@ export default function Lienzo(props: Props) {
           const def = DEF[n.tipo];
           const corriendo = n.data.estado === 'corriendo';
           return (
-            <div key={n.id} className={`lz-nodo ${def.ia ? 'ia' : ''} ${corriendo ? 'corre' : ''}`} style={{ transform: `translate(${n.x}px, ${n.y}px)`, width: ANCHO }}>
+            <div key={n.id} className={`lz-nodo ${def.ia ? 'ia' : ''} ${corriendo ? 'corre' : ''}`} style={{ transform: `translate(${n.x}px, ${n.y}px)`, width: ANCHO, zIndex: arriba === n.id ? 3 : undefined }} onPointerDownCapture={() => setArriba(n.id)}>
               <div className="lz-cab" data-drag={n.id}>
                 <span>{def.icono}</span><b>{def.titulo}</b>
                 <button className="lz-x dup" data-ui onClick={() => duplicar(n.id)} aria-label="Duplicar caja" title="Duplicar">⧉</button>
@@ -645,6 +658,7 @@ export default function Lienzo(props: Props) {
                   onPublicar={onPublicar}
                   onGuardar={onGuardar}
                   conectadaASalida={edges.some((e) => e.de === n.id)}
+                  alRecortar={(c) => recorteDeVideo(n.id, c)}
                 />
               </div>
             </div>
@@ -688,6 +702,7 @@ function CuerpoNodo(p: {
   onPublicar: (url: string, tipo: 'foto' | 'video') => void;
   onGuardar: (url: string, tipo: 'foto' | 'video') => void;
   conectadaASalida: boolean;
+  alRecortar: (cuadro: { url: string; w: number; h: number } | null) => void;
 }) {
   const { n, setData } = p;
   const d = n.data;
@@ -695,7 +710,7 @@ function CuerpoNodo(p: {
   const err = typeof d.error === 'string' && d.error ? <p className="lz-err">{d.error}</p> : null;
 
   switch (n.tipo) {
-    case 'video': return <CajaVideo d={d} set={set} />;
+    case 'video': return <CajaVideo d={d} set={set} alRecortar={p.alRecortar} />;
     case 'captura': return <CajaCaptura d={d} set={set} videoUrl={(() => { const s = p.entradas('video').map(p.salidaDe)[0]; return s?.tipo === 'video' ? s.url : ''; })()} />;
     case 'modelo': {
       const m = p.modelas.find((x) => x.id === d.modeloId) ?? p.modelas[0];
@@ -865,7 +880,7 @@ function CuerpoNodo(p: {
   }
 }
 
-function CajaVideo({ d, set }: { d: Record<string, unknown>; set: (p: Record<string, unknown>) => void }) {
+function CajaVideo({ d, set, alRecortar }: { d: Record<string, unknown>; set: (p: Record<string, unknown>) => void; alRecortar: (cuadro: { url: string; w: number; h: number } | null) => void }) {
   const [sub, setSub] = useState(0);
   const [quitando, setQuitando] = useState(false);
   const [roto, setRoto] = useState(false);
@@ -912,6 +927,13 @@ function CajaVideo({ d, set }: { d: Record<string, unknown>; set: (p: Record<str
       </label>
       <ElegirSonido chico sin={sinSonido} onCambio={(s) => set({ conSonido: !s })} />
       {url && typeof d.dur === 'number' ? <p className="lz-nota">{Math.round(d.dur as number)} s · {fmt((d.mb as number) ?? 0)} MB{d.mudo ? ' · 🔇 sin sonido' : ' · 🔊 con sonido'}</p> : <p className="lz-nota">De 3 a 30 segundos. Una sola persona, bien visible.</p>}
+      {url && !roto ? (
+        <RevisarVideo
+          chico
+          video={{ url, dur: typeof d.dur === 'number' ? d.dur : 0, mb: typeof d.mb === 'number' ? d.mb : 0, mudo: d.mudo === true }}
+          onRecortado={(v, c) => { set({ url: v.url, dur: v.dur, mb: v.mb, mudo: !!v.mudo, error: '' }); alRecortar(c); }}
+        />
+      ) : null}
       {typeof d.error === 'string' && d.error ? <p className="lz-err">{d.error}</p> : null}
     </>
   );
