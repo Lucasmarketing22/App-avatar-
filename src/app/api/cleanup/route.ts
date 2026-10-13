@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Limpieza diaria (Vercel Cron, ver vercel.json): borra los videos con más de
- * 3 días. Es pública en el middleware para que el Cron pueda llamarla; si hay
+ * 2 días. Es pública en el middleware para que el Cron pueda llamarla; si hay
  * CRON_SECRET en Vercel se exige, y si no, solo acepta llamadas del Cron.
  * Solo borra lo que ya venció, así que repetirla no hace daño.
  */

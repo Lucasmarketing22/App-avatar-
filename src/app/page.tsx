@@ -10,7 +10,7 @@ import Lienzo from '@/components/lienzo/Lienzo';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
-import { ponerSonido, prefSinSonido, quitarSonido } from '@/lib/cliente/video';
+import { esperarTarea, prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
 
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, pistaFija, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
@@ -28,15 +28,19 @@ type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral';
 
 const ASPECTS = ['3:4', '1:1', '4:5', '9:16', '16:9', '4:3'];
 
-async function subir(file: File, folder: string): Promise<string> {
-  const form = new FormData();
-  form.append('file', file);
-  form.append('folder', folder);
-  const res = await fetch('/api/upload', { method: 'POST', body: form });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.url) throw new Error(data.error ?? 'No se pudo subir la imagen.');
-  return data.url as string;
+const subir = (file: File, folder: string) => subirImagen(file, folder);
+
+/** Pedidos en camino, guardados en el celu para retomarlos si se cierra la app. */
+type Pendiente = { id: string; tipo: 'foto' | 'video'; ts: number };
+const CLAVE_PENDIENTES = 'musa-pendientes';
+function leerPendientes(): Pendiente[] {
+  try { const v = JSON.parse(localStorage.getItem(CLAVE_PENDIENTES) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
+function guardarPendientes(l: Pendiente[]) {
+  try { localStorage.setItem(CLAVE_PENDIENTES, JSON.stringify(l.slice(-30))); } catch { /* */ }
+}
+function anotarPendiente(p: Pendiente) { guardarPendientes([...leerPendientes().filter((x) => x.id !== p.id), p]); }
+function quitarPendiente(id: string) { guardarPendientes(leerPendientes().filter((x) => x.id !== id)); }
 
 export default function Estudio() {
   const [vista, setVista] = useState<Vista>('crear');
@@ -124,8 +128,8 @@ export default function Estudio() {
   const [mVideo, setMVideo] = useState<{ url: string; dur: number; mb: number; mudo?: boolean } | null>(null);
   const [mSinSonido, setMSinSonido] = useState(true); // quitarle la música al subir (derechos de autor)
   useEffect(() => { setMSinSonido(prefSinSonido()); }, []);
-  // Video original subido CON sonido: al terminar, se le pega ese audio al video final.
-  const audioOriginal = useRef('');
+  // Pedidos en camino (fotos de Crear y videos de Motion): si se cierra la app, se retoman al volver.
+  const [recuperando, setRecuperando] = useState(0);
   const [mQuitando, setMQuitando] = useState(false);
   const [mFoto, setMFoto] = useState<string | null>(null);
   const [mOri, setMOri] = useState<'video' | 'image'>('video');
@@ -202,6 +206,40 @@ export default function Estudio() {
     })();
   }, []);
 
+
+  useEffect(() => {
+    const pend = leerPendientes().filter((p) => Date.now() - p.ts < 90 * 60 * 1000);
+    guardarPendientes(pend);
+    if (!pend.length) return;
+    setRecuperando(pend.length);
+    pend.forEach(async (p) => {
+      try {
+        const r = await esperarTarea(p.id);
+        if (p.tipo === 'video') setVideos((prev) => [{ id: r.url, url: r.url, ts: Date.now() }, ...prev.filter((x) => x.url !== r.url)]);
+        else setCreaciones((prev) => (prev.some((c) => c.url === r.url) ? prev : [{ id: r.url, url: r.url, ts: Date.now() }, ...prev]));
+      } catch { /* falló o tardó demasiado */ } finally {
+        quitarPendiente(p.id);
+        setRecuperando((n) => Math.max(0, n - 1));
+      }
+    });
+  }, []);
+
+  /** Trae los datos de una foto (prompt, referencias…) si todavía no los tiene. */
+  async function completarDatos(c: Creacion): Promise<Creacion> {
+    if (c.prompt && c.refs?.length) return c;
+    try {
+      const d = await fetch(`/api/meta?url=${encodeURIComponent(c.url)}`).then((r) => r.json());
+      if (!d?.prompt) return c;
+      const full: Creacion = { ...c, prompt: d.prompt, modelo: d.modelo, refs: d.refs, aspect: d.aspect, credits: d.credits ?? c.credits };
+      setCreaciones((prev) => prev.map((x) => (x.url === c.url ? { ...x, ...full, id: x.id } : x)));
+      setLightbox((lb) => (lb && lb.url === c.url ? { ...lb, ...full, id: lb.id } : lb));
+      return full;
+    } catch { return c; }
+  }
+  useEffect(() => {
+    if (lightbox && !lightbox.prompt) completarDatos(lightbox);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightbox?.url]);
 
   const busy = phase === 'creating' || phase === 'polling';
   const vestidoActual = vestidos.find((v) => v.id === vestidoSel) ?? null;
@@ -355,7 +393,8 @@ export default function Estudio() {
   // (antes cortábamos a los 2 y la foto se perdía aunque la IA la terminara).
   // Los primeros ~60s consulta cada 3s; después cada 6s.
   function pollOne(taskId: string, tries: number, prompt: string, imageUrls: string[], meta: GenMeta, done: (ok: boolean, credits?: number) => void) {
-    if (tries > 110) { setError('La IA tardó más de 10 minutos. Probá de nuevo o con otro modelo.'); done(false); return; }
+    if (tries === 0) anotarPendiente({ id: taskId, tipo: 'foto', ts: Date.now() });
+    if (tries > 110) { quitarPendiente(taskId); setError('La IA tardó más de 10 minutos. Probá de nuevo o con otro modelo.'); done(false); return; }
     if (tries === 30) setStatusMsg('La IA está tardando más de lo normal… seguimos esperando (Nano Banana Pro a veces se demora unos minutos).');
     schedulePoll(async () => {
       try {
@@ -367,11 +406,15 @@ export default function Estudio() {
           if (u) {
             setResultUrls((prev) => (prev.includes(u) ? prev : [...prev, u]));
             setCreaciones((prev) => [{ id: u, url: u, ts: Date.now(), prompt, modelo: meta.modelo, refs: imageUrls, aspect: meta.aspect, credits }, ...prev.filter((c) => c.url !== u)]);
-            fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: u, prompt, modelo: meta.modelo, refs: imageUrls, aspect: meta.aspect, credits }) }).catch(() => undefined);
           }
+          quitarPendiente(taskId);
           done(!!u, credits); return;
         }
-        if (data.state === 'fail' || (!res.ok && data.error)) { done(false); return; }
+        if (data.state === 'fail' || (!res.ok && data.error)) {
+          quitarPendiente(taskId);
+          if (data.error) setError(data.error as string);
+          done(false); return;
+        }
         pollOne(taskId, tries + 1, prompt, imageUrls, meta, done);
       } catch { pollOne(taskId, tries + 1, prompt, imageUrls, meta, done); }
     }, tries < 20 ? 3000 : 6000);
@@ -401,8 +444,9 @@ export default function Estudio() {
   }
 
   /** Repetir / variar: reusa el prompt y las referencias exactas de una creación. */
-  function variar(c: Creacion) {
+  async function variar(foto: Creacion) {
     if (busy) return;
+    const c = await completarDatos(foto);
     if (!c.prompt || !c.refs || !c.refs.length) { setError('Esta foto es vieja y no guardó sus datos. Hacela de nuevo desde el Editor.'); return; }
     const m = (c.modelo as ModeloId) || modelo;
     const a = c.aspect || aspect;
@@ -415,8 +459,9 @@ export default function Estudio() {
    * Usa la foto como image 1 y las caras de la modelo que salía en ella (si no
    * se sabe, la modelo elegida).
    */
-  function sesionDeFotos(c: Creacion) {
+  async function sesionDeFotos(foto: Creacion) {
     if (busy) return;
+    const c = await completarDatos(foto);
     const deLaFoto = modelas.find((m) => m.refs.some((u) => c.refs?.includes(u)));
     const modeloFoto = deLaFoto ?? personaje;
     const caras = modeloFoto.refs;
@@ -472,7 +517,7 @@ export default function Estudio() {
 
   async function crearVideo(c: Creacion) {
     if (haciendoVideo) return;
-    setError(''); audioOriginal.current = ''; setHaciendoVideo(c.id); setVidMsg('Creando el video… (Veo tarda 1 a 4 minutos, no cierres)');
+    setError(''); setHaciendoVideo(c.id); setVidMsg('Creando el video… (Veo tarda 1 a 4 minutos, no cierres)');
     try {
       const res = await fetch('/api/video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrls: [c.url], prompt: motion.trim() || undefined, aspect: '9:16' }) });
       const data = await res.json().catch(() => ({}));
@@ -482,19 +527,15 @@ export default function Estudio() {
   }
   function pollVideo(taskId: string, tries: number) {
     // Hasta ~15 min: los videos (sobre todo Motion de 30 s) pueden tardar bastante.
-    if (tries > 120) { setError('El video tardó demasiado. Probá de nuevo.'); setHaciendoVideo(null); setVidMsg(''); return; }
+    if (tries === 0) anotarPendiente({ id: taskId, tipo: 'video', ts: Date.now() });
+    if (tries > 120) { setError('El video tardó demasiado. Si termina, va a aparecer solo en tu galería.'); setHaciendoVideo(null); setVidMsg(''); return; }
     vidTimer.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`);
         const data = await res.json().catch(() => ({}));
         if (data.state === 'success') {
-          if (data.url && audioOriginal.current) {
-            setVidMsg('🔊 Pegándole el sonido del video original…');
-            const r = await ponerSonido(data.url as string, audioOriginal.current);
-            audioOriginal.current = '';
-            data.url = r.url;
-            if (r.error) setMError(`El video quedó listo, pero sin el sonido original: ${r.error}`);
-          }
+          quitarPendiente(taskId);
+          if (typeof data.aviso === 'string') setMError(data.aviso);
           if (data.url) setVideos((prev) => [{ id: data.url as string, url: data.url as string, ts: Date.now() }, ...prev.filter((x) => x.url !== data.url)]);
           const extra = costoPrevio.current; costoPrevio.current = 0;
           const total = (typeof data.credits === 'number' ? data.credits : 0) + extra;
@@ -503,7 +544,7 @@ export default function Estudio() {
           setHaciendoVideo(null); setVidMsg(''); setVista('galeria'); setGalTab('videos');
           return;
         }
-        if (data.state === 'fail' || (!res.ok && data.error)) { setError(data.error ?? 'El video falló.'); setHaciendoVideo(null); setVidMsg(''); return; }
+        if (data.state === 'fail' || (!res.ok && data.error)) { quitarPendiente(taskId); setError(data.error ?? 'El video falló.'); setHaciendoVideo(null); setVidMsg(''); return; }
         pollVideo(taskId, tries + 1);
       } catch { pollVideo(taskId, tries + 1); }
     }, tries < 20 ? 3000 : 8000);
@@ -674,12 +715,10 @@ export default function Estudio() {
         costoPrevio.current = hecha.credits ?? 0;
         const nueva = foto;
         setCreaciones((prev) => [{ id: nueva, url: nueva, ts: Date.now(), prompt, modelo: 'seedream', refs: imageUrls, aspect: asp, credits: hecha.credits }, ...prev.filter((c) => c.url !== nueva)]);
-        fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: nueva, prompt, modelo: 'seedream', refs: imageUrls, aspect: asp, credits: hecha.credits }) }).catch(() => undefined);
         setMFoto(nueva);
       }
       setVidMsg(`🕺 ${pasoPrevio ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
-      audioOriginal.current = mVideo.mudo ? '' : mVideo.url;
-      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: escenaActiva ? 'video' : mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo }) });
+      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: escenaActiva ? 'video' : mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo, audioOriginal: mVideo.mudo ? undefined : mVideo.url }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
       pollVideo(data.taskId, 0);
@@ -1052,7 +1091,7 @@ export default function Estudio() {
             {!haciendoVideo ? <p className="costo">{costoMotionTexto(costoDe(mModo === 'reemplazar' ? `wan/2-2-animate-replace|${mCal}` : `kling-3.0/motion-control|${mCal}`), mTxt.trim() || mAdaptar || escenaActiva ? costoDe(claveFoto('seedream')) : null, !!mTxt.trim() || mAdaptar || escenaActiva)}</p> : null}
             {vidMsg ? <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--violeta)' }}>{vidMsg}</p> : null}
             {mError || error ? <p className="errbox" style={{ marginTop: 10 }}>{mError || error}</p> : null}
-            <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos. ⏳ Los videos se borran solos a los 3 días: descargalos antes.</p>
+            <p className="sub" style={{ fontSize: 12, marginTop: 12 }}>Se cobra por segundo de video (aprox. US$ 0,06–0,10 por segundo). Cuando esté listo aparece en Galería → Videos. ⏳ Los videos se borran solos a los 2 días: descargalos antes.</p>
           </>
         ) : vista === 'viral' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🔥 Recrear viral</h1><Guia id="viral" /></div>
@@ -1095,7 +1134,7 @@ export default function Estudio() {
                 <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no hay videos. Abrí una foto y tocá “🎬 Crear video”.</p></div>
               ) : (
                 <>
-                <p className="sub" style={{ margin: '0 0 10px', fontSize: 12.5 }}>⏳ Los videos se borran solos a los 3 días. Descargá los que quieras guardar.</p>
+                <p className="sub" style={{ margin: '0 0 10px', fontSize: 12.5 }}>⏳ Los videos se borran solos a los 2 días. Descargá los que quieras guardar.</p>
                 <div className="grid-cards stagger">
                   {videos.map((v) => (
                     <div key={v.id} className="tile" style={{ cursor: 'default' }}>
@@ -1124,7 +1163,6 @@ export default function Estudio() {
               claveFoto={(m) => claveFoto(m as ModeloId)}
               onCreacion={(c) => {
                 setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)]);
-                fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: c.url, prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }) }).catch(() => undefined);
               }}
               onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
               onTrabajo={setViralTrabajo}
@@ -1146,7 +1184,6 @@ export default function Estudio() {
               claveFoto={(m) => claveFoto(m as ModeloId)}
               onCreacion={(c) => {
                 setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)]);
-                fetch('/api/meta', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: c.url, prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }) }).catch(() => undefined);
               }}
               onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
               onTrabajo={setLienzoTrabajo}
@@ -1181,6 +1218,7 @@ export default function Estudio() {
           busy ? `${statusMsg || 'Creando tus fotos…'} (${resultUrls.length}/${totalGen})` : '',
           haciendoVideo ? (vidMsg || 'Creando tu video…') : '',
           mejorando ? (upMsg || 'Mejorando la calidad…') : '',
+          recuperando ? `♻️ Recuperando ${recuperando === 1 ? 'una creación que quedó' : `${recuperando} creaciones que quedaron`} en camino…` : '',
           vozTrabajo,
           lienzoTrabajo,
           viralTrabajo,
@@ -1460,7 +1498,7 @@ function costoMotionTexto(ultimoVideo: number | null, foto: number | null, conCa
   return partes.join(' ');
 }
 
-/** Los videos se borran a los 3 días (ver src/lib/limpieza.ts). */
+/** Los videos se borran a los 2 días (ver src/lib/limpieza.ts). */
 function venceEn(ts: number): string {
   const dias = Math.ceil((ts + 3 * 24 * 60 * 60 * 1000 - Date.now()) / (24 * 60 * 60 * 1000));
   if (dias <= 1) return 'se borra en menos de 24 h';

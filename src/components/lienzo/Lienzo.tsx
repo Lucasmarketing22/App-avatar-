@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { upload } from '@vercel/blob/client';
 
-import { ponerSonido, prefSinSonido, quitarSonido } from '@/lib/cliente/video';
+import { prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import {
@@ -65,15 +65,6 @@ function aspecto(w: number, h: number): string {
   const r = w / Math.max(1, h);
   const ops: [string, number][] = [['9:16', 9 / 16], ['3:4', 3 / 4], ['1:1', 1], ['4:3', 4 / 3], ['16:9', 16 / 9]];
   return ops.reduce((a, b) => (Math.abs(b[1] - r) < Math.abs(a[1] - r) ? b : a))[0];
-}
-async function subirImagen(file: File): Promise<string> {
-  const form = new FormData();
-  form.append('file', file);
-  form.append('folder', 'refs');
-  const res = await fetch('/api/upload', { method: 'POST', body: form });
-  const d = await res.json().catch(() => ({}));
-  if (!res.ok || !d.url) throw new Error(d.error ?? 'No se pudo subir la imagen.');
-  return d.url as string;
 }
 function metaVideo(file: File): Promise<number> {
   return new Promise((resolve) => {
@@ -240,12 +231,12 @@ export default function Lienzo(props: Props) {
   }
 
   /* ----- esperar una tarea de la IA ----- */
-  async function esperar(taskId: string): Promise<{ url: string; credits?: number }> {
+  async function esperar(taskId: string): Promise<{ url: string; credits?: number; aviso?: string }> {
     for (let i = 0; i < 160; i++) {
       await dormir(i < 20 ? 3000 : 7000);
       if (!vivo.current) throw new Error('cancelado');
       const d = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`).then((r) => r.json()).catch(() => ({}));
-      if (d.state === 'success' && d.url) return { url: d.url as string, credits: typeof d.credits === 'number' ? d.credits : undefined };
+      if (d.state === 'success' && d.url) return { url: d.url as string, credits: typeof d.credits === 'number' ? d.credits : undefined, aviso: typeof d.aviso === 'string' ? d.aviso : undefined };
       if (d.state === 'fail') throw new Error(d.error || 'La IA no pudo crearlo. Probá de nuevo.');
     }
     throw new Error('Tardó demasiado. Probá de nuevo.');
@@ -313,11 +304,13 @@ export default function Lienzo(props: Props) {
         body: JSON.stringify({
           modo: motor === 'wan' ? 'reemplazar' : 'mover', motor, imageUrl: img.items[0].url, videoUrl: vid.url,
           orientacion: (n.data.orientacion as string) || 'video', calidad: (n.data.calidad as string) || '720p', cuerpo: m?.cuerpo, fijo: m?.promptFijo, prompt: txt,
+          // Subido CON sonido: el video final sale con ese mismo audio.
+          audioOriginal: vid.conSonido ? vid.url : undefined,
         }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.taskId) throw new Error(d.error ?? 'No se pudo crear el video.');
-      setData(id, { taskId: d.taskId, audioOriginal: vid.conSonido ? vid.url : '' });
+      setData(id, { taskId: d.taskId });
       await terminarMotion(id, d.taskId);
     } catch (e) {
       if (vivo.current) setData(id, { estado: '', taskId: '', error: e instanceof Error ? e.message : 'Error.' });
@@ -326,15 +319,7 @@ export default function Lienzo(props: Props) {
   async function terminarMotion(id: string, taskId: string) {
     try {
       const r = await esperar(taskId);
-      // Video subido CON sonido: el video final sale con ese mismo audio.
-      const original = nodesRef.current.find((x) => x.id === id)?.data.audioOriginal;
-      let aviso = '';
-      if (typeof original === 'string' && original) {
-        const c = await ponerSonido(r.url, original);
-        r.url = c.url;
-        if (c.error) aviso = `El video quedó listo, pero sin el sonido original: ${c.error}`;
-      }
-      setData(id, { estado: '', taskId: '', resultado: r.url, credits: r.credits, audioOriginal: '', error: aviso });
+      setData(id, { estado: '', taskId: '', resultado: r.url, credits: r.credits, error: r.aviso ?? '' });
       onVideo(r.url);
       onSaldo();
     } catch (e) {
@@ -920,7 +905,7 @@ function CajaVideo({ d, set }: { d: Record<string, unknown>; set: (p: Record<str
   return (
     <>
       {url && !roto ? <video className="lz-vid" src={url} controls muted playsInline preload="metadata" onError={() => setRoto(true)} /> : null}
-      {roto ? <p className="lz-err">Este video ya se borró (duran 3 días). Subilo de nuevo.</p> : null}
+      {roto ? <p className="lz-err">Este video ya se borró (duran 2 días). Subilo de nuevo.</p> : null}
       <label className="btn-soft lz-file">
         <input type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={onFile} style={{ display: 'none' }} disabled={sub > 0 || quitando} />
         {quitando ? '🔇 Quitando el sonido…' : sub ? `Subiendo… ${sub}%` : url ? '🔄 Cambiar video' : '⬆ Subir video'}
@@ -965,7 +950,7 @@ function CajaCaptura({ d, set, videoUrl }: { d: Record<string, unknown>; set: (p
       <video
         ref={ref} className="lz-vid" crossOrigin="anonymous" src={videoUrl} muted playsInline preload="auto"
         onLoadedMetadata={(e) => { const v = e.currentTarget; setDur(v.duration || 0); if (t) v.currentTime = Math.min(t, v.duration || t); }}
-        onError={() => setFallo('No se pudo cargar el video (¿se borró? duran 3 días).')}
+        onError={() => setFallo('No se pudo cargar el video (¿se borró? duran 2 días).')}
       />
       <input
         type="range" className="lz-slider" min={0} max={Math.max(0.1, dur - 0.05)} step={0.05} value={Math.min(t, dur || t)}

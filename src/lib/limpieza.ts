@@ -2,12 +2,12 @@ import 'server-only';
 
 import { listPublic, removeObject } from '@/lib/storage';
 
-/** Los videos (terminados y de referencia de Motion) duran 3 días. */
-export const DIAS_VIDEO = 3;
+/** Los videos (terminados y de referencia de Motion) duran 2 días. */
+export const DIAS_VIDEO = 2;
 const VENCE_MS = DIAS_VIDEO * 24 * 60 * 60 * 1000;
 const CARPETAS_VIDEO = ['videos/', 'motion/'];
 
-/** Borra los videos con más de 3 días. Devuelve cuántos borró. */
+/** Borra los videos con más de 2 días. Devuelve cuántos borró. */
 export async function borrarVideosVencidos(): Promise<number> {
   const limite = Date.now() - VENCE_MS;
   let borrados = 0;

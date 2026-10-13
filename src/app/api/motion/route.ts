@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { createTask } from '@/lib/ia/kie';
+import { registrarTarea, urlDeAviso } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +27,7 @@ const PROMPT_MOVER =
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { modo?: string; motor?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string; fijo?: string }
+    | { modo?: string; motor?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string; fijo?: string; audioOriginal?: string }
     | null;
 
   const imageUrl = typeof body?.imageUrl === 'string' && body.imageUrl.startsWith('http') ? body.imageUrl : '';
@@ -34,7 +35,9 @@ export async function POST(request: Request) {
   if (!imageUrl) return NextResponse.json({ error: 'Elegí la foto de tu modelo.' }, { status: 400 });
   if (!videoUrl) return NextResponse.json({ error: 'Subí el video de referencia.' }, { status: 400 });
 
-  const aviso = `${new URL(request.url).origin}/api/kie-callback`;
+  const aviso = urlDeAviso(request);
+  // Video subido CON sonido: al terminar, el servidor le pega ese audio al video final.
+  const audio = typeof body?.audioOriginal === 'string' ? body.audioOriginal : undefined;
 
   if (body?.modo === 'reemplazar') {
     const result = await createTask(
@@ -48,6 +51,7 @@ export async function POST(request: Request) {
       aviso,
     );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
+    await registrarTarea(result.taskId, { tipo: 'video', audio });
     return NextResponse.json({ taskId: result.taskId });
   }
 
@@ -69,5 +73,6 @@ export async function POST(request: Request) {
     aviso,
   );
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
+  await registrarTarea(result.taskId, { tipo: 'video', prompt: (body?.prompt ?? '').trim() || undefined, audio });
   return NextResponse.json({ taskId: result.taskId });
 }
