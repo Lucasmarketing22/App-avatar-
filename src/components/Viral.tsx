@@ -10,6 +10,7 @@ import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import { VIRALES, type TipoViral } from '@/lib/estudio/virales';
 import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
+import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 
 type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string };
 type Props = {
@@ -19,6 +20,8 @@ type Props = {
   vestidos: { url: string }[];
   galeria: { url: string }[];
   costo: (clave: string) => number | null;
+  estimar: (clave: string, dur: number) => Estimado;
+  saldo: number | null;
   claveFoto: (modelo: string) => string;
   onCreacion: (c: { url: string; prompt: string; modelo: string; refs: string[]; aspect: string; credits?: number }) => void;
   onVideo: (url: string) => void;
@@ -58,7 +61,7 @@ const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
 
 export default function Viral(props: Props) {
-  const { modelas, activoId, escenas, vestidos, galeria, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
+  const { modelas, activoId, escenas, vestidos, galeria, costo, estimar, saldo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
   const [e, setE] = useState<Estado>(VACIO);
   const eRef = useRef(e); eRef.current = e;
   const set = (p: Partial<Estado>) => setE((x) => ({ ...x, ...p }));
@@ -69,6 +72,7 @@ export default function Viral(props: Props) {
   const [capturando, setCapturando] = useState(false);
   const [creandoFoto, setCreandoFoto] = useState(false);
   const [creandoVideo, setCreandoVideo] = useState(false);
+  const [confirmar, setConfirmar] = useState(false); // "Revisá antes de crear"
   const [error, setError] = useState('');
   const [t, setT] = useState(0.3);
   const [dur, setDur] = useState(0);
@@ -234,6 +238,7 @@ export default function Viral(props: Props) {
           orientacion: 'video', calidad: e.calidad, cuerpo: modelo?.cuerpo, fijo: modelo?.promptFijo, prompt: [def.pistaVideo, e.instr].filter(Boolean).join(' '),
           // Subido CON sonido: el video final sale con ese mismo audio.
           audioOriginal: e.video.mudo ? undefined : e.video.url,
+          dur: e.video.dur,
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -449,7 +454,7 @@ export default function Viral(props: Props) {
           </div>
           {e.motor === 'kling26' && e.video.dur > 10 ? <p className="lz-err">Kling 2.6 hace hasta 10 s: tu video sale cortado.</p> : null}
           {(e.tipo === 'hablando' || e.tipo === 'rostro') && e.motor !== 'wan' && e.calidad !== '1080p' ? <p className="vr-tip" style={{ marginTop: 4 }}>💡 En videos de cara, <b>1080p</b> mantiene mejor la cara de {modelo?.nombre || 'tu modelo'} (cuesta más). Si igual cambia, probá <b>Reemplazar</b>.</p> : null}
-          <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo} onClick={crearVideo}>
+          <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo} onClick={() => setConfirmar(true)}>
             {creandoVideo ? 'Creando video… (unos minutos)' : e.resultado ? '🔄 Crear otro video' : '🎬 Crear video'}
           </button>
           <p className="vr-nota">{costoVideo === null ? 'El costo lo vas a ver después del primero con este motor.' : `Último video con este motor: ${fmt(costoVideo)} créditos (${usd(costoVideo)}).`}</p>
@@ -468,6 +473,20 @@ export default function Viral(props: Props) {
 
       {error ? <p className="errbox" style={{ margin: '0 0 12px' }}>{error}</p> : null}
       {e.tipo ? <button className="btn-ghost" style={{ width: '100%' }} onClick={empezarOtro}>🔁 Empezar otro viral</button> : null}
+      {confirmar && e.video && e.elegida ? (
+        <ConfirmarVideo
+          foto={e.elegida}
+          cuadro={e.cuadro?.url}
+          videoUrl={e.video.url}
+          dur={e.video.dur}
+          motor={`${e.motor === 'wan' ? 'Reemplazar' : e.motor === 'kling26' ? 'Kling 2.6' : 'Kling 3.0'} · ${e.calidad}`}
+          estimado={estimar(claveVideo, e.motor === 'kling26' ? Math.min(10, e.video.dur) : e.video.dur)}
+          saldo={saldo}
+          nombre={modelo?.nombre || 'tu modelo'}
+          onCrear={crearVideo}
+          onCerrar={() => setConfirmar(false)}
+        />
+      ) : null}
     </div>
   );
 }

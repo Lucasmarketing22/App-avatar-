@@ -7,6 +7,7 @@ import { upload } from '@vercel/blob/client';
 import { prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
+import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ANCHO, DEF, ORDEN_MENU, nuevoId, plantillaMotionExacto, yEntrada, ySalida,
@@ -22,6 +23,8 @@ type Props = {
   galeria: { url: string }[];
   galerias: Record<string, { url: string }[]>;
   costo: (clave: string) => number | null;
+  estimar: (clave: string, dur: number) => Estimado;
+  saldo: number | null;
   claveFoto: (modelo: string) => string;
   onCreacion: (c: { url: string; prompt: string; modelo: string; refs: string[]; aspect: string; credits?: number }) => void;
   onVideo: (url: string) => void;
@@ -80,7 +83,7 @@ function metaVideo(file: File): Promise<number> {
 
 /* ===================== Lienzo ===================== */
 export default function Lienzo(props: Props) {
-  const { modelas, activoId, vestidos, galeria, galerias, costo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
+  const { modelas, activoId, vestidos, galeria, galerias, costo, estimar, saldo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
   const [nodes, setNodes] = useState<Nodo[]>([]);
   const [edges, setEdges] = useState<Cable[]>([]);
   const [view, setView] = useState<Vista>({ x: 20, y: 110, z: 0.8 });
@@ -298,6 +301,20 @@ export default function Lienzo(props: Props) {
     }
   }
 
+  /* ----- "Revisá antes de crear" (Motion Control) ----- */
+  const [confirmar, setConfirmar] = useState<{ id: string; foto: string; videoUrl: string; dur: number; motor: string; clave: string } | null>(null);
+  function pedirMotion(id: string) {
+    const n = nodesRef.current.find((x) => x.id === id);
+    const img = entradas(id, 'imagen').map(salidaDe).find((s) => s?.tipo === 'imagen') as Extract<Salida, { tipo: 'imagen' }> | undefined;
+    const vid = entradas(id, 'video').map(salidaDe).find((s) => s?.tipo === 'video') as Extract<Salida, { tipo: 'video' }> | undefined;
+    if (!n || !img?.items[0] || !vid) { correrMotion(id); return; } // muestra qué falta
+    const motor = (n.data.motor as string) || 'kling3';
+    const cal = (n.data.calidad as string) || '720p';
+    const clave = motor === 'wan' ? `wan/2-2-animate-replace|${cal}` : `${motor === 'kling26' ? 'kling-2.6' : 'kling-3.0'}/motion-control|${cal}`;
+    const dur = motor === 'kling26' ? Math.min(10, vid.dur ?? 0) : (vid.dur ?? 0);
+    setConfirmar({ id, foto: img.items[0].url, videoUrl: vid.url, dur, clave, motor: `${motor === 'wan' ? 'Reemplazar' : motor === 'kling26' ? 'Kling 2.6' : 'Kling 3.0'} · ${cal}` });
+  }
+
   /* ----- correr "Motion Control" ----- */
   async function correrMotion(id: string) {
     const n = nodesRef.current.find((x) => x.id === id);
@@ -319,6 +336,7 @@ export default function Lienzo(props: Props) {
           orientacion: (n.data.orientacion as string) || 'video', calidad: (n.data.calidad as string) || '720p', cuerpo: m?.cuerpo, fijo: m?.promptFijo, prompt: txt,
           // Subido CON sonido: el video final sale con ese mismo audio.
           audioOriginal: vid.conSonido ? vid.url : undefined,
+          dur: vid.dur,
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -653,7 +671,7 @@ export default function Lienzo(props: Props) {
                   costo={costo}
                   claveFoto={claveFoto}
                   correrFoto={() => correrFoto(n.id)}
-                  correrMotion={() => correrMotion(n.id)}
+                  correrMotion={() => pedirMotion(n.id)}
                   correrHablar={() => correrHablar(n.id)}
                   onPublicar={onPublicar}
                   onGuardar={onGuardar}
@@ -665,6 +683,20 @@ export default function Lienzo(props: Props) {
           );
         })}
       </div>
+
+      {confirmar ? (
+        <ConfirmarVideo
+          foto={confirmar.foto}
+          videoUrl={confirmar.videoUrl}
+          dur={confirmar.dur}
+          motor={confirmar.motor}
+          estimado={estimar(confirmar.clave, confirmar.dur)}
+          saldo={saldo}
+          nombre={modelas.find((m) => m.id === activoId)?.nombre || 'tu modelo'}
+          onCrear={() => correrMotion(confirmar.id)}
+          onCerrar={() => setConfirmar(null)}
+        />
+      ) : null}
 
       {/* Menú de cajas */}
       {menu ? (

@@ -27,7 +27,7 @@ const PROMPT_MOVER =
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { modo?: string; motor?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string; fijo?: string; audioOriginal?: string }
+    | { modo?: string; motor?: string; imageUrl?: string; videoUrl?: string; prompt?: string; orientacion?: string; calidad?: string; cuerpo?: string; fijo?: string; audioOriginal?: string; dur?: number }
     | null;
 
   const imageUrl = typeof body?.imageUrl === 'string' && body.imageUrl.startsWith('http') ? body.imageUrl : '';
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
   const aviso = urlDeAviso(request);
   // Video subido CON sonido: al terminar, el servidor le pega ese audio al video final.
   const audio = typeof body?.audioOriginal === 'string' ? body.audioOriginal : undefined;
+  const dur = Number(body?.dur) || undefined;
 
   if (body?.modo === 'reemplazar') {
     const result = await createTask(
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
       aviso,
     );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
-    await registrarTarea(result.taskId, { tipo: 'video', audio });
+    await registrarTarea(result.taskId, { tipo: 'video', audio, dur });
     return NextResponse.json({ taskId: result.taskId });
   }
 
@@ -73,6 +74,6 @@ export async function POST(request: Request) {
     aviso,
   );
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
-  await registrarTarea(result.taskId, { tipo: 'video', prompt: (body?.prompt ?? '').trim() || undefined, audio });
+  await registrarTarea(result.taskId, { tipo: 'video', prompt: (body?.prompt ?? '').trim() || undefined, audio, dur });
   return NextResponse.json({ taskId: result.taskId });
 }

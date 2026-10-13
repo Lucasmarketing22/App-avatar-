@@ -13,6 +13,7 @@ import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
 import { esperarTarea, prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
+import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, pistaFija, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
@@ -110,6 +111,13 @@ export default function Estudio() {
     const c = costos[clave]?.credits;
     return typeof c === 'number' ? c : null;
   }
+  /** Cuánto va a costar un video: por segundo (si ya se conoce) o como el último con ese motor. */
+  function estimarVideo(clave: string, dur: number): Estimado {
+    const seg = costos[`${clave}|seg`]?.credits;
+    if (typeof seg === 'number' && dur > 0) return { creditos: seg * dur, porSegundo: true };
+    const ult = costos[clave]?.credits;
+    return typeof ult === 'number' ? { creditos: ult, porSegundo: false } : null;
+  }
   function claveFoto(id: ModeloId): string {
     const m = MODELOS.find((x) => x.id === id) ?? MODELOS[0];
     const e = m.extra('3:4');
@@ -135,6 +143,7 @@ export default function Estudio() {
   const [mFoto, setMFoto] = useState<string | null>(null);
   const [mOri, setMOri] = useState<'video' | 'image'>('video');
   const [mCal, setMCal] = useState<'480p' | '720p' | '1080p'>('720p');
+  const [confirmarM, setConfirmarM] = useState(false); // "Revisá antes de crear"
   const [mTxt, setMTxt] = useState('');
   const [mSubiendo, setMSubiendo] = useState(0); // % de subida del video (0 = no está subiendo)
   const [mSubiendoFoto, setMSubiendoFoto] = useState(false);
@@ -719,7 +728,7 @@ export default function Estudio() {
         setMFoto(nueva);
       }
       setVidMsg(`🕺 ${pasoPrevio ? 'Paso 2 de 2: ' : ''}creando el video… Tarda unos minutos; podés seguir usando la app.`);
-      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: escenaActiva ? 'video' : mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo, audioOriginal: mVideo.mudo ? undefined : mVideo.url }) });
+      const res = await fetch('/api/motion', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modo: mModo, imageUrl: foto, videoUrl: mVideo.url, orientacion: escenaActiva ? 'video' : mOri, calidad: mCal, cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo, audioOriginal: mVideo.mudo ? undefined : mVideo.url, dur: mVideo.dur }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.taskId) { setMError(data.error ?? 'No se pudo crear el video.'); setHaciendoVideo(null); setVidMsg(''); return; }
       pollVideo(data.taskId, 0);
@@ -1092,7 +1101,7 @@ export default function Estudio() {
 
             {mPesado ? <p className="errbox" style={{ margin: '0 0 10px' }}>Para “Reemplazar en el video” el video tiene que pesar hasta 10 MB (este pesa {mVideo?.mb.toFixed(1)} MB). Recortalo o usá “Mover mi foto”.</p> : null}
             {mModo === 'mover' && mOri === 'image' && !escenaActiva && mVideo && mVideo.dur > 10 ? <p className="sub" style={{ fontSize: 12, margin: '0 0 10px' }}>⚠️ Con “Quedarse como en la foto” el video sale de 10 segundos como máximo.</p> : null}
-            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || (!mEncuadre && !escenaActiva) || !!haciendoVideo || mSubiendo > 0 || mPesado || mCuadroEstado === 'sacando'} onClick={generarMotion}>
+            <button className={`btn-grad shine ${haciendoVideo === 'motion' ? 'busy' : ''}`} style={{ width: '100%' }} disabled={!mVideo || !mFoto || (!mEncuadre && !escenaActiva) || !!haciendoVideo || mSubiendo > 0 || mPesado || mCuadroEstado === 'sacando'} onClick={() => setConfirmarM(true)}>
               {haciendoVideo === 'motion' ? 'Creando video…' : mModo === 'reemplazar' ? '🔁 Reemplazar con mi modelo' : '🕺 Generar video con movimiento'}
             </button>
             {!haciendoVideo && (!mVideo || !mFoto || (!mEncuadre && !escenaActiva)) ? <p className="sub" style={{ fontSize: 12, margin: '8px 0 0' }}>Falta: {[!mVideo ? 'subir el video a recrear' : '', !mEncuadre && !escenaActiva ? 'indicar cómo se ve la persona en el video' : '', !mFoto ? 'elegir la imagen de tu avatar' : ''].filter(Boolean).join(', ')}.</p> : null}
@@ -1168,6 +1177,8 @@ export default function Estudio() {
               vestidos={vestidos}
               galeria={creaciones}
               costo={costoDe}
+              estimar={estimarVideo}
+              saldo={saldo}
               claveFoto={(m) => claveFoto(m as ModeloId)}
               onCreacion={(c) => {
                 setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)]);
@@ -1189,6 +1200,8 @@ export default function Estudio() {
               galeria={creaciones}
               galerias={galerias}
               costo={costoDe}
+              estimar={estimarVideo}
+              saldo={saldo}
               claveFoto={(m) => claveFoto(m as ModeloId)}
               onCreacion={(c) => {
                 setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)]);
@@ -1237,6 +1250,27 @@ export default function Estudio() {
           </div>
         ) : null;
       })()}
+
+      {confirmarM && mVideo ? (() => {
+        const pasoPrevio = escenaActiva || !!mTxt.trim() || mAdaptar;
+        const clave = mModo === 'reemplazar' ? `wan/2-2-animate-replace|${mCal === '480p' ? '480p' : '720p'}` : `kling-3.0/motion-control|${mCal === '1080p' ? '1080p' : '720p'}`;
+        return (
+          <ConfirmarVideo
+            foto={mFoto ?? ''}
+            cuadro={mCuadro || undefined}
+            videoUrl={mVideo.url}
+            dur={mVideo.dur}
+            motor={mModo === 'reemplazar' ? `Reemplazar · ${mCal}` : `Kling 3.0 · ${mCal}`}
+            estimado={estimarVideo(clave, mVideo.dur)}
+            extra={pasoPrevio ? (costoDe(claveFoto('seedream')) ?? 0) : 0}
+            saldo={saldo}
+            nombre={personaje.nombre || 'tu modelo'}
+            notaFoto={pasoPrevio ? 'Antes se prepara una foto de inicio nueva (con el escenario o los cambios que pediste) a partir de esta.' : undefined}
+            onCrear={generarMotion}
+            onCerrar={() => setConfirmarM(false)}
+          />
+        );
+      })() : null}
 
       {guardar ? <Guardar url={guardar.url} tipo={guardar.tipo} onClose={() => setGuardar(null)} /> : null}
       {publicar ? <Publicar url={publicar.url} tipo={publicar.tipo} prompt={publicar.prompt} nombre={personaje.nombre} onClose={() => setPublicar(null)} /> : null}

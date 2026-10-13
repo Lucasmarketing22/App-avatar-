@@ -25,6 +25,8 @@ export type Tarea = {
   aspect?: string;
   /** Video subido CON sonido: se le pega ese audio al video final. */
   audio?: string;
+  /** Segundos del video de referencia (Motion): para saber cuánto cuesta cada segundo. */
+  dur?: number;
   url?: string;
   credits?: number;
   aviso?: string;
@@ -46,6 +48,7 @@ export async function registrarTarea(taskId: string, datos: Omit<Tarea, 'ts'>): 
     prompt: datos.prompt?.slice(0, 6000),
     refs,
     audio,
+    dur: typeof datos.dur === 'number' && Number.isFinite(datos.dur) && datos.dur > 0 ? Math.min(60, datos.dur) : undefined,
     ts: Date.now(),
   }).catch(() => undefined);
 }
@@ -73,6 +76,10 @@ export async function terminarTarea(taskId: string): Promise<Estado> {
 
   // Guardamos cuánto costó este tipo de generación (para estimar las próximas).
   await registrarCosto(task.costoClave, task.credits).catch(() => undefined);
+  // Motion se cobra por segundo: guardamos también el costo de cada segundo (para estimar antes de crear).
+  if (task.costoClave && typeof task.credits === 'number' && ficha?.dur && ficha.dur >= 1) {
+    await registrarCosto(`${task.costoClave}|seg`, task.credits / ficha.dur).catch(() => undefined);
+  }
 
   // Copiamos el resultado a nuestro almacenamiento (los de Kie vencen ~14 días).
   // Si algo falla al guardar, igual mostramos el de Kie.
