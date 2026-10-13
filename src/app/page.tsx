@@ -91,6 +91,8 @@ export default function Estudio() {
   const [vidMsg, setVidMsg] = useState('');
   // Créditos de Kie: saldo de la cuenta y último costo real de cada tipo de generación.
   const [saldo, setSaldo] = useState<number | null>(null);
+  // Aviso de saldo bajo: se cierra con la ×, y vuelve si el saldo sigue bajando.
+  const [saldoVisto, setSaldoVisto] = useState<number | null>(null);
   const [costos, setCostos] = useState<Record<string, { credits: number }>>({});
   const [costoMsg, setCostoMsg] = useState('');
   const [espacio, setEspacio] = useState<{ total: number; carpetas: Record<string, number>; archivos: number } | null>(null);
@@ -767,7 +769,6 @@ export default function Estudio() {
         <div className="rail-logo">m</div>
         <button className={`rail-ic ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><Icon name="sparkles" /><span>Crear</span></button>
         <button className={`rail-ic ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><Icon name="galeria" /><span>Galería</span></button>
-        <button className={`rail-ic ${vista === 'voz' ? 'on' : ''}`} onClick={() => setVista('voz')}><Icon name="voz" /><span>Voz</span></button>
         <button className={`rail-ic ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><Icon name="viral" /><span>Viral</span></button>
         <button className={`rail-ic ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><Icon name="motion" /><span>Motion</span></button>
         <button className={`rail-ic ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><Icon name="lienzo" /><span>Lienzo</span></button>
@@ -793,6 +794,23 @@ export default function Estudio() {
           <button className="hdr-salir" onClick={salir} title="Salir">Salir</button>
           <div className="stat"><b>{creaciones.length}</b> creaciones<br />{modeloLabel}{saldo !== null ? <><br /><span className="saldo">💳 <b>{fmtCred(saldo)}</b> créditos</span><br /><span className="saldo">≈ {fmtUsd(saldo)}</span></> : null}</div>
         </header>
+
+        {saldo !== null && saldo < SALDO_BAJO && (saldoVisto === null || saldo < saldoVisto - 50) ? (() => {
+          const ultMotion = costos['kling-3.0/motion-control|720p']?.credits;
+          return (
+            <div className="saldo-bajo" role="alert">
+              <span>⚠️</span>
+              <div>
+                <b>Te queda poco saldo en Kie: {fmtCred(saldo)} créditos (≈ {fmtUsd(saldo)}).</b>
+                {typeof ultMotion === 'number' && saldo < ultMotion
+                  ? <> No te alcanza para un video de Motion (el último costó ≈ {fmtUsd(ultMotion)}).</>
+                  : <> Cargá saldo antes de crear videos, así no se corta a mitad de camino.</>}
+                {' '}<a href="https://kie.ai" target="_blank" rel="noreferrer">Cargar en Kie ↗</a>
+              </div>
+              <button aria-label="Cerrar aviso" onClick={() => setSaldoVisto(saldo)}>×</button>
+            </div>
+          );
+        })() : null}
 
         {cargando ? (
           <p className="sub">Cargando tu estudio…</p>
@@ -1221,7 +1239,6 @@ export default function Estudio() {
         <button className={`tab ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><span className="ti"><Icon name="sparkles" /></span>Crear</button>
         <button className={`tab ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><span className="ti"><Icon name="viral" /></span>Viral</button>
         <button className={`tab ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><span className="ti"><Icon name="galeria" /></span>Galería</button>
-        <button className={`tab ${vista === 'voz' ? 'on' : ''}`} onClick={() => setVista('voz')}><span className="ti"><Icon name="voz" /></span>Voz</button>
         <button className={`tab ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><span className="ti"><Icon name="motion" /></span>Motion</button>
         <button className={`tab ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><span className="ti"><Icon name="lienzo" /></span>Lienzo</button>
 
@@ -1518,6 +1535,9 @@ function MedidorEspacio({ uso }: { uso: { total: number; carpetas: Record<string
 /* ---------- Créditos de Kie ---------- */
 // 1 crédito de Kie ≈ US$ 0,005 (1.000 créditos ≈ US$ 5). Es aproximado.
 const USD_POR_CREDITO = 0.005;
+/** Debajo de esto (≈ US$ 3) avisa que queda poco saldo en Kie. */
+const SALDO_BAJO = 600;
+
 function fmtCred(n: number): string {
   return n.toLocaleString('es-AR', { maximumFractionDigits: 1 });
 }

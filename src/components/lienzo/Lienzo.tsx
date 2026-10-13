@@ -1110,7 +1110,7 @@ function CajaAudio({ d, set }: { d: Record<string, unknown>; set: (p: Record<str
       </div>
       {ver ? (
         <div className="lz-mis">
-          {mis === null ? <p className="lz-nota">Cargando…</p> : !mis.length ? <p className="lz-nota">Todavía no tenés audios en la sección Voz.</p> : mis.slice(0, 12).map((a) => (
+          {mis === null ? <p className="lz-nota">Cargando…</p> : !mis.length ? <p className="lz-nota">Todavía no tenés audios guardados.</p> : mis.slice(0, 12).map((a) => (
             <button key={a.url} className="lz-opc" onClick={() => elegir(a.url)}><b>🎵 Audio del {new Date(a.ts).toLocaleDateString()}</b><span>Tocá para usarlo</span></button>
           ))}
         </div>
