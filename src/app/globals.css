@@ -512,3 +512,20 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .sonido.chico { margin-top: 6px; }
 .sonido.chico .sonido-btns .opt { padding: 5px 4px; font-size: 12px; }
 .sonido.chico .sonido-nota { font-size: 11px; }
+/* Revisar y recortar video */
+.rv { margin-top: 10px; }
+.rv-msg { margin: 6px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--muted); }
+.rv-msg.ok { color: #1f8a4c; font-weight: 600; }
+.rv-msg.mal { color: var(--ink); background: #fff4e5; border: 1px solid #f3d3a4; border-radius: 10px; padding: 8px 10px; }
+.rv-btn { display: block; width: 100%; margin-top: 8px; }
+.rv-panel { margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.rv-vid { width: 100%; max-height: 300px; border-radius: 10px; background: #000; display: block; }
+.rv-barra { position: relative; height: 14px; margin: 10px 0 4px; border-radius: 7px; background: var(--line); overflow: hidden; }
+.rv-sel { position: absolute; top: 0; bottom: 0; background: var(--rosa); opacity: .55; }
+.rv-corte { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1px; background: #e0352b; }
+.rv-lbl { display: block; font-size: 12.5px; margin-top: 6px; }
+.rv-fila { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; margin-top: 8px; }
+.rv.chico .rv-msg { font-size: 11px; }
+.rv.chico .rv-vid { max-height: 180px; }
+.rv.chico .rv-panel { padding: 6px; }
+.rv.chico .rv-btn, .rv.chico .rv-fila .btn-grad, .rv.chico .rv-fila .btn-soft { font-size: 12px; padding: 6px 4px; }

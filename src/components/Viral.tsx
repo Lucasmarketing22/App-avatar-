@@ -9,6 +9,7 @@ import {
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
 import { VIRALES, type TipoViral } from '@/lib/estudio/virales';
 import ElegirSonido from '@/components/ElegirSonido';
+import RevisarVideo from '@/components/RevisarVideo';
 
 type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string };
 type Props = {
@@ -290,6 +291,14 @@ export default function Viral(props: Props) {
                 onError={() => setError('Este video ya no está (se borran a los 2 días). Subilo de nuevo.')}
               />
               <p className="vr-nota">{Math.round(e.video.dur) || '?'} s · {fmt(e.video.mb)} MB{e.video.mudo ? ' · 🔇 sin sonido' : ' · 🔊 con sonido'}</p>
+              <RevisarVideo
+                video={e.video}
+                onRecortado={(v, c) => {
+                  // El video recortado arranca en otro momento: la foto inicial se rehace desde su primer cuadro.
+                  set({ video: { url: v.url, dur: v.dur, mb: v.mb, mudo: !!v.mudo }, cuadro: c?.url ? { url: c.url, asp: c.w && c.h ? aspectoMasCercano(c.w, c.h) : (e.cuadro?.asp || '9:16'), t: 0 } : null, fotos: [], elegida: '', resultado: '' });
+                  setT(0);
+                }}
+              />
               <div className="vr-tit chico">¿Desde qué momento arranca?</div>
               <input type="range" className="lz-slider" min={0} max={Math.max(0.1, dur - 0.05)} step={0.05} value={Math.min(t, dur || t)}
                 onChange={(ev) => { const x = Number(ev.target.value); setT(x); if (vidRef.current) vidRef.current.currentTime = x; }} />
