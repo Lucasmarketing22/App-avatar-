@@ -14,7 +14,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { taskId?: string; data?: { taskId?: string; task_id?: string } } | null;
   const taskId = body?.data?.taskId ?? body?.data?.task_id ?? body?.taskId ?? '';
-  if (typeof taskId === 'string' && /^[a-zA-Z0-9_-]{6,80}$/.test(taskId)) {
+  if (typeof taskId === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(taskId)) {
     await terminarTarea(taskId).catch(() => undefined);
   }
   return NextResponse.json({ ok: true });
