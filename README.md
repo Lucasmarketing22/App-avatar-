@@ -11,8 +11,11 @@ almacenamiento. Opcional: sumar una foto de referencia.
 
 - `KIE_API_KEY` — clave de Kie.ai (https://kie.ai/api-key).
 - `APP_PASSWORD` — contraseña única para entrar a la app.
-- `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` — para guardar las
-  imágenes en Supabase Storage (bucket público `musa`, se crea solo).
+- `BLOB_READ_WRITE_TOKEN` — almacenamiento (Vercel Blob). Lo agrega Vercel solo
+  al conectar un Blob Store al proyecto.
+- `FISH_AUDIO_API_KEY` (opcional) — voces de Fish Audio. Sin esta clave la
+  sección Voz no aparece.
+- `CRON_SECRET` (opcional) — protege la limpieza diaria de videos.
 
 ### Cómo probarla
 

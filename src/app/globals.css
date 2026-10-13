@@ -551,3 +551,9 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .cv-ck input { width: 20px; height: 20px; flex: none; margin-top: 1px; accent-color: var(--rosa); }
 .cv-crear { width: 100%; margin-top: 14px; }
 .cv-volver { width: 100%; margin-top: 8px; }
+/* Aviso de saldo bajo en Kie */
+.saldo-bajo { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; padding: 10px 12px; border-radius: 14px; background: #fff4e5; border: 1px solid #f3c98b; font-size: 13px; line-height: 1.4; color: var(--ink); }
+.saldo-bajo > span { font-size: 18px; line-height: 1.2; }
+.saldo-bajo > div { flex: 1; }
+.saldo-bajo a { color: var(--rosa-strong); font-weight: 700; white-space: nowrap; }
+.saldo-bajo button { border: none; background: transparent; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; padding: 0 2px; }
