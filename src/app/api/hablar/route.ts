@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { createTask } from '@/lib/ia/kie';
+import { registrarTarea, urlDeAviso } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -23,12 +24,13 @@ export async function POST(request: Request) {
   if (!audioUrl) return NextResponse.json({ error: 'Falta el audio.' }, { status: 400 });
   const extra = (body?.prompt ?? '').trim().slice(0, 1500);
   const prompt = (extra ? `${PROMPT} ${extra}` : PROMPT).slice(0, 4900);
-  const aviso = `${new URL(request.url).origin}/api/kie-callback`;
+  const aviso = urlDeAviso(request);
   const motor = body?.motor ?? 'kling-std';
 
   const result = motor.startsWith('inf-')
     ? await createTask('infinitalk/from-audio', { image_url: imageUrl, audio_url: audioUrl, prompt, resolution: motor === 'inf-720' ? '720p' : '480p', nsfw_checker: false }, aviso)
     : await createTask(motor === 'kling-pro' ? 'kling/ai-avatar-pro' : 'kling/ai-avatar-standard', { image_url: imageUrl, audio_url: audioUrl, prompt }, aviso);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
+  await registrarTarea(result.taskId, { tipo: 'video', prompt: extra || undefined });
   return NextResponse.json({ taskId: result.taskId });
 }

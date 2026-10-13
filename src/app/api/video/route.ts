@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { createTask } from '@/lib/ia/kie';
+import { registrarTarea, urlDeAviso } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -36,7 +37,8 @@ export async function POST(request: Request) {
     enable_translation: false,
   };
 
-  const result = await createTask('veo-3-1', input);
+  const result = await createTask('veo-3-1', input, urlDeAviso(request));
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
+  await registrarTarea(result.taskId, { tipo: 'video', prompt });
   return NextResponse.json({ taskId: result.taskId });
 }

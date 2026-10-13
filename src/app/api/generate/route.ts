@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { createTask } from '@/lib/ia/kie';
 import { buscarModelo } from '@/lib/ia/models';
+import { registrarTarea, urlDeAviso } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -35,9 +36,11 @@ export async function POST(request: Request) {
     input[modelo.refsField] = modelo.refsSingle ? imageUrls[0] : imageUrls;
   }
 
-  const result = await createTask(modelo.kieModel, input);
+  const result = await createTask(modelo.kieModel, input, urlDeAviso(request));
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 502 });
   }
+  // Ficha con los datos de la foto (para "Repetir" y "Sesión de fotos").
+  await registrarTarea(result.taskId, { tipo: 'foto', prompt, modelo: typeof body?.modelo === 'string' ? body.modelo : undefined, refs: imageUrls, aspect });
   return NextResponse.json({ taskId: result.taskId });
 }

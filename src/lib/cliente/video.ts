@@ -8,19 +8,6 @@ export async function quitarSonido(url: string): Promise<{ url: string; teniaAud
   return { url: d.url as string, teniaAudio: !!d.teniaAudio, mb: Number(d.mb) || 0 };
 }
 
-/**
- * Del lado del celu: le pega al video terminado el sonido del video original
- * (subido CON sonido). Si algo falla, devuelve el video como estaba.
- */
-export async function ponerSonido(video: string, original: string): Promise<{ url: string; error?: string }> {
-  try {
-    const res = await fetch('/api/con-audio', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ video, audio: original }) });
-    const d = await res.json().catch(() => ({}));
-    if (!res.ok || !d.url) return { url: video, error: d.error ?? 'No se pudo pegar el sonido.' };
-    return { url: d.url as string };
-  } catch { return { url: video, error: 'No se pudo pegar el sonido.' }; }
-}
-
 /** Lo último que eligió: subir los videos sin sonido (true) o con sonido (false). */
 const CLAVE_SONIDO = 'musa-sonido';
 export function prefSinSonido(): boolean {
@@ -81,18 +68,53 @@ export function cuadroDeArchivo(file: File, t = 0.3): Promise<{ blob: Blob; w: n
   });
 }
 
-/** Sube una imagen (se achica a 2048 en el servidor) y devuelve su URL. */
+/**
+ * Achica la foto EN EL CELU antes de subirla (lado mayor 2048 px, JPG): así
+ * entran las fotos pesadas del iPhone (el servidor acepta hasta ~4,5 MB por
+ * pedido) y las HEIC se convierten a JPG. Si no se puede, va la original.
+ */
+export async function achicarImagen(file: File): Promise<File> {
+  const comun = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
+  if (comun && file.size <= 1.5 * 1024 * 1024) return file;
+  try {
+    const u = URL.createObjectURL(file);
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new window.Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('no se pudo leer'));
+      i.src = u;
+    }).finally(() => setTimeout(() => URL.revokeObjectURL(u), 1000));
+    const w = img.naturalWidth, h = img.naturalHeight;
+    if (!w || !h) return file;
+    const k = Math.min(1, 2048 / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * k); c.height = Math.round(h * k);
+    const ctx = c.getContext('2d');
+    if (!ctx) return file;
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); // PNG con fondo transparente
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise<Blob | null>((resolve) => c.toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) return file;
+    if (comun && blob.size >= file.size) return file;
+    return new File([blob], (file.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
+/** Sube una imagen (se achica en el celu y otra vez en el servidor) y devuelve su URL. */
 export async function subirImagen(file: File, folder = 'refs'): Promise<string> {
   const form = new FormData();
-  form.append('file', file);
+  form.append('file', await achicarImagen(file));
   form.append('folder', folder);
   const res = await fetch('/api/upload', { method: 'POST', body: form });
   const d = await res.json().catch(() => ({}));
+  if (res.status === 413) throw new Error('La foto es demasiado pesada. Probá con otra o sacale una captura de pantalla.');
   if (!res.ok || !d.url) throw new Error(d.error ?? 'No se pudo subir la imagen.');
   return d.url as string;
 }
 
-/** Sube un video/audio DIRECTO al almacenamiento (carpeta motion/, se borra a los 3 días). */
+/** Sube un video/audio DIRECTO al almacenamiento (carpeta motion/, se borra a los 2 días). */
 export async function subirAMotion(file: File, nombre: string, onProgreso?: (pct: number) => void): Promise<string> {
   const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
   const tipo = file.type || (ext === 'mov' ? 'video/quicktime' : ext === 'webm' ? 'video/webm' : 'video/mp4');
@@ -106,12 +128,12 @@ export async function subirAMotion(file: File, nombre: string, onProgreso?: (pct
 }
 
 /** Espera a que termine una tarea de la IA (foto o video). */
-export async function esperarTarea(taskId: string, sigue: () => boolean = () => true): Promise<{ url: string; credits?: number }> {
+export async function esperarTarea(taskId: string, sigue: () => boolean = () => true): Promise<{ url: string; credits?: number; aviso?: string }> {
   for (let i = 0; i < 160; i++) {
     await new Promise((r) => setTimeout(r, i < 20 ? 3000 : 7000));
     if (!sigue()) throw new Error('cancelado');
     const d = await fetch(`/api/status?taskId=${encodeURIComponent(taskId)}`).then((r) => r.json()).catch(() => ({}));
-    if (d.state === 'success' && d.url) return { url: d.url as string, credits: typeof d.credits === 'number' ? d.credits : undefined };
+    if (d.state === 'success' && d.url) return { url: d.url as string, credits: typeof d.credits === 'number' ? d.credits : undefined, aviso: typeof d.aviso === 'string' ? d.aviso : undefined };
     if (d.state === 'fail') throw new Error(d.error || 'La IA no pudo crearlo. Probá de nuevo.');
   }
   throw new Error('Tardó demasiado. Probá de nuevo.');
