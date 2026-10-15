@@ -79,3 +79,27 @@ function leerSSE(crudo: string): { content: Bloque[] } | null {
   const content = bloques.filter(Boolean);
   return content.length ? { content } : null;
 }
+
+/**
+ * Mirar una imagen y describirla (Gemini 3.5 Flash vía Kie, misma clave).
+ * Endpoint verificado en docs.kie.ai: POST /gemini-3-5-flash-openai/v1/chat/completions
+ * con formato OpenAI; las imágenes van como { type: 'image_url', image_url: { url } }.
+ */
+export async function verImagen(url: string, pedido: string): Promise<{ ok: true; texto: string } | { ok: false; error: string }> {
+  if (!process.env.KIE_API_KEY) return { ok: false, error: 'Falta configurar la clave de Kie (KIE_API_KEY).' };
+  try {
+    const res = await fetch('https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.KIE_API_KEY}`, 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify({ stream: false, messages: [{ role: 'user', content: [{ type: 'text', text: pedido }, { type: 'image_url', image_url: { url } }] }] }),
+    });
+    const d = (await res.json().catch(() => null)) as { code?: number; msg?: string; choices?: { message?: { content?: unknown } }[] } | null;
+    const c = d?.choices?.[0]?.message?.content;
+    const texto = typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => (typeof x === 'object' && x && 'text' in x ? String((x as { text: unknown }).text) : '')).join(' ') : '';
+    if (res.ok && texto.trim()) return { ok: true, texto: texto.trim() };
+    return { ok: false, error: d?.msg ? `Kie devolvió un error: ${d.msg}` : 'No se pudo leer la imagen.' };
+  } catch {
+    return { ok: false, error: 'No se pudo conectar con Kie. Probá de nuevo.' };
+  }
+}

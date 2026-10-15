@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
 import { esperarTarea, subirAMotion, subirImagen } from '@/lib/cliente/video';
+import { vestuarioATexto } from '@/lib/cliente/vestuario';
 import { componerNodoFoto, medidasDe, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ESCENARIOS, ESTILOS, GRABACIONES, IDIOMA_DEFECTO, VOCES_OMNI, durValida, palabrasMax, pistaFotoInicial, type Guion, type Motor,
@@ -35,6 +36,8 @@ type Estado = {
   ropa: 'foto' | 'texto';
   ropaUrl: string;
   ropaTexto: string;
+  /** Cómo describió la IA la ropa de la foto (eso es lo que se usa, no la foto). */
+  ropaDesc?: string;
   instr: string;
   fotoModelo: string;
   fotos: string[];
@@ -160,7 +163,7 @@ export default function Hablados(props: Props) {
     const f = ev.target.files?.[0]; ev.target.value = '';
     if (!f) return;
     setSubiendoRopa(true); setError('');
-    try { set({ ropa: 'foto', ropaUrl: await subirImagen(f) }); } catch { setError('No se pudo subir la foto de la ropa.'); } finally { setSubiendoRopa(false); }
+    try { set({ ropa: 'foto', ropaUrl: await subirImagen(f), ropaDesc: '' }); } catch { setError('No se pudo subir la foto de la ropa.'); } finally { setSubiendoRopa(false); }
   }
   async function crearFoto() {
     if (!modelo || creandoFoto) return;
@@ -176,9 +179,12 @@ export default function Hablados(props: Props) {
       ...(e.ropa === 'foto' && e.ropaUrl ? [{ url: e.ropaUrl, rol: 'vestuario' as const }] : []),
     ];
     const ropa = e.ropa === 'texto' ? `She wears ${e.ropaTexto.trim()}.` : '';
-    const prompt = componerNodoFoto(items.map((x) => x.rol), [pistaFotoInicial(escenarioEn, e.grabacion), ropa, e.instr], modelo.cuerpo, modelo.promptFijo);
-    const imageUrls = items.map((x) => x.url);
     try {
+      // La foto de la ropa no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien la tiene puesta).
+      const v = await vestuarioATexto(items);
+      set({ ropaDesc: v.descripciones[0] ?? '' });
+      const prompt = componerNodoFoto(v.items.map((x) => x.rol), [pistaFotoInicial(escenarioEn, e.grabacion), ...v.textos, ropa, e.instr], modelo.cuerpo, modelo.promptFijo);
+      const imageUrls = v.items.map((x) => x.url);
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: '9:16', modelo: e.fotoModelo }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.taskId) throw new Error(d.error ?? 'No se pudo crear la foto.');
@@ -349,6 +355,7 @@ export default function Hablados(props: Props) {
             <span className="vr-cap-l">{e.elegida ? '✅ Aprobada' : 'Foto final'}</span>
           </div>
         </div>
+        {e.ropa === 'foto' && e.ropaDesc ? <p className="vr-nota">👗 La IA la viste con: <i>{e.ropaDesc}</i></p> : null}
         <div className="lz-chips" style={{ marginTop: 10 }}>
           <button className={`opt ${e.ropa === 'foto' ? 'on' : ''}`} onClick={() => set({ ropa: 'foto' })}>📷 Foto de la ropa</button>
           <button className={`opt ${e.ropa === 'texto' ? 'on' : ''}`} onClick={() => set({ ropa: 'texto' })}>✏️ Escribirla</button>
@@ -361,7 +368,7 @@ export default function Hablados(props: Props) {
                 <span>{subiendoRopa ? '…' : '＋'}</span><small>{subiendoRopa ? 'Subiendo' : 'Subir foto'}</small>
               </label>
               {vestidos.slice(0, 15).map((v) => (
-                <button key={v.url} className={`lz-th ${e.ropaUrl === v.url ? 'on' : ''}`} style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }} onClick={() => set({ ropaUrl: v.url })}>
+                <button key={v.url} className={`lz-th ${e.ropaUrl === v.url ? 'on' : ''}`} style={{ width: '100%', height: 'auto', aspectRatio: '3 / 4' }} onClick={() => set({ ropaUrl: v.url, ropaDesc: '' })}>
                   <Image src={v.url} alt="" fill sizes="80px" />
                 </button>
               ))}

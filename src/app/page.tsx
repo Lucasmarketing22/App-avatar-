@@ -10,6 +10,7 @@ import Lienzo from '@/components/lienzo/Lienzo';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
 import Hablados from '@/components/Hablados';
+import { describirVestuario, textoVestuario } from '@/lib/cliente/vestuario';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
 import { esperarTarea, prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
@@ -440,7 +441,13 @@ export default function Estudio() {
   async function generarUnificado() {
     if (busy) return;
     const refsExtra: { url: string; hint: string }[] = [];
-    if (vestidoActual) refsExtra.push({ url: vestidoActual.url, hint: pistaVestuario('One reference image') });
+    let ropaTexto = '';
+    if (vestidoActual) {
+      // La foto del vestido no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien lo tiene puesto).
+      const desc = await describirVestuario(vestidoActual.url);
+      if (!desc) refsExtra.push({ url: vestidoActual.url, hint: pistaVestuario('One reference image') });
+      else ropaTexto = textoVestuario(desc);
+    }
     for (const g of GALERIAS) {
       const item = (galerias[g.key] ?? []).find((i) => i.id === galSel[g.key]);
       if (item) refsExtra.push({ url: item.url, hint: g.hint });
@@ -454,7 +461,7 @@ export default function Estudio() {
     const medidas = medidasDe(personaje.cuerpo, personaje.promptFijo);
     const cuerpoHint = pistaCuerpo(medidas);
     const fijoHint = pistaFija(personaje.promptFijo, !medidas);
-    const hints = [...faceHint, ...figuraHint, ...(cuerpoHint ? [cuerpoHint] : []), ...(fijoHint ? [fijoHint] : []), ...refsExtra.map((r) => r.hint)];
+    const hints = [...faceHint, ...figuraHint, ...(cuerpoHint ? [cuerpoHint] : []), ...(fijoHint ? [fijoHint] : []), ...(ropaTexto ? [ropaTexto] : []), ...refsExtra.map((r) => r.hint)];
     const texto = [editPrompt.trim(), extra.trim()].filter(Boolean).join('. ');
     const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel, figura: describirCuerpo(medidas) });
     lanzar(prompt, imageUrls, { aspect, modelo });
