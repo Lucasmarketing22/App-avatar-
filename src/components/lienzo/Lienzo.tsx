@@ -9,6 +9,7 @@ import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
+import { vestuarioATexto } from '@/lib/cliente/vestuario';
 import {
   ANCHO, DEF, ORDEN_MENU, nuevoId, plantillaMotionExacto, yEntrada, ySalida,
   type Cable, type Dato, type Nodo, type TipoNodo, type Vista,
@@ -262,13 +263,15 @@ export default function Lienzo(props: Props) {
     const textos = entradas(id, 'txt').map(salidaDe).flatMap((s) => (s && s.tipo === 'texto' ? [s.texto] : []));
     const cuerpo = sal.find((s) => s.cuerpo)?.cuerpo;
     const fijo = sal.find((s) => s.fijo)?.fijo;
-    const prompt = componerNodoFoto(items.map((x) => x.rol), textos, cuerpo, fijo);
     const modelo = (n.data.modelo as string) || 'seedream';
     const formato = (n.data.aspect as string) || 'auto';
     const aspect = formato === 'auto' ? (sal.find((s) => s.asp)?.asp || '9:16') : formato;
-    const imageUrls = items.map((x) => x.url);
     setData(id, { estado: 'corriendo', error: '' });
     try {
+      // La foto de la ropa no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien la tiene puesta).
+      const v = await vestuarioATexto(items);
+      const prompt = componerNodoFoto(v.items.map((x) => x.rol), [...v.textos, ...textos], cuerpo, fijo);
+      const imageUrls = v.items.map((x) => x.url);
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect, modelo }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.taskId) throw new Error(d.error ?? 'No se pudo crear la foto.');

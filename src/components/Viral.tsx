@@ -7,6 +7,7 @@ import {
   aspectoMasCercano, cuadroDeArchivo, cuadroDeVideo, duracionArchivo, esperarTarea, prefSinSonido, quitarSonido, subirAMotion, subirImagen,
 } from '@/lib/cliente/video';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
+import { vestuarioATexto } from '@/lib/cliente/vestuario';
 import { VIRALES, type TipoViral } from '@/lib/estudio/virales';
 import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
@@ -201,10 +202,12 @@ export default function Viral(props: Props) {
     const fondo = e.fondo === 'texto'
       ? `Change ONLY the place and background to: ${e.fondoTexto.trim()} — a real, believable location. Keep EXACTLY the same pose, framing, camera angle, distance and light direction of the video frame; nothing of the original background may remain.`
       : '';
-    const prompt = componerNodoFoto(items.map((x) => x.rol), [def.pistaFoto, ropa, fondo, e.instr], modelo.cuerpo, modelo.promptFijo);
-    const imageUrls = items.map((x) => x.url);
     const aspect = e.cuadro.asp || '9:16';
     try {
+      // La foto de la ropa no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien la tiene puesta).
+      const v = await vestuarioATexto(items);
+      const prompt = componerNodoFoto(v.items.map((x) => x.rol), [def.pistaFoto, ropa, ...v.textos, fondo, e.instr], modelo.cuerpo, modelo.promptFijo);
+      const imageUrls = v.items.map((x) => x.url);
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect, modelo: e.fotoModelo }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.taskId) throw new Error(d.error ?? 'No se pudo crear la foto.');
