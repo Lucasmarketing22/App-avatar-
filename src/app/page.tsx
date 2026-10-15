@@ -9,6 +9,7 @@ import Guia from '@/components/Guia';
 import Lienzo from '@/components/lienzo/Lienzo';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
+import Hablados from '@/components/Hablados';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
 import { esperarTarea, prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
@@ -26,7 +27,7 @@ const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
-type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral';
+type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados';
 
 const ASPECTS = ['3:4', '1:1', '4:5', '9:16', '16:9', '4:3'];
 
@@ -179,6 +180,9 @@ export default function Estudio() {
   const [viralAbierto, setViralAbierto] = useState(false);
   const [viralTrabajo, setViralTrabajo] = useState('');
   useEffect(() => { if (vista === 'viral') setViralAbierto(true); }, [vista]);
+  const [habladosAbierto, setHabladosAbierto] = useState(false);
+  const [habladosTrabajo, setHabladosTrabajo] = useState('');
+  useEffect(() => { if (vista === 'hablados') setHabladosAbierto(true); }, [vista]);
 
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -770,6 +774,7 @@ export default function Estudio() {
         <button className={`rail-ic ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><Icon name="sparkles" /><span>Crear</span></button>
         <button className={`rail-ic ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><Icon name="galeria" /><span>Galería</span></button>
         <button className={`rail-ic ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><Icon name="viral" /><span>Viral</span></button>
+        <button className={`rail-ic ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><Icon name="voz" /><span>Hablados</span></button>
         <button className={`rail-ic ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><Icon name="motion" /><span>Motion</span></button>
         <button className={`rail-ic ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><Icon name="lienzo" /><span>Lienzo</span></button>
         <div className="rail-sep" />
@@ -1130,6 +1135,8 @@ export default function Estudio() {
           </>
         ) : vista === 'viral' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🔥 Recrear viral</h1><Guia id="viral" /></div>
+        ) : vista === 'hablados' ? (
+          <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🎙️ Hablados</h1><Guia id="hablados" /></div>
         ) : vista === 'lienzo' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 8 }}>🧩 Lienzo</h1><Guia id="lienzo" /></div>
         ) : vista === 'voz' ? (
@@ -1209,6 +1216,27 @@ export default function Estudio() {
             />
           </div>
         ) : null}
+        {habladosAbierto ? (
+          <div style={{ display: vista === 'hablados' ? 'block' : 'none' }}>
+            <Hablados
+              modelas={modelas}
+              activoId={personaje.id}
+              vestidos={vestidos}
+              costo={costoDe}
+              estimar={estimarVideo}
+              saldo={saldo}
+              claveFoto={(m) => claveFoto(m as ModeloId)}
+              onCreacion={(c) => {
+                setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)]);
+              }}
+              onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
+              onTrabajo={setHabladosTrabajo}
+              onPublicar={(url, tipo) => setPublicar({ url, tipo })}
+              onGuardar={(url, tipo) => setGuardar({ url, tipo })}
+              onSaldo={cargarSaldo}
+            />
+          </div>
+        ) : null}
         {lienzoAbierto ? (
           <div style={{ display: vista === 'lienzo' ? 'block' : 'none' }}>
             <Lienzo
@@ -1238,6 +1266,7 @@ export default function Estudio() {
       <nav className="tabbar">
         <button className={`tab ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><span className="ti"><Icon name="sparkles" /></span>Crear</button>
         <button className={`tab ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><span className="ti"><Icon name="viral" /></span>Viral</button>
+        <button className={`tab ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><span className="ti"><Icon name="voz" /></span>Hablados</button>
         <button className={`tab ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><span className="ti"><Icon name="galeria" /></span>Galería</button>
         <button className={`tab ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><span className="ti"><Icon name="motion" /></span>Motion</button>
         <button className={`tab ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><span className="ti"><Icon name="lienzo" /></span>Lienzo</button>
@@ -1260,6 +1289,7 @@ export default function Estudio() {
           vozTrabajo,
           lienzoTrabajo,
           viralTrabajo,
+          habladosTrabajo,
         ].filter(Boolean);
         return trabajos.length ? (
           <div className="genfloat" role="status" aria-live="polite">

@@ -1,5 +1,5 @@
 /** Guías paso a paso de cada sección (se leen en pantalla y en voz alta). */
-export type GuiaId = 'crear' | 'clonar' | 'viral' | 'motion' | 'lienzo' | 'voz' | 'galeria';
+export type GuiaId = 'crear' | 'clonar' | 'viral' | 'hablados' | 'motion' | 'lienzo' | 'voz' | 'galeria';
 
 export const GUIAS: Record<GuiaId, { titulo: string; pasos: string[] }> = {
   crear: {
@@ -32,6 +32,17 @@ export const GUIAS: Record<GuiaId, { titulo: string; pasos: string[] }> = {
       'Paso tres: tocá Crear foto. Comparala con el video: si no coincide, tocá Crear otra. Cuando te guste, tocala para aprobarla.',
       'Paso cuatro: elegí el motor. Kling 3.0 es el más fiel. Tocá Crear video y esperá unos minutos: podés seguir usando la app.',
       'Cuando termina, tocá Guardar para bajarlo al celu, o Publicar para mandarlo a tus redes.',
+    ],
+  },
+  hablados: {
+    titulo: 'Videos hablados',
+    pasos: [
+      'Paso uno: tu modelo. Se usan las fotos de cara de su ficha. La primera vez, subí una muestra de su voz: un video o audio donde hable entre 5 y 30 segundos, sin música. Queda guardada.',
+      'Paso dos: elegí el escenario, por ejemplo el sillón, la cama o el auto, y quién graba: celular apoyado, selfie en mano o alguien que la filma.',
+      'Paso tres: el vestuario. Subí la foto de la ropa a seguir o escribila, y tocá Crear foto. Sale tu modelo vestida así, sentada en el escenario. Tocá la que te guste para aprobarla: es el primer cuadro del video.',
+      'Paso cuatro: escribí el idioma, el acento y el tono. Si tocás Dejar como predeterminado, queda guardado para la próxima.',
+      'Paso cinco: elegí la duración, escribí de qué habla y tocá Escribir 3 guiones. Cada uno trae gancho, desarrollo y cierre. Tocá el que más te guste; lo podés editar.',
+      'Paso seis: elegí el motor. Kling 3.0 habla con la voz de tu modelo; Gemini Omni es más barato y usa una voz del catálogo. Tocá Crear video, revisá la pantalla de confirmación con el costo y listo: el video queda en tu galería.',
     ],
   },
   motion: {
