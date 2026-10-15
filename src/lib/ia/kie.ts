@@ -159,6 +159,25 @@ export function claveDeCosto(model?: string, param?: string): string | undefined
   return `${model}|${calidad}`;
 }
 
+/**
+ * Gemini Omni: registra una voz del catálogo (gratis, al instante) y devuelve
+ * su audioId para pasarlo en audio_ids del video. Así la voz es siempre la misma.
+ */
+export async function crearVozOmni(preset: string, nombre: string, descripcion: string): Promise<{ ok: true; audioId: string } | { ok: false; error: string }> {
+  if (!process.env.KIE_API_KEY) return { ok: false, error: 'Falta configurar la clave de Kie (KIE_API_KEY).' };
+  try {
+    const res = await fetch(`${BASE}/omni/audio/create`, {
+      method: 'POST', headers: authHeaders(), cache: 'no-store',
+      body: JSON.stringify({ audio_id: preset, name: nombre.slice(0, 200), voice_description: descripcion.slice(0, 2000) }),
+    });
+    const d = (await res.json().catch(() => null)) as { code?: number; msg?: string; data?: { audioId?: string } } | null;
+    if (res.ok && d?.code === 200 && d.data?.audioId) return { ok: true, audioId: d.data.audioId };
+    return { ok: false, error: friendlyMessage(d?.msg) };
+  } catch {
+    return { ok: false, error: 'No se pudo conectar con Kie.ai. Probá de nuevo.' };
+  }
+}
+
 /** Saldo de créditos de la cuenta de Kie (null si no se pudo consultar). */
 export async function getCredits(): Promise<number | null> {
   if (!process.env.KIE_API_KEY) return null;
