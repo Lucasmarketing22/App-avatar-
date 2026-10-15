@@ -125,7 +125,10 @@ export function componerUnificado(opts: {
 /** Prompt fijo de la modelo (de su ficha): se suma siempre, con prioridad. */
 export function pistaFija(texto?: string): string {
   const t = (texto ?? '').trim();
-  return t ? `Fixed traits of this woman that must ALWAYS be respected (top priority): ${t}.` : '';
+  if (!t) return '';
+  // Si el prompt fijo trae medidas ("100-60-95"), también van traducidas a cómo se ve la figura.
+  const medidas = t.match(/\d{2,3}\s*[-–/]\s*\d{2,3}\s*[-–/]\s*\d{2,3}/)?.[0];
+  return `Fixed traits of this woman that must ALWAYS be respected (top priority): ${t.replace(/[.\s]+$/, "")}.${medidas ? ` Her figure: ${describirCuerpo(medidas)}.` : ''}`;
 }
 
 /** Texto sugerido para el prompt fijo (la usuaria lo puede editar). */
@@ -139,10 +142,37 @@ export function promptFijoSugerido(nombre: string, cuerpo?: string): string {
   ].filter(Boolean).join(' ');
 }
 
-export function pistaCuerpo(cuerpo?: string): string {
+/**
+ * Las medidas en números ("100-60-95") los modelos casi no las entienden:
+ * las traducimos a cómo se VE la figura (busto, cintura, cadera, cola).
+ */
+export function describirCuerpo(cuerpo?: string): string {
   const c = (cuerpo ?? '').trim();
   if (!c) return '';
-  return `Her body shape and measurements must be exactly: ${c}. Apply these proportions ONLY to her body; her face must stay exactly the same as in the face reference images (do not make the face rounder, wider or fuller).`;
+  const n = (c.match(/\d{2,3}/g) ?? []).map(Number);
+  const [busto, cintura, cadera] = n;
+  const cm = n.length >= 3 && busto >= 70 && busto <= 140 && cintura >= 45 && cintura <= 110 && cadera >= 70 && cadera <= 150;
+  if (!cm) return `her body: ${c}`;
+  const partes: string[] = [];
+  // Lo que se ve es la diferencia con la cintura, no solo el número.
+  partes.push(busto >= 98 || busto - cintura >= 36 ? 'a full, large, round bust' : busto >= 92 || busto - cintura >= 28 ? 'a full bust' : busto >= 86 ? 'a medium bust' : 'a small natural bust');
+  partes.push(cintura <= 62 ? 'a very small, cinched waist' : cintura <= 68 ? 'a slim, narrow waist' : 'a natural waist');
+  partes.push(cadera >= 100 || cadera - cintura >= 33 ? 'wide, rounded hips and a big, full, round butt' : cadera >= 92 || cadera - cintura >= 25 ? 'rounded hips and a full, round butt' : 'slim hips');
+  const r = cintura / Math.max(busto, cadera);
+  const figura = r <= 0.67 ? 'a pronounced hourglass figure' : r <= 0.75 ? 'a curvy figure' : 'a slim figure';
+  const extra = c.replace(/\d{2,3}\s*[-–/x\s]\s*\d{2,3}\s*[-–/x\s]\s*\d{2,3}\s*(cm)?/i, '').replace(/^[\s,.;:-]+|[\s,.;:-]+$/g, '');
+  return `measurements ${busto}-${cintura}-${cadera} cm: ${figura} with ${partes.join(', ')}${extra ? ` (${extra})` : ''}`;
+}
+
+export function pistaCuerpo(cuerpo?: string): string {
+  const d = describirCuerpo(cuerpo);
+  if (!d) return '';
+  return `BODY (top priority, in every image): ${d}. Keep exactly these proportions in any pose, angle, outfit and framing — also when sitting, lying down, in loose clothes or in a medium shot. Never slim down, flatten or shrink her bust, hips or butt, and never widen her waist. Apply these proportions ONLY to her body; her face must stay exactly the same as in the face reference images (do not make the face rounder, wider or fuller).`;
+}
+
+/** Texto para la foto de cuerpo cuando va como referencia extra. */
+export function pistaFotoCuerpo(cual: string): string {
+  return `${cual} shows her body: keep exactly that body shape, curves and proportions (bust, waist, hips, butt). Do NOT copy its clothing, pose or background.`;
 }
 
 /** Encuadres para adaptar la foto del avatar al video de Motion. */
@@ -165,13 +195,14 @@ export const TOMAS_SESION: string[] = [
   'a medium shot of her sitting or leaning on something in the same place, relaxed pose, looking away from the camera',
 ];
 
-export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string, fijo?: string): string {
+export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string, fijo?: string, conFotoCuerpo = false): string {
   const partes: string[] = [
     'Photorealistic photoshoot continuation. Image 1 is a photo from an ongoing photo session.',
     'Keep EXACTLY the same location, background and setting, the same lighting, weather and time of day, and the same outfit (every garment, color, fabric, pattern and accessory) and the same hairstyle and makeup as in image 1.',
     conCaras
-      ? "The other reference images show the woman's face and identity: keep her face exactly the same (same face, bone structure, skin tone, freckles, eye color and natural features)."
+      ? `The other reference images${conFotoCuerpo ? ' (except the last one)' : ''} show the woman's face and identity: keep her face exactly the same (same face, bone structure, skin tone, freckles, eye color and natural features).`
       : 'Keep the woman exactly the same person as in image 1 (same face, bone structure, skin tone, freckles, eye color and natural features).',
+    conFotoCuerpo ? pistaFotoCuerpo('The last reference image') : '',
     `Create a NEW, different photo from this same session: ${toma}. Do not copy the pose, angle or framing of image 1.`,
     pistaCuerpo(cuerpo),
     pistaFija(fijo),
@@ -188,13 +219,14 @@ export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string,
 export function componerCambioAvatar(
   instrucciones: string,
   conCaras: boolean,
-  extra?: { cuerpo?: string; encuadre?: Encuadre; fijo?: string },
+  extra?: { cuerpo?: string; encuadre?: Encuadre; fijo?: string; conFotoCuerpo?: boolean },
 ): string {
   const instr = instrucciones.trim();
   return [
     'Photorealistic edit of image 1.',
     'Keep EXACTLY the same woman: same face, identity, bone structure, skin tone, freckles, eye color and natural features.',
-    conCaras ? 'The other reference images show her face and identity; keep her face exactly the same.' : '',
+    conCaras ? `The other reference images${extra?.conFotoCuerpo ? ' (except the last one)' : ''} show her face and identity; keep her face exactly the same.` : '',
+    extra?.conFotoCuerpo ? pistaFotoCuerpo('The last reference image') : '',
     extra?.encuadre
       ? `Reframe the photo as ${ENCUADRES[extra.encuadre]}, keeping the same outfit, hair and setting style, so it can be used as the first frame of a video with that framing.`
       : 'Keep the same pose, body position, framing, camera angle and composition as image 1, so it can be used as the first frame of a video.',
@@ -210,14 +242,15 @@ export function componerCambioAvatar(
  * original. Se recrea esa misma foto (lugar, luz, postura, ropa, encuadre)
  * pero con la cara y el cuerpo de la modelo, para usarla como primer cuadro.
  */
-export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?: string, fijo?: string): string {
+export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?: string, fijo?: string, conFotoCuerpo = false): string {
   const instr = instrucciones.trim();
   return [
     'Image 1 is a frame taken from a video. Recreate EXACTLY this same photo: the same place, background, bed or furniture, sheets, objects, lighting, light direction, colors, time of day, camera angle, lens, distance and framing.',
     "Keep the person's exact body pose and position from image 1 (lying down, sitting, leaning, head and arm positions, where she looks) and the same outfit, so it matches the first frame of that video.",
     conCaras
-      ? 'Replace ONLY the person with the woman from the other reference images: her face, identity, bone structure, face width, skin tone, freckles, eye color and hair (color, length and style) must be exactly hers. Nothing of the original person’s face may remain.'
+      ? `Replace ONLY the person with the woman from the other reference images${conFotoCuerpo ? ' (except the last one)' : ''}: her face, identity, bone structure, face width, skin tone, freckles, eye color and hair (color, length and style) must be exactly hers. Nothing of the original person’s face may remain.`
       : 'Keep the same woman.',
+    conFotoCuerpo ? `${pistaFotoCuerpo('The last reference image')} Her body replaces the original person's body too (same pose).` : '',
     instr ? `Also apply this change and keep everything else unchanged: ${instr}.` : '',
     pistaCuerpo(cuerpo),
     pistaFija(fijo),
@@ -252,7 +285,7 @@ export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: 
     partes.push(`${lista(caras)} show the woman's face and identity: the person in the result must be exactly her — same face, bone structure, face width, skin tone, freckles, eye color and hair. Do not alter, widen or round her face.${captura.length ? ' Nothing of the original person in the video frame may remain.' : ''}`);
   }
   const cuerpos = nums('cuerpo');
-  if (cuerpos.length) partes.push(`${lista(cuerpos)} show her body: keep exactly that body shape, curves and proportions (do not copy its clothes, pose or background).`);
+  if (cuerpos.length) partes.push(pistaFotoCuerpo(lista(cuerpos)));
   const vest = nums('vestuario');
   if (vest.length) partes.push(`${lista(vest)} show an outfit: dress her in exactly that outfit (same garments, colors, fabric, fit and details).`);
   const esc = nums('escena');

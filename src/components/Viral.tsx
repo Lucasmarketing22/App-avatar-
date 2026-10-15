@@ -188,7 +188,8 @@ export default function Viral(props: Props) {
       { url: e.cuadro.url, rol: 'captura' },
       ...modelo.refs.slice(0, 3).map((url) => ({ url, rol: 'cara' as const })),
       ...e.carasExtra.filter((u) => !modelo.refs.includes(u)).slice(0, 3).map((url) => ({ url, rol: 'cara' as const })),
-      ...(def.conCuerpo && cuerpo ? [{ url: cuerpo, rol: 'cuerpo' as const }] : []),
+      // Siempre su foto de cuerpo: la figura sale igual en cualquier tipo de video.
+      ...(cuerpo ? [{ url: cuerpo, rol: 'cuerpo' as const }] : []),
       ...(e.fondo === 'escena' && e.fondoUrl ? [{ url: e.fondoUrl, rol: 'escena' as const }] : []),
       ...(e.ropa === 'vestido' && e.ropaUrl ? [{ url: e.ropaUrl, rol: 'vestuario' as const }] : []),
     ];

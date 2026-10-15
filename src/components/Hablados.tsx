@@ -236,8 +236,8 @@ export default function Hablados(props: Props) {
       const res = await fetch('/api/hablado', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          motor: e.motor, modeloId: modelo.id, foto: e.elegida, caras: modelo.refs.slice(0, 4), texto: e.texto, idioma, escenario: escenarioEn,
-          grabacion: e.grabacion, gestos: e.gestos, fijo: modelo.promptFijo, dur: durVideo, calidad: e.calidad, vozOmni: e.vozOmni,
+          motor: e.motor, modeloId: modelo.id, foto: e.elegida, caras: [...modelo.refs.slice(0, 3), ...(modelo.entero || modelo.medio ? [(modelo.entero || modelo.medio) as string] : [])], texto: e.texto, idioma, escenario: escenarioEn,
+          grabacion: e.grabacion, gestos: e.gestos, fijo: modelo.promptFijo, cuerpo: modelo.cuerpo, dur: durVideo, calidad: e.calidad, vozOmni: e.vozOmni,
         }),
       });
       const d = await res.json().catch(() => ({}));

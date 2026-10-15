@@ -1,3 +1,5 @@
+import { describirCuerpo } from './prompt';
+
 /**
  * "Hablados": videos de la modelo hablando a cámara, casual y creíble.
  * No es una foto animada: el motor genera el video entero (boca, gestos, voz y
@@ -95,6 +97,7 @@ export function componerVideoHablado(o: {
   grabacion: string;
   gestos?: string;
   fijo?: string;
+  cuerpo?: string;
 }): string {
   const g = GRABACIONES.find((x) => x.id === o.grabacion) ?? GRABACIONES[0];
   const ella = o.motor === 'kling3' ? '@mila' : 'the woman';
@@ -107,6 +110,7 @@ export function componerVideoHablado(o: {
     `FORMAT: ${o.dur}-second, 9:16 live-action personal phone video. One continuous take, no cuts. Contemporary phone footage, beauty mode off.`,
     sujeto,
     fijo ? `Her fixed traits: ${fijo.slice(0, 300)}` : '',
+    o.cuerpo?.trim() ? `BODY: keep exactly the figure of the first frame (${describirCuerpo(o.cuerpo)}) in every movement.` : '',
     `SETTING / LIGHT: ${o.escenario.trim()}. Motivated natural light from the window; light direction stays consistent.`,
     `CAMERA: ${g.en}.`,
     `ACTION: An unguarded, unperformed moment. ${ella} talks to the camera as if to a close friend, not presenting. Micro-gestures with a reason: a brief glance away while she thinks, eyebrows lifting on the key word, a small exhale or soft laugh, a hand that moves naturally once and rests again. Natural blinking, a quiet breath before the first word.${o.gestos ? ` ${o.gestos.trim().slice(0, 400)}` : ''}`,
