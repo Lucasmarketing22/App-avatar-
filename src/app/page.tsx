@@ -16,7 +16,7 @@ import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 
-import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, pistaFija, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
+import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, pistaFija, pistaVestuario, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
@@ -440,7 +440,7 @@ export default function Estudio() {
   async function generarUnificado() {
     if (busy) return;
     const refsExtra: { url: string; hint: string }[] = [];
-    if (vestidoActual) refsExtra.push({ url: vestidoActual.url, hint: 'One reference image shows an outfit; dress her in that exact outfit, keeping its shape, color, fabric and details.' });
+    if (vestidoActual) refsExtra.push({ url: vestidoActual.url, hint: pistaVestuario('One reference image') });
     for (const g of GALERIAS) {
       const item = (galerias[g.key] ?? []).find((i) => i.id === galSel[g.key]);
       if (item) refsExtra.push({ url: item.url, hint: g.hint });

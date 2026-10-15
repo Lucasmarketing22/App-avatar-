@@ -9,10 +9,10 @@
 export type GaleriaDef = { key: string; titulo: string; emoji: string; hint: string };
 
 export const GALERIAS: GaleriaDef[] = [
-  { key: 'peinados', titulo: 'Peinados', emoji: '💇', hint: 'Give her a hairstyle like the one shown in the hairstyle reference image.' },
+  { key: 'peinados', titulo: 'Peinados', emoji: '💇', hint: "Give her a hairstyle like the one shown in the hairstyle reference image (copy only the hairstyle, keeping her own hair color, face and body)." },
   { key: 'expresion', titulo: 'Expresión', emoji: '😊', hint: 'One reference image is a close-up of the woman showing a specific facial expression; reproduce that same facial expression (eyes, mouth, mood) on her face.' },
-  { key: 'poses', titulo: 'Poses / Gestos', emoji: '🤳', hint: 'Use a pose and body language like the one shown in the pose reference image.' },
-  { key: 'escenas', titulo: 'Escenas / Fondos', emoji: '🏙️', hint: 'Place her in a setting and background like the one shown in the scene reference image.' },
+  { key: 'poses', titulo: 'Poses / Gestos', emoji: '🤳', hint: "Use a pose and body language like the one shown in the pose reference image (copy only the pose, not that person's body, measurements, face or clothes)." },
+  { key: 'escenas', titulo: 'Escenas / Fondos', emoji: '🏙️', hint: 'Place her in a setting and background like the one shown in the scene reference image (ignore any person in that image).' },
   { key: 'cine', titulo: 'Looks de cine', emoji: '🎥', hint: 'Match the color grade, lighting and cinematic mood of the film-look reference image.' },
 ];
 

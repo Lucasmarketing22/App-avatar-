@@ -170,6 +170,15 @@ export function pistaCuerpo(cuerpo?: string): string {
   return `BODY (top priority, in every image): ${d}. Keep exactly these proportions in any pose, angle, outfit and framing — also when sitting, lying down, in loose clothes or in a medium shot. Never slim down, flatten or shrink her bust, hips or butt, and never widen her waist. Apply these proportions ONLY to her body; her face must stay exactly the same as in the face reference images (do not make the face rounder, wider or fuller).`;
 }
 
+/**
+ * Foto de vestuario: se toma SOLO la ropa. La persona que la tiene puesta
+ * (cuerpo, medidas, cara, pelo, pose, fondo) no se copia: la ropa se adapta
+ * al cuerpo de la modelo.
+ */
+export function pistaVestuario(cual: string): string {
+  return `${cual} is ONLY an outfit reference: dress her in exactly those garments (same pieces, colors, fabric, pattern, fit and details). Take NOTHING else from that image — not the wearer's body, measurements, bust, waist, hip or butt size, height, skin, face, hair, pose or background. The clothes must adapt to HER own body and proportions, fitting over her curves like real clothes would.`;
+}
+
 /** Texto para la foto de cuerpo cuando va como referencia extra. */
 export function pistaFotoCuerpo(cual: string): string {
   return `${cual} shows her body: keep exactly that body shape, curves and proportions (bust, waist, hips, butt). Do NOT copy its clothing, pose or background.`;
@@ -287,13 +296,13 @@ export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: 
   const cuerpos = nums('cuerpo');
   if (cuerpos.length) partes.push(pistaFotoCuerpo(lista(cuerpos)));
   const vest = nums('vestuario');
-  if (vest.length) partes.push(`${lista(vest)} show an outfit: dress her in exactly that outfit (same garments, colors, fabric, fit and details).`);
+  if (vest.length) partes.push(pistaVestuario(lista(vest)));
   const esc = nums('escena');
-  if (esc.length) partes.push(`${lista(esc)} show a place: put her in that same setting, background and lighting${captura.length ? ' (this replaces the background of the video frame, but keep the pose and framing of the frame)' : ''}.`);
+  if (esc.length) partes.push(`${lista(esc)} show a place: put her in that same setting, background and lighting${captura.length ? ' (this replaces the background of the video frame, but keep the pose and framing of the frame)' : ''}. Ignore any person in that image.`);
   const pein = nums('peinado');
-  if (pein.length) partes.push(`${lista(pein)} show a hairstyle: give her exactly that hairstyle (cut, length, volume, updo or parting), keeping her own hair color.`);
+  if (pein.length) partes.push(`${lista(pein)} show a hairstyle: give her exactly that hairstyle (cut, length, volume, updo or parting), keeping her own hair color. Copy ONLY the hairstyle, not that person's face or body.`);
   const pose = nums('pose');
-  if (pose.length) partes.push(`${lista(pose)} show a pose: make her do that same body pose, gesture and hand position${captura.length ? ' (this replaces the pose of the video frame)' : ''}.`);
+  if (pose.length) partes.push(`${lista(pose)} show a pose: make her do that same body pose, gesture and hand position${captura.length ? ' (this replaces the pose of the video frame)' : ''}. Copy ONLY the pose, not that person's body, measurements, face or clothes.`);
   const extras = nums('imagen');
   if (extras.length) partes.push(`${lista(extras)} are extra references: use what the instructions say about them.`);
 
