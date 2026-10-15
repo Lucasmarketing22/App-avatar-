@@ -20,7 +20,7 @@ const HERRAMIENTA = {
         maxItems: 3,
         items: {
           type: 'object',
-          required: ['estilo', 'titulo', 'gancho', 'desarrollo', 'cierre', 'texto', 'gestos', 'caption'],
+          required: ['estilo', 'titulo', 'gancho', 'desarrollo', 'cierre', 'texto', 'gestos', 'caption', 'traduccion'],
           properties: {
             estilo: { type: 'string', enum: ['storytime', 'opinion', 'consejo'] },
             titulo: { type: 'string', description: 'Título corto en español para reconocerlo (máx. 6 palabras).' },
@@ -30,6 +30,7 @@ const HERRAMIENTA = {
             texto: { ...TEXTO, description: 'Todo lo que dice, de corrido: gancho + desarrollo + cierre.' },
             gestos: { ...TEXTO, description: 'Microgestos y acciones, en inglés.' },
             caption: { ...TEXTO, description: 'Texto para publicar con 3-5 hashtags, en el idioma pedido.' },
+            traduccion: { ...TEXTO, description: 'Traducción al español rioplatense de todo el texto que dice.' },
           },
         },
       },

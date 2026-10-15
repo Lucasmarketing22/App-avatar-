@@ -67,6 +67,8 @@ export type Guion = {
   gestos: string;
   /** Texto para publicar (en el idioma elegido). */
   caption: string;
+  /** Lo que dice, traducido al español (para entender qué va a decir). */
+  traduccion: string;
 };
 
 /** Pista para la foto inicial: ella sentada en el escenario, con encuadre de celular. */
@@ -139,6 +141,7 @@ export function pedidoGuiones(o: { tema: string; idioma: string; dur: number; no
     'Each script needs: a hook that stops the scroll in the first 2 seconds (curiosity, tension or a bold statement — never "Hi guys" or a greeting), a short development, and a closing line that invites a comment or a follow (soft, not salesy).',
     'Also write "gestos": 1-2 short sentences IN ENGLISH with the micro-gestures and small actions that fit the script (e.g. "She glances away and laughs softly before the hook, then leans in slightly on the key line"). Keep them subtle and motivated.',
     'And "caption": a short post caption in the same language as the spoken text, with 3-5 relevant hashtags.',
+    'And "traduccion": a faithful translation into Rioplatense Spanish (Argentina) of the full spoken text ("texto"), so the creator understands exactly what she says.',
     'Nothing explicit, no medical/financial claims, no mention of being AI.',
     'Answer by calling the tool entregar_guiones.',
   ].filter(Boolean).join('\n');
@@ -158,6 +161,7 @@ export function limpiarGuiones(x: unknown): Guion[] {
       texto: s(o.texto, 900) || [gancho, desarrollo, cierre].filter(Boolean).join(' '),
       gestos: s(o.gestos, 400),
       caption: s(o.caption, 400),
+      traduccion: s(o.traduccion, 1200),
     };
   }).filter((g) => g.texto);
 }

@@ -50,6 +50,9 @@ type Estado = {
   texto: string;
   gestos: string;
   caption: string;
+  /** Traducción al español de lo que dice, y el texto al que corresponde. */
+  traduccion: string;
+  traduccionDe: string;
   motor: Motor;
   calidad: '720p' | '1080p';
   vozOmni: string;
@@ -59,7 +62,7 @@ type Estado = {
 };
 const VACIO: Estado = {
   escenario: 'sillon', escenarioTexto: '', grabacion: 'apoyado', ropa: 'foto', ropaUrl: '', ropaTexto: '', instr: '', fotoModelo: 'seedream',
-  fotos: [], elegida: '', fotoTask: '', idioma: '', tema: '', extra: '', dur: 10, guiones: [], guionSel: -1, texto: '', gestos: '', caption: '',
+  fotos: [], elegida: '', fotoTask: '', idioma: '', tema: '', extra: '', dur: 10, guiones: [], guionSel: -1, texto: '', gestos: '', caption: '', traduccion: '', traduccionDe: '',
   motor: 'kling3', calidad: '720p', vozOmni: VOCES_OMNI[0].id, videoTask: '', resultado: '',
 };
 const CLAVE = 'musa-hablados-v1';
@@ -79,6 +82,9 @@ export default function Hablados(props: Props) {
   const [creandoFoto, setCreandoFoto] = useState(false);
   const [creandoVideo, setCreandoVideo] = useState(false);
   const [escribiendo, setEscribiendo] = useState(false);
+  const [traduciendo, setTraduciendo] = useState(false);
+  const [errorGuion, setErrorGuion] = useState('');
+  const pasoGuion = useRef<HTMLDivElement | null>(null);
   const [subiendoRopa, setSubiendoRopa] = useState(false);
   const [subiendoVoz, setSubiendoVoz] = useState(0);
   const [procesandoVoz, setProcesandoVoz] = useState(false);
@@ -204,8 +210,8 @@ export default function Hablados(props: Props) {
 
   /* ----- 5. Guiones ----- */
   async function escribirGuiones() {
-    if (!e.tema.trim() || escribiendo) { if (!e.tema.trim()) setError('Escribí de qué querés que hable.'); return; }
-    setError(''); setEscribiendo(true);
+    if (!e.tema.trim() || escribiendo) { if (!e.tema.trim()) setErrorGuion('Escribí de qué querés que hable.'); return; }
+    setErrorGuion(''); setEscribiendo(true);
     try {
       const r = await fetch('/api/guiones', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -213,13 +219,27 @@ export default function Hablados(props: Props) {
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !Array.isArray(d.guiones)) throw new Error(d.error ?? 'No se pudieron escribir los guiones.');
-      set({ guiones: d.guiones, guionSel: -1, texto: '', gestos: '', caption: '' });
+      if (!d.guiones.length) throw new Error('La IA no devolvió guiones. Probá de nuevo.');
+      set({ guiones: d.guiones, guionSel: -1 });
       onSaldo();
-    } catch (er) { setError(er instanceof Error ? er.message : 'No se pudieron escribir los guiones.'); } finally { setEscribiendo(false); }
+    } catch (er) { setErrorGuion(er instanceof Error ? er.message : 'No se pudieron escribir los guiones.'); } finally { setEscribiendo(false); }
   }
   function elegirGuion(i: number) {
     const g = e.guiones[i];
-    if (g) set({ guionSel: i, texto: g.texto, gestos: g.gestos, caption: g.caption });
+    if (!g) return;
+    setErrorGuion('');
+    set({ guionSel: i, texto: g.texto, gestos: g.gestos ?? '', caption: g.caption ?? '', traduccion: g.traduccion ?? '', traduccionDe: g.traduccion ? g.texto : '' });
+  }
+  async function traducir() {
+    const texto = e.texto.trim();
+    if (!texto || traduciendo) return;
+    setErrorGuion(''); setTraduciendo(true);
+    try {
+      const r = await fetch('/api/traducir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || typeof d.traduccion !== 'string') throw new Error(d.error ?? 'No se pudo traducir.');
+      set({ traduccion: d.traduccion, traduccionDe: texto });
+    } catch (er) { setErrorGuion(er instanceof Error ? er.message : 'No se pudo traducir.'); } finally { setTraduciendo(false); }
   }
   async function copiarCaption() {
     try { await navigator.clipboard.writeText(e.caption); setCopiado(true); setTimeout(() => setCopiado(false), 2000); } catch { /* */ }
@@ -390,7 +410,7 @@ export default function Hablados(props: Props) {
       </div>
 
       {/* 5. Guion */}
-      <div className="panel vr-paso hb-paso">
+      <div className="panel vr-paso hb-paso" ref={pasoGuion}>
         <div className="vr-tit">{n(5)} ✍️ Guion automático</div>
         <div className="vr-tit chico">⏱️ Duración</div>
         <div className="lz-chips">
@@ -402,30 +422,45 @@ export default function Hablados(props: Props) {
           {escribiendo ? 'Escribiendo… (unos segundos)' : e.guiones.length ? '🔄 Escribir otros 3' : '✨ Escribir 3 guiones'}
         </button>
         <p className="vr-nota">Gancho para frenar el scroll, desarrollo y cierre, medidos para {e.dur} s. Cuesta menos de 1 centavo.</p>
+        {errorGuion ? <p className="errbox" style={{ margin: '8px 0 0' }}>{errorGuion}</p> : null}
         {e.guiones.length ? (
-          <div className="hb-guiones">
-            {e.guiones.map((g, i) => (
-              <button key={i} className={`hb-guion ${e.guionSel === i ? 'on' : ''}`} onClick={() => elegirGuion(i)}>
-                <b>{e.guionSel === i ? '✅ ' : ''}{ESTILOS.find((x) => x.id === g.estilo)?.label ?? g.estilo}{g.titulo ? ` · ${g.titulo}` : ''}</b>
-                <p><span className="hb-et">Gancho</span>{g.gancho}</p>
-                <p><span className="hb-et">Desarrollo</span>{g.desarrollo}</p>
-                <p><span className="hb-et">Cierre</span>{g.cierre}</p>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {e.guionSel >= 0 ? (
           <>
-            <div className="vr-tit chico" style={{ marginTop: 10 }}>🗣️ Lo que va a decir <span className="vr-nota" style={{ margin: 0, fontWeight: 600 }}>(podés editarlo)</span></div>
-            <textarea className="textarea" value={e.texto} onChange={(ev) => set({ texto: ev.target.value })} style={{ height: 90 }} />
-            <p className={palabras > max ? 'lz-err' : 'vr-nota'}>{palabras} palabras{palabras > max ? ` · para ${durVideo} s conviene hasta ${max}: si no, va a hablar apurada o se corta.` : ` · entra bien en ${durVideo} s.`}</p>
-            {e.caption ? (
-              <div className="vr-fila">
-                <p className="vr-nota" style={{ margin: 0, flex: 1 }}>📝 {e.caption}</p>
-                <button className="btn-ghost" onClick={copiarCaption} style={{ padding: '6px 10px', fontSize: 12 }}>{copiado ? '✓' : 'Copiar'}</button>
-              </div>
-            ) : null}
+            <p className="vr-nota" style={{ marginTop: 10 }}>👇 Tocá el guion que más te guste para elegirlo.</p>
+            <div className="hb-guiones">
+              {e.guiones.map((g, i) => (
+                <div key={i} role="button" tabIndex={0} className={`hb-guion ${e.guionSel === i ? 'on' : ''}`} onClick={() => elegirGuion(i)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') elegirGuion(i); }}>
+                  <b>{e.guionSel === i ? '✅ Elegido · ' : ''}{ESTILOS.find((x) => x.id === g.estilo)?.label ?? g.estilo}{g.titulo ? ` · ${g.titulo}` : ''}</b>
+                  <p><span className="hb-et">Gancho</span>{g.gancho}</p>
+                  <p><span className="hb-et">Desarrollo</span>{g.desarrollo}</p>
+                  <p><span className="hb-et">Cierre</span>{g.cierre}</p>
+                  {g.traduccion ? <p className="hb-trad">🇦🇷 {g.traduccion}</p> : null}
+                </div>
+              ))}
+            </div>
           </>
+        ) : null}
+        <div className="vr-tit chico" style={{ marginTop: 12 }}>🗣️ Lo que va a decir <span className="vr-nota" style={{ margin: 0, fontWeight: 600 }}>(podés editarlo o escribirlo vos)</span></div>
+        <textarea className="textarea" value={e.texto} onChange={(ev) => set({ texto: ev.target.value })} placeholder="Elegí un guion de arriba o escribí acá lo que dice, en el idioma del video." style={{ height: 90 }} />
+        {e.texto.trim() ? (
+          <>
+            <p className={palabras > max ? 'lz-err' : 'vr-nota'}>{palabras} palabras{palabras > max ? ` · para ${durVideo} s conviene hasta ${max}: si no, va a hablar apurada o se corta.` : ` · entra bien en ${durVideo} s.`}</p>
+            <div className="hb-trad-caja">
+              <div className="hb-trad-tit">🇦🇷 Traducción</div>
+              {e.traduccion && e.traduccionDe === e.texto.trim()
+                ? <p>{e.traduccion}</p>
+                : (
+                  <button className="btn-soft" onClick={traducir} disabled={traduciendo} style={{ width: '100%', padding: '8px 10px', fontSize: 13 }}>
+                    {traduciendo ? 'Traduciendo…' : e.traduccion ? '🔄 Traducir de nuevo (cambiaste el texto)' : '🇦🇷 Ver qué dice en español'}
+                  </button>
+                )}
+            </div>
+          </>
+        ) : null}
+        {e.caption && e.texto.trim() ? (
+          <div className="vr-fila">
+            <p className="vr-nota" style={{ margin: 0, flex: 1 }}>📝 {e.caption}</p>
+            <button className="btn-ghost" onClick={copiarCaption} style={{ padding: '6px 10px', fontSize: 12 }}>{copiado ? '✓' : 'Copiar'}</button>
+          </div>
         ) : null}
       </div>
 
@@ -450,7 +485,11 @@ export default function Hablados(props: Props) {
           </>
         ) : null}
         {!e.elegida ? <p className="vr-nota">👆 Falta aprobar la foto inicial (paso 3).</p> : null}
-        {e.elegida && !e.texto.trim() ? <p className="vr-nota">👆 Falta elegir un guion (paso 5).</p> : null}
+        {e.elegida && !e.texto.trim() ? (
+          <button className="btn-ghost" style={{ width: '100%', marginTop: 6, fontSize: 13 }} onClick={() => pasoGuion.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+            👆 Falta el guion: elegí uno o escribilo en el paso 5
+          </button>
+        ) : null}
         <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo || !e.elegida || !e.texto.trim()} onClick={() => setConfirmar(true)}>
           {creandoVideo ? 'Creando video… (unos minutos)' : e.resultado ? '🔄 Crear otro video' : '🎬 Crear video'}
         </button>
