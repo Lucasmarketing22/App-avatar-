@@ -481,11 +481,12 @@ export default function Estudio() {
     const deLaFoto = modelas.find((m) => m.refs.some((u) => c.refs?.includes(u)));
     const modeloFoto = deLaFoto ?? personaje;
     const caras = modeloFoto.refs;
+    const fotoCuerpo = modeloFoto.entero || modeloFoto.medio || '';
     const a = c.aspect || aspect;
     setLightbox(null); setVista('crear'); setAspect(a);
     lanzar(
-      TOMAS_SESION.map((t) => componerSesion(t, caras.length > 0, modeloFoto.cuerpo, modeloFoto.promptFijo)),
-      [c.url, ...caras],
+      TOMAS_SESION.map((t) => componerSesion(t, caras.length > 0, modeloFoto.cuerpo, modeloFoto.promptFijo, !!fotoCuerpo)),
+      [c.url, ...caras, ...(fotoCuerpo ? [fotoCuerpo] : [])],
       { aspect: a, modelo },
       `📸 Sesión de fotos: generando ${TOMAS_SESION.length} tomas del mismo set… (puede tardar ~1 minuto)`,
     );
@@ -711,16 +712,19 @@ export default function Estudio() {
       const pasoPrevio = escenaActiva || !!instr || mAdaptar;
       if (pasoPrevio) {
         const caras = modeloFoto.refs;
+        // Su foto de cuerpo siempre va última: la figura sale igual sin tener que aclararlo.
+        const fotoCuerpo = modeloFoto.entero || modeloFoto.medio || '';
+        const conCuerpo = !!fotoCuerpo && fotoCuerpo !== mFoto;
         let prompt: string; let imageUrls: string[]; let asp: string;
         if (escenaActiva) {
           setVidMsg(`🛏️ Paso 1 de 2: poniendo a ${modeloFoto.nombre || 'tu modelo'} en el escenario del video${instr ? ' con los cambios' : ''}… (~1 min)`);
-          prompt = componerEscena(instr, true, modeloFoto.cuerpo, modeloFoto.promptFijo);
-          imageUrls = [mCuadro, ...(caras.length ? caras : [mFoto])];
+          prompt = componerEscena(instr, true, modeloFoto.cuerpo, modeloFoto.promptFijo, conCuerpo);
+          imageUrls = [mCuadro, ...(caras.length ? caras : [mFoto]), ...(conCuerpo ? [fotoCuerpo] : [])];
           asp = mCuadroAsp || await aspectoDe(mCuadro);
         } else {
           setVidMsg(`✍️ Paso 1 de 2: preparando la foto de tu avatar${mAdaptar ? ' con el encuadre del video' : ''}${instr ? ' con los cambios' : ''}… (~1 min)`);
-          prompt = componerCambioAvatar(instr, caras.length > 0, { cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo, encuadre: mAdaptar && mEncuadre ? mEncuadre : undefined });
-          imageUrls = [mFoto, ...caras];
+          prompt = componerCambioAvatar(instr, caras.length > 0, { cuerpo: modeloFoto.cuerpo, fijo: modeloFoto.promptFijo, encuadre: mAdaptar && mEncuadre ? mEncuadre : undefined, conFotoCuerpo: conCuerpo });
+          imageUrls = [mFoto, ...caras, ...(conCuerpo ? [fotoCuerpo] : [])];
           asp = await aspectoDe(mFoto);
         }
         const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: asp, modelo: 'seedream' }) });

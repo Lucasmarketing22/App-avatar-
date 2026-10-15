@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { describirCuerpo } from '@/lib/estudio/prompt';
 import { createTask } from '@/lib/ia/kie';
 import { registrarTarea, urlDeAviso } from '@/lib/tareas';
 
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
 
   const cuerpo = (body?.cuerpo ?? '').trim().slice(0, 200);
   const extra = [
-    cuerpo ? `Her body shape and measurements must stay: ${cuerpo}; her face stays exactly as in the reference image.` : '',
+    cuerpo ? `Her body must keep exactly these proportions the whole time (${describirCuerpo(cuerpo)}); never slimmer, flatter or with a wider waist. Her face stays exactly as in the reference image.` : '',
     (body?.fijo ?? '').trim() ? `Fixed traits (always): ${(body?.fijo ?? '').trim().slice(0, 800)}.` : '',
     (body?.prompt ?? '').trim(),
   ].filter(Boolean).join(' ');
