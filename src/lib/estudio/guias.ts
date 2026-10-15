@@ -42,7 +42,7 @@ export const GUIAS: Record<GuiaId, { titulo: string; pasos: string[] }> = {
       'Paso tres: el vestuario. Subí la foto de la ropa a seguir o escribila, y tocá Crear foto. Sale tu modelo vestida así, sentada en el escenario. Tocá la que te guste para aprobarla: es el primer cuadro del video.',
       'Paso cuatro: escribí el idioma, el acento y el tono. Si tocás Dejar como predeterminado, queda guardado para la próxima.',
       'Paso cinco: elegí la duración, escribí de qué habla y tocá Escribir 3 guiones. Cada uno trae gancho, desarrollo y cierre. Tocá el que más te guste; lo podés editar.',
-      'Paso seis: elegí el motor. A Kling 3.0 se le manda la muestra de voz de tu modelo; Gemini Omni es más barato y usa siempre la misma voz de su catálogo. Tocá Crear video, revisá la pantalla de confirmación con el costo y listo: el video queda en tu galería.',
+      'Paso seis: el motor recomendado es Gemini Omni: hasta 10 segundos, más barato, y usa siempre la misma voz de su catálogo. Kling 3.0 es más caro y se le manda la muestra de voz de tu modelo. Tocá Crear video, revisá la pantalla de confirmación con el costo y listo: el video queda en tu galería.',
     ],
   },
   motion: {

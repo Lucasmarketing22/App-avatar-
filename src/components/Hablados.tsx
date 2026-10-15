@@ -71,10 +71,13 @@ type Estado = {
 const VACIO: Estado = {
   escenario: 'sillon', escenarioTexto: '', grabacion: 'apoyado', ropa: 'foto', ropaUrl: '', ropaTexto: '', instr: '', fotoModelo: 'nanopro',
   fotos: [], elegida: '', fotoTask: '', idioma: '', tema: '', extra: '', dur: 10, guiones: [], guionSel: -1, texto: '', gestos: '', caption: '', traduccion: '', traduccionDe: '',
-  motor: 'kling3', calidad: '720p', vozOmni: VOCES_OMNI[0].id, videoTask: '', resultado: '',
+  motor: 'omni', calidad: '720p', vozOmni: VOCES_OMNI[0].id, videoTask: '', resultado: '',
 };
 const CLAVE = 'musa-hablados-v1';
-const DURS = [6, 8, 10, 12, 15];
+/** Duraciones que se pueden elegir con cada motor (Omni hace hasta 10 s). */
+const DURS: Record<Motor, number[]> = { omni: [4, 6, 8, 10], kling3: [6, 8, 10, 12, 15] };
+/** Una sola vez: el usuario eligió Omni como motor principal (antes quedaba Kling guardado). */
+const CLAVE_OMNI = 'musa-hablados-omni-v1';
 const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
 const contar = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
@@ -119,7 +122,15 @@ export default function Hablados(props: Props) {
   const [listo, setListo] = useState(false);
   useEffect(() => {
     vivo.current = true;
-    try { const s = localStorage.getItem(CLAVE); if (s) setE({ ...VACIO, ...(JSON.parse(s) as Estado) }); } catch { /* */ }
+    try {
+      const s = localStorage.getItem(CLAVE);
+      if (s) {
+        const x = { ...VACIO, ...(JSON.parse(s) as Estado) };
+        if (!localStorage.getItem(CLAVE_OMNI)) { x.motor = 'omni'; x.dur = durValida('omni', x.dur); }
+        setE(x);
+      }
+      localStorage.setItem(CLAVE_OMNI, '1');
+    } catch { /* */ }
     setListo(true);
     fetch('/api/hablados').then((r) => r.json()).then((d) => {
       if (d && typeof d.idioma === 'string') setIdiomaDef(d.idioma);
@@ -443,7 +454,7 @@ export default function Hablados(props: Props) {
         <div className="vr-tit">{n(5)} ✍️ Guion automático</div>
         <div className="vr-tit chico">⏱️ Duración</div>
         <div className="lz-chips">
-          {DURS.map((d) => <button key={d} className={`opt ${e.dur === d ? 'on' : ''}`} onClick={() => set({ dur: d })}>{d} s</button>)}
+          {DURS[e.motor].map((d) => <button key={d} className={`opt ${e.dur === d ? 'on' : ''}`} onClick={() => set({ dur: d })}>{d} s</button>)}
         </div>
         <textarea className="textarea" value={e.tema} onChange={(ev) => set({ tema: ev.target.value })} placeholder="¿De qué habla? Ej: lo que nadie te dice de mudarte sola a otra ciudad" style={{ height: 64 }} />
         <input className="input" value={e.extra} onChange={(ev) => set({ extra: ev.target.value })} placeholder="Nota opcional: público, producto, palabra a evitar…" style={{ width: '100%', boxSizing: 'border-box', marginTop: 6 }} />
@@ -497,8 +508,8 @@ export default function Hablados(props: Props) {
       <div className="panel vr-paso hb-paso">
         <div className="vr-tit">{n(6)} 🎬 Video</div>
         <div className="lz-chips">
-          <button className={`opt ${e.motor === 'kling3' ? 'on' : ''}`} onClick={() => set({ motor: 'kling3' })}>Kling 3.0 · con su muestra de voz</button>
-          <button className={`opt ${e.motor === 'omni' ? 'on' : ''}`} onClick={() => set({ motor: 'omni' })}>Gemini Omni · hasta 10 s</button>
+          <button className={`opt ${e.motor === 'omni' ? 'on' : ''}`} onClick={() => set({ motor: 'omni', dur: durValida('omni', e.dur) })}>Gemini Omni ⭐ · hasta 10 s</button>
+          <button className={`opt ${e.motor === 'kling3' ? 'on' : ''}`} onClick={() => set({ motor: 'kling3' })}>Kling 3.0 · más caro</button>
         </div>
         <div className="lz-chips">
           {(['720p', '1080p'] as const).map((c) => <button key={c} className={`opt ${e.calidad === c ? 'on' : ''}`} onClick={() => set({ calidad: c })}>{c}</button>)}
@@ -510,7 +521,7 @@ export default function Hablados(props: Props) {
             <div className="lz-chips">
               {VOCES_OMNI.map((v) => <button key={v.id} className={`opt ${e.vozOmni === v.id ? 'on' : ''}`} onClick={() => set({ vozOmni: v.id })}>{v.label}</button>)}
             </div>
-            {e.dur > 10 ? <p className="lz-err">Gemini Omni hace hasta 10 s: el video va a durar 10 s (acortá el guion).</p> : null}
+            <p className="vr-nota">La voz es del catálogo de Omni (no la muestra del paso 1), pero siempre la misma.</p>
           </>
         ) : null}
         {!e.elegida ? <p className="vr-nota">👆 Falta aprobar la foto inicial (paso 3).</p> : null}
