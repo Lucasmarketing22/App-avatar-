@@ -45,11 +45,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `La muestra dura ${Math.round(durTotal)} s y hacen falta al menos ${MIN}. Subí un video donde hable más tiempo.` }, { status: 400 });
       }
       const dur = durTotal ? Math.min(MAX, durTotal) : MAX;
-      const { code } = await correrFfmpeg([
-        '-hide_banner', '-y', '-i', entrada, '-vn', '-t', String(dur),
+      const base = ['-hide_banner', '-y', '-i', entrada, '-vn', '-t', String(dur)];
+      const fin = ['-ac', '1', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '192k', salida];
+      let { code } = await correrFfmpeg([
+        ...base,
         '-af', `highpass=f=80,afftdn=nr=10:nf=-50,loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=in:d=0.05,afade=t=out:st=${Math.max(0, dur - 0.15).toFixed(2)}:d=0.15`,
-        '-ac', '1', '-ar', '44100', '-c:a', 'libmp3lame', '-b:a', '192k', salida,
+        ...fin,
       ]);
+      // Si algún filtro de limpieza no está disponible, se guarda la voz sin limpiar (mejor que nada).
+      if (code !== 0) ({ code } = await correrFfmpeg([...base, ...fin]));
       if (code !== 0) return NextResponse.json({ error: 'No se pudo sacar la voz de este archivo.' }, { status: 500 });
 
       const bytes = new Uint8Array(await fs.readFile(salida));
