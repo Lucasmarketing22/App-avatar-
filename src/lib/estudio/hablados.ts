@@ -1,4 +1,4 @@
-import { describirCuerpo } from './prompt';
+import { describirCuerpo, medidasDe } from './prompt';
 
 /**
  * "Hablados": videos de la modelo hablando a cámara, casual y creíble.
@@ -75,12 +75,12 @@ export type Guion = {
 export function pistaFotoInicial(escenario: string, grabacion: string): string {
   const g = GRABACIONES.find((x) => x.id === grabacion) ?? GRABACIONES[0];
   const encuadre = g.id === 'selfie'
-    ? 'Front-camera selfie framing from arm\'s length, slightly above eye level, her face and shoulders filling the upper half of a vertical 9:16 frame, one arm extended toward the camera (the phone itself is not visible).'
+    ? 'Front-camera selfie framing from arm\'s length, slightly above eye level, vertical 9:16: her face in the upper third and her upper body visible down to the waist, one arm extended toward the camera (the phone itself is not visible).'
     : 'Vertical 9:16 phone framing from about one metre away at chest height: head, shoulders and hands visible, slightly off-center, she looks into the lens as if about to talk to a friend.';
   return [
     `She is ${escenario.trim()}.`,
     encuadre,
-    'Relaxed, natural posture, mouth closed or slightly parted, an ordinary candid moment right before she starts talking. Real, lived-in place with motivated natural light.',
+    'Relaxed, natural posture, mouth closed or slightly parted, an ordinary candid moment right before she starts talking. Her own figure (as described) is clearly recognizable in the frame. Real, lived-in place with motivated natural light.',
   ].join(' ');
 }
 
@@ -112,7 +112,7 @@ export function componerVideoHablado(o: {
     `FORMAT: ${o.dur}-second, 9:16 live-action personal phone video. One continuous take, no cuts. Contemporary phone footage, beauty mode off.`,
     sujeto,
     fijo ? `Her fixed traits: ${fijo.slice(0, 300)}` : '',
-    o.cuerpo?.trim() ? `BODY: keep exactly the figure of the first frame (${describirCuerpo(o.cuerpo)}) in every movement.` : '',
+    medidasDe(o.cuerpo, o.fijo) ? `BODY: keep exactly the figure of the first frame (${describirCuerpo(medidasDe(o.cuerpo, o.fijo))}) in every movement.` : '',
     `SETTING / LIGHT: ${o.escenario.trim()}. Motivated natural light from the window; light direction stays consistent.`,
     `CAMERA: ${g.en}.`,
     `ACTION: An unguarded, unperformed moment. ${ella} talks to the camera as if to a close friend, not presenting. Micro-gestures with a reason: a brief glance away while she thinks, eyebrows lifting on the key word, a small exhale or soft laugh, a hand that moves naturally once and rests again. Natural blinking, a quiet breath before the first word.${o.gestos ? ` ${o.gestos.trim().slice(0, 400)}` : ''}`,

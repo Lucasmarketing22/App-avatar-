@@ -16,7 +16,7 @@ import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 
-import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, pistaCuerpo, pistaFija, pistaVestuario, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
+import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, describirCuerpo, medidasDe, pistaCuerpo, pistaFija, pistaVestuario, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
@@ -451,11 +451,12 @@ export default function Estudio() {
     if (!imageUrls.length) { setError('Subí al menos una imagen: el personaje (cara) o una referencia.'); setPhase('error'); return; }
     const faceHint = personaje.refs.length ? ["One or more reference images show the woman's face and identity; keep her face exactly."] : [];
     const figuraHint = fotoCuerpo ? ["One reference image shows her body: keep exactly the same body shape, curves and proportions as in that image. Do NOT copy its clothing, pose or plain background."] : [];
-    const cuerpoHint = pistaCuerpo(personaje.cuerpo);
-    const fijoHint = pistaFija(personaje.promptFijo);
+    const medidas = medidasDe(personaje.cuerpo, personaje.promptFijo);
+    const cuerpoHint = pistaCuerpo(medidas);
+    const fijoHint = pistaFija(personaje.promptFijo, !medidas);
     const hints = [...faceHint, ...figuraHint, ...(cuerpoHint ? [cuerpoHint] : []), ...(fijoHint ? [fijoHint] : []), ...refsExtra.map((r) => r.hint)];
     const texto = [editPrompt.trim(), extra.trim()].filter(Boolean).join('. ');
-    const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel });
+    const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel, figura: describirCuerpo(medidas) });
     lanzar(prompt, imageUrls, { aspect, modelo });
   }
 
