@@ -15,15 +15,34 @@ export function textoVestuario(desc: string): string {
 }
 
 /**
- * Saca las fotos de vestuario de la lista de imágenes y las cambia por su
- * descripción en texto: así la IA de imagen nunca ve el cuerpo de la persona
- * que tenía puesta la ropa. Si no se puede describir, la foto queda (como antes).
+ * Cómo se usa la foto de la ropa (lo elige la usuaria, se recuerda en el celu):
+ *  - 'cuerpo': la foto NO va a la IA de imagen, va su descripción. El cuerpo
+ *    sale como el de la modelo; estampados muy detallados pueden variar.
+ *  - 'exacta': la foto va tal cual. La ropa sale igual, pero la IA puede
+ *    copiar también el cuerpo de quien la tiene puesta.
  */
-export async function vestuarioATexto<T extends { url: string; rol: RolImagen }>(items: T[]): Promise<{ items: T[]; textos: string[]; descripciones: string[] }> {
+export type ModoRopa = 'cuerpo' | 'exacta';
+const CLAVE_MODO = 'musa-ropa-modo';
+export function prefModoRopa(): ModoRopa {
+  try { return localStorage.getItem(CLAVE_MODO) === 'exacta' ? 'exacta' : 'cuerpo'; } catch { return 'cuerpo'; }
+}
+export function guardarModoRopa(m: ModoRopa) {
+  try { localStorage.setItem(CLAVE_MODO, m); } catch { /* */ }
+}
+
+/**
+ * En modo 'cuerpo' saca las fotos de vestuario de la lista de imágenes y las
+ * cambia por su descripción en texto: así la IA de imagen nunca ve el cuerpo
+ * de la persona que tenía puesta la ropa. Si alguna no se puede describir, esa
+ * foto queda y `fallo` avisa (para decírselo a la usuaria).
+ */
+export async function vestuarioATexto<T extends { url: string; rol: RolImagen }>(items: T[], modo: ModoRopa = prefModoRopa()): Promise<{ items: T[]; textos: string[]; descripciones: string[]; fallo: boolean }> {
   const vest = items.filter((x) => x.rol === 'vestuario');
-  if (!vest.length) return { items, textos: [], descripciones: [] };
+  if (!vest.length || modo === 'exacta') return { items, textos: [], descripciones: [], fallo: false };
   const descs = await Promise.all(vest.map((x) => describirVestuario(x.url)));
   const ok = new Set(vest.filter((_, i) => descs[i]).map((x) => x.url));
   const descripciones = descs.filter((d): d is string => !!d);
-  return { items: items.filter((x) => !(x.rol === 'vestuario' && ok.has(x.url))), textos: descripciones.map(textoVestuario), descripciones };
+  return { items: items.filter((x) => !(x.rol === 'vestuario' && ok.has(x.url))), textos: descripciones.map(textoVestuario), descripciones, fallo: descripciones.length < vest.length };
 }
+
+export const AVISO_FALLO_ROPA = 'No se pudo leer la ropa de la foto, así que se usó la foto tal cual: puede copiar el cuerpo de quien la tiene puesta.';

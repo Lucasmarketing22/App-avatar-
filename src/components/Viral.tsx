@@ -7,11 +7,12 @@ import {
   aspectoMasCercano, cuadroDeArchivo, cuadroDeVideo, duracionArchivo, esperarTarea, prefSinSonido, quitarSonido, subirAMotion, subirImagen,
 } from '@/lib/cliente/video';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
-import { vestuarioATexto } from '@/lib/cliente/vestuario';
+import { AVISO_FALLO_ROPA, vestuarioATexto } from '@/lib/cliente/vestuario';
 import { VIRALES, type TipoViral } from '@/lib/estudio/virales';
 import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
+import ModoRopa from '@/components/ModoRopa';
 
 type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string };
 type Props = {
@@ -56,7 +57,7 @@ type Estado = {
   resultado: string;
   videoCred?: number;
 };
-const VACIO: Estado = { tipo: '', video: null, cuadro: null, instr: '', fondo: 'video', fondoTexto: '', fondoUrl: '', ropa: 'video', ropaUrl: '', ropaTexto: '', carasExtra: [], fotoModelo: 'seedream', fotos: [], elegida: '', fotoTask: '', motor: 'kling3', calidad: '720p', videoTask: '', resultado: '' };
+const VACIO: Estado = { tipo: '', video: null, cuadro: null, instr: '', fondo: 'video', fondoTexto: '', fondoUrl: '', ropa: 'video', ropaUrl: '', ropaTexto: '', carasExtra: [], fotoModelo: 'nanopro', fotos: [], elegida: '', fotoTask: '', motor: 'kling3', calidad: '720p', videoTask: '', resultado: '' };
 const CLAVE = 'musa-viral-v1';
 const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
@@ -75,6 +76,7 @@ export default function Viral(props: Props) {
   const [creandoVideo, setCreandoVideo] = useState(false);
   const [confirmar, setConfirmar] = useState(false); // "Revisá antes de crear"
   const [error, setError] = useState('');
+  const [avisoRopa, setAvisoRopa] = useState('');
   const [t, setT] = useState(0.3);
   const [dur, setDur] = useState(0);
   const vidRef = useRef<HTMLVideoElement | null>(null);
@@ -206,6 +208,7 @@ export default function Viral(props: Props) {
     try {
       // La foto de la ropa no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien la tiene puesta).
       const v = await vestuarioATexto(items);
+      setAvisoRopa(v.fallo ? AVISO_FALLO_ROPA : '');
       const prompt = componerNodoFoto(v.items.map((x) => x.rol), [def.pistaFoto, ropa, ...v.textos, fondo, e.instr], modelo.cuerpo, modelo.promptFijo);
       const imageUrls = v.items.map((x) => x.url);
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect, modelo: e.fotoModelo }) });
@@ -386,6 +389,8 @@ export default function Viral(props: Props) {
                 ))}
               </div>
               <p className="vr-nota" style={{ marginTop: 0, marginBottom: 8 }}>Elegí uno de tus vestidos o subí una foto de la ropa (puede ser de una tienda o de otra persona).</p>
+              <ModoRopa nombre={modelo?.nombre || 'tu modelo'} />
+              {avisoRopa ? <p className="vr-tip" style={{ marginTop: 0, marginBottom: 8 }}>⚠️ {avisoRopa}</p> : null}
             </>
           ) : null}
           {e.ropa === 'texto' ? (
@@ -416,8 +421,8 @@ export default function Viral(props: Props) {
           {modelo?.promptFijo ? <p className="vr-nota">✍️ Se suma solo el <b>prompt fijo</b> de {modelo.nombre || 'tu modelo'} (cara y medidas).</p> : <p className="vr-nota">💡 Tip: cargá el <b>✍️ Prompt fijo</b> en la ficha de {modelo?.nombre || 'tu modelo'} para que siempre respete su cara y sus medidas.</p>}
           <div className="vr-fila">
             <select className="input" value={e.fotoModelo} onChange={(ev) => set({ fotoModelo: ev.target.value })} style={{ flex: 1, minWidth: 0 }}>
-              <option value="seedream">Seedream 4.5 ⭐</option>
-              <option value="nanopro">Nano Banana Pro</option>
+              <option value="nanopro">Nano Banana Pro ⭐</option>
+              <option value="seedream">Seedream 4.5</option>
             </select>
             <button className={`btn-grad ${creandoFoto ? 'busy' : ''}`} disabled={creandoFoto} onClick={crearFoto} style={{ flex: 1.3 }}>
               {creandoFoto ? 'Creando…' : e.fotos.length ? '🔄 Crear otra' : '📸 Crear foto'}

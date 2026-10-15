@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const texto = typeof b?.texto === 'string' ? b.texto.trim().slice(0, 1500) : '';
   if (!texto) return NextResponse.json({ error: 'No hay texto para traducir.' }, { status: 400 });
   const r = await pedirDatos(
-    `Translate this spoken line into natural Rioplatense Spanish (Argentina), faithfully, keeping the tone. If it is already in Spanish, return it unchanged.\n\n"${texto}"\n\nAnswer by calling the tool entregar_traduccion.`,
+    `Translate this spoken line into natural Rioplatense Spanish (Argentina), faithfully, keeping the tone. If it is already in Spanish, return it unchanged.\n\n"${texto}"\n\nAnswer by calling the tool entregar_traduccion. If you cannot call tools, answer ONLY with the JSON object {"traduccion": "..."} and no other text.`,
     HERRAMIENTA,
   );
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 });

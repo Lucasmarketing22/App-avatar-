@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
 import { esperarTarea, subirAMotion, subirImagen } from '@/lib/cliente/video';
-import { vestuarioATexto } from '@/lib/cliente/vestuario';
+import { AVISO_FALLO_ROPA, vestuarioATexto } from '@/lib/cliente/vestuario';
 import { componerNodoFoto, medidasDe, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ESCENARIOS, ESTILOS, GRABACIONES, IDIOMA_DEFECTO, VOCES_OMNI, durValida, palabrasMax, pistaFotoInicial, type Guion, type Motor,
 } from '@/lib/estudio/hablados';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
+import ModoRopa from '@/components/ModoRopa';
 
 type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string };
 type Props = {
@@ -38,6 +39,8 @@ type Estado = {
   ropaTexto: string;
   /** Cómo describió la IA la ropa de la foto (eso es lo que se usa, no la foto). */
   ropaDesc?: string;
+  /** Aviso si no se pudo describir la ropa y se usó la foto. */
+  ropaAviso?: string;
   instr: string;
   fotoModelo: string;
   fotos: string[];
@@ -62,9 +65,11 @@ type Estado = {
   videoTask: string;
   resultado: string;
   videoCred?: number;
+  /** Lo que cobró Kie por escribir los guiones. */
+  guionCred?: number;
 };
 const VACIO: Estado = {
-  escenario: 'sillon', escenarioTexto: '', grabacion: 'apoyado', ropa: 'foto', ropaUrl: '', ropaTexto: '', instr: '', fotoModelo: 'seedream',
+  escenario: 'sillon', escenarioTexto: '', grabacion: 'apoyado', ropa: 'foto', ropaUrl: '', ropaTexto: '', instr: '', fotoModelo: 'nanopro',
   fotos: [], elegida: '', fotoTask: '', idioma: '', tema: '', extra: '', dur: 10, guiones: [], guionSel: -1, texto: '', gestos: '', caption: '', traduccion: '', traduccionDe: '',
   motor: 'kling3', calidad: '720p', vozOmni: VOCES_OMNI[0].id, videoTask: '', resultado: '',
 };
@@ -73,8 +78,15 @@ const DURS = [6, 8, 10, 12, 15];
 const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
 const contar = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
-/** Precio publicado de Gemini Omni (720p, sin video de entrada): 4 s 63, 6 s 84 créditos. */
-const omniLista = (dur: number) => Math.round(63 + (dur - 4) * 10.5);
+/**
+ * Precios publicados por Kie (kie.ai, revisados el 15/10/2026), para estimar
+ * antes del primer video. Después se usa lo que cobró de verdad.
+ *  - Gemini Omni sin video de entrada, 720p o 1080p: 4 s 63, 6 s 84, 8 s 105, 10 s 126 créditos.
+ *  - Kling 3.0 con sonido: Standard (720p) 20 créditos por segundo, Pro (1080p) 27.
+ */
+const OMNI: Record<number, number> = { 4: 63, 6: 84, 8: 105, 10: 126 };
+const listaKie = (motor: Motor, calidad: string, dur: number): number | null =>
+  motor === 'omni' ? (OMNI[dur] ?? null) : dur * (calidad === '1080p' ? 27 : 20);
 
 export default function Hablados(props: Props) {
   const { modelas, activoId, vestidos, costo, estimar, saldo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
@@ -182,7 +194,7 @@ export default function Hablados(props: Props) {
     try {
       // La foto de la ropa no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien la tiene puesta).
       const v = await vestuarioATexto(items);
-      set({ ropaDesc: v.descripciones[0] ?? '' });
+      set({ ropaDesc: v.descripciones[0] ?? '', ropaAviso: v.fallo ? AVISO_FALLO_ROPA : '' });
       const prompt = componerNodoFoto(v.items.map((x) => x.rol), [pistaFotoInicial(escenarioEn, e.grabacion), ...v.textos, ropa, e.instr], modelo.cuerpo, modelo.promptFijo);
       const imageUrls = v.items.map((x) => x.url);
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: '9:16', modelo: e.fotoModelo }) });
@@ -226,7 +238,7 @@ export default function Hablados(props: Props) {
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !Array.isArray(d.guiones)) throw new Error(d.error ?? 'No se pudieron escribir los guiones.');
       if (!d.guiones.length) throw new Error('La IA no devolvió guiones. Probá de nuevo.');
-      set({ guiones: d.guiones, guionSel: -1 });
+      set({ guiones: d.guiones, guionSel: -1, guionCred: typeof d.credits === 'number' ? d.credits : undefined });
       onSaldo();
     } catch (er) { setErrorGuion(er instanceof Error ? er.message : 'No se pudieron escribir los guiones.'); } finally { setEscribiendo(false); }
   }
@@ -254,7 +266,8 @@ export default function Hablados(props: Props) {
   /* ----- 6. Video ----- */
   const durVideo = durValida(e.motor, e.dur);
   const claveVideo = e.motor === 'omni' ? `gemini-omni-video|${e.calidad}` : `kling-3.0/video|${e.calidad === '1080p' ? 'pro' : 'std'}`;
-  const estimado: Estimado = estimar(claveVideo, durVideo) ?? (e.motor === 'omni' && e.calidad === '720p' ? { creditos: omniLista(durVideo), porSegundo: true } : null);
+  const lista = listaKie(e.motor, e.calidad, durVideo);
+  const estimado: Estimado = estimar(claveVideo, durVideo) ?? (lista !== null ? { creditos: lista, porSegundo: true } : null);
   async function crearVideo() {
     if (!modelo || !e.elegida || !e.texto.trim() || creandoVideo) return;
     setError(''); setCreandoVideo(true);
@@ -310,10 +323,10 @@ export default function Hablados(props: Props) {
               <audio src={voz.url} controls preload="none" />
               <button className="btn-ghost" onClick={borrarVoz} style={{ padding: '6px 10px', fontSize: 12 }}>🗑️</button>
             </div>
-            <p className="vr-nota">✓ Muestra de {fmt(voz.dur)} s guardada: los videos con Kling 3.0 salen con esta voz.</p>
+            <p className="vr-nota">✓ Muestra de {fmt(voz.dur)} s guardada. Se le manda a Kling 3.0 como voz de {nombre}. Todavía no lo comprobamos con un video real: fijate en el primero si suena igual.</p>
           </>
         ) : (
-          <p className="vr-nota" style={{ marginTop: 0 }}>Subí un video o audio donde {nombre} hable (de 5 a 30 s, solo su voz, sin música). Se limpia y queda guardado. Sin muestra, el video inventa una voz cada vez.</p>
+          <p className="vr-nota" style={{ marginTop: 0 }}>Subí un video o audio donde {nombre} hable (de 5 a 30 s, solo su voz, sin música). Se limpia y queda guardado. Sin muestra, el motor elige la voz solo.</p>
         )}
         <label className="btn-soft vr-lbl" style={{ marginTop: 8 }}>
           <input type="file" accept="video/*,audio/*" onChange={subirVoz} style={{ display: 'none' }} disabled={subiendoVoz > 0 || procesandoVoz} />
@@ -355,7 +368,8 @@ export default function Hablados(props: Props) {
             <span className="vr-cap-l">{e.elegida ? '✅ Aprobada' : 'Foto final'}</span>
           </div>
         </div>
-        {e.ropa === 'foto' && e.ropaDesc ? <p className="vr-nota">👗 La IA la viste con: <i>{e.ropaDesc}</i></p> : null}
+        {e.ropa === 'foto' && e.ropaDesc ? <p className="vr-nota">👗 La IA la vistió con: <i>{e.ropaDesc}</i></p> : null}
+        {e.ropa === 'foto' && e.ropaAviso ? <p className="vr-tip" style={{ marginTop: 6 }}>⚠️ {e.ropaAviso}</p> : null}
         <div className="lz-chips" style={{ marginTop: 10 }}>
           <button className={`opt ${e.ropa === 'foto' ? 'on' : ''}`} onClick={() => set({ ropa: 'foto' })}>📷 Foto de la ropa</button>
           <button className={`opt ${e.ropa === 'texto' ? 'on' : ''}`} onClick={() => set({ ropa: 'texto' })}>✏️ Escribirla</button>
@@ -374,6 +388,7 @@ export default function Hablados(props: Props) {
               ))}
             </div>
             <p className="vr-nota" style={{ marginTop: 0, marginBottom: 8 }}>Subí la foto del vestuario (de una tienda u otra persona) o elegí uno de tus vestidos.</p>
+            <ModoRopa nombre={nombre} />
           </>
         ) : (
           <input className="input" value={e.ropaTexto} onChange={(ev) => set({ ropaTexto: ev.target.value })} placeholder="Ej: buzo gris oversize y short de jean" style={{ width: '100%', boxSizing: 'border-box', marginBottom: 8 }} />
@@ -381,8 +396,8 @@ export default function Hablados(props: Props) {
         <textarea className="textarea" value={e.instr} onChange={(ev) => set({ instr: ev.target.value })} placeholder="¿Algo más? (opcional) Ej: pelo recogido, aros dorados" style={{ height: 56 }} />
         <div className="vr-fila">
           <select className="input" value={e.fotoModelo} onChange={(ev) => set({ fotoModelo: ev.target.value })} style={{ flex: 1, minWidth: 0 }}>
-            <option value="seedream">Seedream 4.5 ⭐</option>
-            <option value="nanopro">Nano Banana Pro</option>
+            <option value="nanopro">Nano Banana Pro ⭐</option>
+            <option value="seedream">Seedream 4.5</option>
           </select>
           <button className={`btn-grad ${creandoFoto ? 'busy' : ''}`} disabled={creandoFoto} onClick={crearFoto} style={{ flex: 1.3 }}>
             {creandoFoto ? 'Creando…' : e.fotos.length ? '🔄 Crear otra' : '📸 Crear foto'}
@@ -435,7 +450,7 @@ export default function Hablados(props: Props) {
         <button className={`btn-grad ${escribiendo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 8 }} disabled={escribiendo} onClick={escribirGuiones}>
           {escribiendo ? 'Escribiendo… (unos segundos)' : e.guiones.length ? '🔄 Escribir otros 3' : '✨ Escribir 3 guiones'}
         </button>
-        <p className="vr-nota">Gancho para frenar el scroll, desarrollo y cierre, medidos para {e.dur} s. Cuesta menos de 1 centavo.</p>
+        <p className="vr-nota">Gancho para frenar el scroll, desarrollo y cierre, medidos para {e.dur} s. Se cobra en créditos de Kie (muy poco); abajo te muestro cuánto costó.{typeof e.guionCred === 'number' ? ` Último: ${fmt(e.guionCred)} créditos.` : ''}</p>
         {errorGuion ? <p className="errbox" style={{ margin: '8px 0 0' }}>{errorGuion}</p> : null}
         {e.guiones.length ? (
           <>
@@ -482,13 +497,13 @@ export default function Hablados(props: Props) {
       <div className="panel vr-paso hb-paso">
         <div className="vr-tit">{n(6)} 🎬 Video</div>
         <div className="lz-chips">
-          <button className={`opt ${e.motor === 'kling3' ? 'on' : ''}`} onClick={() => set({ motor: 'kling3' })}>Kling 3.0 · con su voz ⭐</button>
+          <button className={`opt ${e.motor === 'kling3' ? 'on' : ''}`} onClick={() => set({ motor: 'kling3' })}>Kling 3.0 · con su muestra de voz</button>
           <button className={`opt ${e.motor === 'omni' ? 'on' : ''}`} onClick={() => set({ motor: 'omni' })}>Gemini Omni · hasta 10 s</button>
         </div>
         <div className="lz-chips">
           {(['720p', '1080p'] as const).map((c) => <button key={c} className={`opt ${e.calidad === c ? 'on' : ''}`} onClick={() => set({ calidad: c })}>{c}</button>)}
         </div>
-        {e.motor === 'kling3' && !voz ? <p className="vr-tip" style={{ marginTop: 4 }}>💡 Sin muestra de voz, Kling inventa una voz. Subila en el paso 1 para que siempre suene como {nombre}.</p> : null}
+        {e.motor === 'kling3' && !voz ? <p className="vr-tip" style={{ marginTop: 4 }}>💡 Sin muestra de voz, Kling elige la voz solo. Subila en el paso 1 para mandarle la voz de {nombre}.</p> : null}
         {e.motor === 'omni' ? (
           <>
             <div className="vr-tit chico">🎙️ Voz (siempre la misma)</div>
@@ -507,7 +522,7 @@ export default function Hablados(props: Props) {
         <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo || !e.elegida || !e.texto.trim()} onClick={() => setConfirmar(true)}>
           {creandoVideo ? 'Creando video… (unos minutos)' : e.resultado ? '🔄 Crear otro video' : '🎬 Crear video'}
         </button>
-        <p className="vr-nota">{estimado ? `Va a costar ≈ ${fmt(estimado.creditos)} créditos (${usd(estimado.creditos)}).` : 'El costo exacto lo vas a ver después del primer video con este motor.'}</p>
+        <p className="vr-nota">{estimado ? `Va a costar ≈ ${fmt(estimado.creditos)} créditos (${usd(estimado.creditos)})${estimar(claveVideo, durVideo) ? '' : ', según el precio publicado por Kie'}.` : 'El costo exacto lo vas a ver después del primer video con este motor.'}</p>
         {e.resultado ? (
           <div style={{ marginTop: 12 }}>
             <video className="vr-vid" src={e.resultado} controls playsInline preload="metadata" />

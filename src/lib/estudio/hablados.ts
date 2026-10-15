@@ -143,7 +143,7 @@ export function pedidoGuiones(o: { tema: string; idioma: string; dur: number; no
     'And "caption": a short post caption in the same language as the spoken text, with 3-5 relevant hashtags.',
     'And "traduccion": a faithful translation into Rioplatense Spanish (Argentina) of the full spoken text ("texto"), so the creator understands exactly what she says.',
     'Nothing explicit, no medical/financial claims, no mention of being AI.',
-    'Answer by calling the tool entregar_guiones.',
+    'Answer by calling the tool entregar_guiones. If you cannot call tools, answer ONLY with the JSON object {"guiones": [ ... ]} using exactly those field names, with no other text.',
   ].filter(Boolean).join('\n');
 }
 

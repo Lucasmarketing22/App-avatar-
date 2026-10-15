@@ -9,7 +9,8 @@ import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
-import { vestuarioATexto } from '@/lib/cliente/vestuario';
+import { AVISO_FALLO_ROPA, vestuarioATexto } from '@/lib/cliente/vestuario';
+import ModoRopa from '@/components/ModoRopa';
 import {
   ANCHO, DEF, ORDEN_MENU, nuevoId, plantillaMotionExacto, yEntrada, ySalida,
   type Cable, type Dato, type Nodo, type TipoNodo, type Vista,
@@ -270,6 +271,7 @@ export default function Lienzo(props: Props) {
     try {
       // La foto de la ropa no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien la tiene puesta).
       const v = await vestuarioATexto(items);
+      if (v.fallo) setData(id, { error: `⚠️ ${AVISO_FALLO_ROPA}` });
       const prompt = componerNodoFoto(v.items.map((x) => x.rol), [...v.textos, ...textos], cuerpo, fijo);
       const imageUrls = v.items.map((x) => x.url);
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect, modelo }) });
@@ -412,7 +414,7 @@ export default function Lienzo(props: Props) {
     const off = (nodesRef.current.length % 5) * 24;
     const data: Record<string, unknown> =
       tipo === 'modelo' ? { modeloId: activoId, cuerpo: true }
-        : tipo === 'foto' ? { modelo: 'seedream', aspect: 'auto' }
+        : tipo === 'foto' ? { modelo: 'nanopro', aspect: 'auto' }
           : tipo === 'motion' ? { motor: 'kling3', calidad: '720p', orientacion: 'video' }
             : tipo === 'hablar' ? { motor: 'kling-std' }
             : tipo === 'prompt' ? { texto: '' } : {};
@@ -767,7 +769,7 @@ function CuerpoNodo(p: {
       );
     }
     case 'cara': return <CajaCaras d={d} set={set} galeria={p.galeria} />;
-    case 'vestuario': return <CajaElegirImagen d={d} set={set} opciones={p.vestidos.map((v) => v.url)} vacio="Elegí un vestuario o subí uno" />;
+    case 'vestuario': return <><CajaElegirImagen d={d} set={set} opciones={p.vestidos.map((v) => v.url)} vacio="Elegí un vestuario o subí uno" /><ModoRopa nombre="tu modelo" chico /></>;
     case 'escena': case 'peinado': case 'pose': {
       const op = (p.galerias[GALERIA_DE[n.tipo] ?? ''] ?? []).map((g) => g.url);
       const nombre = n.tipo === 'escena' ? 'una escena' : n.tipo === 'peinado' ? 'un peinado' : 'una pose';

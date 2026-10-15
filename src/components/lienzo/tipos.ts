@@ -63,7 +63,7 @@ export function plantillaMotionExacto(modeloId: string): { nodes: Nodo[]; edges:
       { id: p, tipo: 'prompt', x: 0, y: 1150, data: { texto: '' } },
       { id: c, tipo: 'captura', x: 300, y: 0, data: {} },
       { id: m, tipo: 'modelo', x: 300, y: 560, data: { modeloId, cuerpo: true } },
-      { id: f, tipo: 'foto', x: 610, y: 160, data: { modelo: 'seedream', aspect: 'auto' } },
+      { id: f, tipo: 'foto', x: 610, y: 160, data: { modelo: 'nanopro', aspect: 'auto' } },
       { id: mo, tipo: 'motion', x: 920, y: 0, data: { motor: 'kling3', calidad: '720p', orientacion: 'video' } },
       { id: r, tipo: 'resultado', x: 1230, y: 0, data: {} },
     ],

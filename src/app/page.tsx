@@ -10,7 +10,8 @@ import Lienzo from '@/components/lienzo/Lienzo';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
 import Hablados from '@/components/Hablados';
-import { describirVestuario, textoVestuario } from '@/lib/cliente/vestuario';
+import { AVISO_FALLO_ROPA, describirVestuario, prefModoRopa, textoVestuario } from '@/lib/cliente/vestuario';
+import ModoRopa from '@/components/ModoRopa';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
 import { esperarTarea, prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
@@ -442,11 +443,16 @@ export default function Estudio() {
     if (busy) return;
     const refsExtra: { url: string; hint: string }[] = [];
     let ropaTexto = '';
+    let falloRopa = false;
     if (vestidoActual) {
-      // La foto del vestido no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien lo tiene puesto).
-      const desc = await describirVestuario(vestidoActual.url);
-      if (!desc) refsExtra.push({ url: vestidoActual.url, hint: pistaVestuario('One reference image') });
-      else ropaTexto = textoVestuario(desc);
+      // "Cuidar su cuerpo": la foto del vestido no va a la IA de imagen, va su descripción
+      // (así no copia el cuerpo de quien lo tiene puesto). "Ropa exacta": va la foto.
+      const desc = prefModoRopa() === 'cuerpo' ? await describirVestuario(vestidoActual.url) : null;
+      if (desc) ropaTexto = textoVestuario(desc);
+      else {
+        falloRopa = prefModoRopa() === 'cuerpo';
+        refsExtra.push({ url: vestidoActual.url, hint: pistaVestuario('One reference image') });
+      }
     }
     for (const g of GALERIAS) {
       const item = (galerias[g.key] ?? []).find((i) => i.id === galSel[g.key]);
@@ -465,6 +471,8 @@ export default function Estudio() {
     const texto = [editPrompt.trim(), extra.trim()].filter(Boolean).join('. ');
     const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel, figura: describirCuerpo(medidas) });
     lanzar(prompt, imageUrls, { aspect, modelo });
+    // lanzar() borra los errores al arrancar: el aviso va después.
+    if (falloRopa) setError(AVISO_FALLO_ROPA);
   }
 
   /** Repetir / variar: reusa el prompt y las referencias exactas de una creación. */
@@ -1405,6 +1413,7 @@ export default function Estudio() {
       {abierto === 'vestidos' ? (
         <Modal title="Tus vestidos" onClose={() => setAbierto(null)}>
           <p className="sub" style={hintS}>Tocá un vestido para elegirlo. Subí los tuyos con “＋”.</p>
+          <ModoRopa nombre={personaje.nombre || 'tu modelo'} />
           <GaleriaGrid items={vestidos} sel={vestidoSel} subiendo={subiendoVestido} onUpload={onSubirVestido} onSelect={(id) => setVestidoSel(vestidoSel === id ? null : id)} onDelete={borrarVestido} />
           {vestidos.length === 0 ? <p className="sub" style={{ marginTop: 12 }}>Todavía no cargaste vestidos.</p> : null}
         </Modal>
