@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
 import { esperarTarea, subirAMotion, subirImagen } from '@/lib/cliente/video';
-import { componerNodoFoto, type RolImagen } from '@/lib/estudio/prompt';
+import { componerNodoFoto, medidasDe, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ESCENARIOS, ESTILOS, GRABACIONES, IDIOMA_DEFECTO, VOCES_OMNI, durValida, palabrasMax, pistaFotoInicial, type Guion, type Motor,
 } from '@/lib/estudio/hablados';
@@ -381,6 +381,13 @@ export default function Hablados(props: Props) {
             {creandoFoto ? 'Creando…' : e.fotos.length ? '🔄 Crear otra' : '📸 Crear foto'}
           </button>
         </div>
+        {(() => {
+          const foto = !!(modelo?.entero || modelo?.medio);
+          const med = medidasDe(modelo?.cuerpo, modelo?.promptFijo);
+          return foto && med
+            ? <p className="vr-nota">🧍 Se usa su cuerpo: foto de {modelo?.entero ? 'cuerpo entero' : 'medio cuerpo'} ✓ · medidas {med} ✓</p>
+            : <p className="vr-tip" style={{ marginTop: 6 }}>⚠️ A la ficha de {nombre} le falta {!foto && !med ? 'la foto de cuerpo entero y las medidas' : !foto ? 'la foto de cuerpo entero' : 'las medidas'}: sin eso la IA no sabe cómo es su cuerpo. Cargalo en su ficha (arriba, en Personaje).</p>;
+        })()}
         <p className="vr-nota">Es el primer cuadro del video: {nombre} sentada en el escenario, con encuadre de celular. {costoFoto === null ? '' : `${fmt(costoFoto)} créditos por foto (${usd(costoFoto)}).`}</p>
         {e.fotos.length ? (
           <>

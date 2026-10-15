@@ -89,13 +89,15 @@ export function componerUnificado(opts: {
   nRefs: number;
   hints?: string[];
   selecciones?: Selecciones;
+  /** Figura de la modelo (va en la primera frase: lo primero pesa más). */
+  figura?: string;
 }): string {
-  const { texto, nRefs, hints = [], selecciones = {} } = opts;
+  const { texto, nRefs, hints = [], selecciones = {}, figura } = opts;
   const instrucciones = texto.trim() ||
     'Create a new photorealistic photo of the same woman shown in the reference images, keeping her exact face and identity.';
   const partes: string[] = [];
 
-  partes.push('Photorealistic image generation using the provided reference images.');
+  partes.push(figura ? `Photorealistic image of a woman with ${figura}, generated using the provided reference images.` : 'Photorealistic image generation using the provided reference images.');
   if (nRefs > 0) {
     const lista = Array.from({ length: nRefs }, (_, i) => `image ${i + 1}`).join(', ');
     partes.push(`The first reference images, named in order (${lista}), are the ones the instructions below refer to.`);
@@ -123,11 +125,11 @@ export function componerUnificado(opts: {
  * en el cuerpo: si no se aclara, la IA tiende a redondearle también la cara.
  */
 /** Prompt fijo de la modelo (de su ficha): se suma siempre, con prioridad. */
-export function pistaFija(texto?: string): string {
+export function pistaFija(texto?: string, conFigura = true): string {
   const t = (texto ?? '').trim();
   if (!t) return '';
   // Si el prompt fijo trae medidas ("100-60-95"), también van traducidas a cómo se ve la figura.
-  const medidas = t.match(/\d{2,3}\s*[-–/]\s*\d{2,3}\s*[-–/]\s*\d{2,3}/)?.[0];
+  const medidas = conFigura ? t.match(/\d{2,3}\s*[-–/]\s*\d{2,3}\s*[-–/]\s*\d{2,3}/)?.[0] : undefined;
   return `Fixed traits of this woman that must ALWAYS be respected (top priority): ${t.replace(/[.\s]+$/, "")}.${medidas ? ` Her figure: ${describirCuerpo(medidas)}.` : ''}`;
 }
 
@@ -164,10 +166,18 @@ export function describirCuerpo(cuerpo?: string): string {
   return `measurements ${busto}-${cintura}-${cadera} cm: ${figura} with ${partes.join(', ')}${extra ? ` (${extra})` : ''}`;
 }
 
+/** Medidas de la modelo: las de su ficha o, si no hay, las que estén escritas en su prompt fijo. */
+export function medidasDe(cuerpo?: string, fijo?: string): string {
+  const c = (cuerpo ?? '').trim();
+  if (c) return c;
+  return (fijo ?? '').match(/\d{2,3}\s*[-–/]\s*\d{2,3}\s*[-–/]\s*\d{2,3}/)?.[0] ?? '';
+}
+
 export function pistaCuerpo(cuerpo?: string): string {
   const d = describirCuerpo(cuerpo);
   if (!d) return '';
-  return `BODY (top priority, in every image): ${d}. Keep exactly these proportions in any pose, angle, outfit and framing — also when sitting, lying down, in loose clothes or in a medium shot. Never slim down, flatten or shrink her bust, hips or butt, and never widen her waist. Apply these proportions ONLY to her body; her face must stay exactly the same as in the face reference images (do not make the face rounder, wider or fuller).`;
+  const curvas = /hourglass|curvy/.test(d) ? ' She is NOT slim, skinny, petite or flat-chested.' : '';
+  return `BODY (top priority, in every image): ${d}.${curvas} Keep exactly these proportions in any pose, angle, outfit and framing — also when sitting, lying down, in loose clothes or in a medium shot. Never slim down, flatten or shrink her bust, hips or butt, and never widen her waist. Apply these proportions ONLY to her body; her face must stay exactly the same as in the face reference images (do not make the face rounder, wider or fuller).`;
 }
 
 /**
@@ -176,7 +186,7 @@ export function pistaCuerpo(cuerpo?: string): string {
  * al cuerpo de la modelo.
  */
 export function pistaVestuario(cual: string): string {
-  return `${cual} is ONLY an outfit reference: dress her in exactly those garments (same pieces, colors, fabric, pattern, fit and details). Take NOTHING else from that image — not the wearer's body, measurements, bust, waist, hip or butt size, height, skin, face, hair, pose or background. The clothes must adapt to HER own body and proportions, fitting over her curves like real clothes would.`;
+  return `${cual} is ONLY an outfit reference: dress her in exactly those garments (same pieces, colors, fabric, pattern, fit and details). Take NOTHING else from that image — not the wearer's body, measurements, bust, waist, hip or butt size, height, skin, face, hair, pose or background. The clothes must be re-fitted to HER own body and proportions (her bust, waist and hips, not the wearer's), fitting over her curves like real clothes would.`;
 }
 
 /** Texto para la foto de cuerpo cuando va como referencia extra. */
@@ -213,8 +223,8 @@ export function componerSesion(toma: string, conCaras: boolean, cuerpo?: string,
       : 'Keep the woman exactly the same person as in image 1 (same face, bone structure, skin tone, freckles, eye color and natural features).',
     conFotoCuerpo ? pistaFotoCuerpo('The last reference image') : '',
     `Create a NEW, different photo from this same session: ${toma}. Do not copy the pose, angle or framing of image 1.`,
-    pistaCuerpo(cuerpo),
-    pistaFija(fijo),
+    pistaCuerpo(medidasDe(cuerpo, fijo)),
+    pistaFija(fijo, !medidasDe(cuerpo, fijo)),
     REALISMO,
   ];
   return partes.filter(Boolean).join(' ');
@@ -240,8 +250,8 @@ export function componerCambioAvatar(
       ? `Reframe the photo as ${ENCUADRES[extra.encuadre]}, keeping the same outfit, hair and setting style, so it can be used as the first frame of a video with that framing.`
       : 'Keep the same pose, body position, framing, camera angle and composition as image 1, so it can be used as the first frame of a video.',
     instr ? `Apply ONLY this change and keep everything else unchanged: ${instr}.` : '',
-    pistaCuerpo(extra?.cuerpo),
-    pistaFija(extra?.fijo),
+    pistaCuerpo(medidasDe(extra?.cuerpo, extra?.fijo)),
+    pistaFija(extra?.fijo, !medidasDe(extra?.cuerpo, extra?.fijo)),
     REALISMO,
   ].filter(Boolean).join(' ');
 }
@@ -261,8 +271,8 @@ export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?
       : 'Keep the same woman.',
     conFotoCuerpo ? `${pistaFotoCuerpo('The last reference image')} Her body replaces the original person's body too (same pose).` : '',
     instr ? `Also apply this change and keep everything else unchanged: ${instr}.` : '',
-    pistaCuerpo(cuerpo),
-    pistaFija(fijo),
+    pistaCuerpo(medidasDe(cuerpo, fijo)),
+    pistaFija(fijo, !medidasDe(cuerpo, fijo)),
     REALISMO,
   ].filter(Boolean).join(' ');
 }
@@ -277,7 +287,10 @@ export type RolImagen = 'captura' | 'base' | 'cara' | 'cuerpo' | 'vestuario' | '
 export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: string, fijo?: string): string {
   const nums = (r: RolImagen) => roles.map((x, i) => (x === r ? i + 1 : 0)).filter(Boolean);
   const lista = (ns: number[]) => (ns.length === 1 ? `Image ${ns[0]}` : `Images ${ns.join(', ')}`);
-  const partes: string[] = ['Photorealistic image.'];
+  const medidas = medidasDe(cuerpo, fijo);
+  const figura = describirCuerpo(medidas);
+  // Lo que va primero pesa más: la figura se nombra en la primera frase.
+  const partes: string[] = [figura ? `Photorealistic image of a woman with ${figura}.` : 'Photorealistic image.'];
 
   const captura = nums('captura');
   const base = nums('base');
@@ -295,6 +308,7 @@ export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: 
   }
   const cuerpos = nums('cuerpo');
   if (cuerpos.length) partes.push(pistaFotoCuerpo(lista(cuerpos)));
+  partes.push(pistaCuerpo(medidas));
   const vest = nums('vestuario');
   if (vest.length) partes.push(pistaVestuario(lista(vest)));
   const esc = nums('escena');
@@ -306,10 +320,10 @@ export function componerNodoFoto(roles: RolImagen[], textos: string[], cuerpo?: 
   const extras = nums('imagen');
   if (extras.length) partes.push(`${lista(extras)} are extra references: use what the instructions say about them.`);
 
-  const instr = textos.map((t) => t.trim()).filter(Boolean).join('. ');
+  const instr = textos.map((t) => t.trim().replace(/[.\s]+$/, '')).filter(Boolean).join('. ');
   if (instr) partes.push(`Instructions: ${instr}.`);
-  partes.push(pistaCuerpo(cuerpo));
-  partes.push(pistaFija(fijo));
+  if (figura) partes.push('Remember: keep her exact figure described above in this pose and framing.');
+  partes.push(pistaFija(fijo, !figura));
   partes.push(REALISMO);
   return partes.filter(Boolean).join(' ');
 }
