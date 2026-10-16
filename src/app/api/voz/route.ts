@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { esAdmin, SOLO_ADMIN } from '@/lib/cuenta';
 import { errorFish, fishKey, idVozValido } from '@/lib/fish';
 import { uploadPublic, listPublic, removeObject, readJson, writeJson } from '@/lib/storage';
 
@@ -10,6 +11,8 @@ type VozCfg = { reference_id?: string; nombre?: string };
 
 /** Estado + voz guardada + audios generados. */
 export async function GET() {
+  // Las cuentas no usan la voz propia (Fish Audio): lista vacía.
+  if (!esAdmin()) return NextResponse.json({ items: [] });
   const [voz, blobs] = await Promise.all([
     readJson<VozCfg>('voz', {}),
     listPublic('voces/'),
@@ -22,6 +25,7 @@ export async function GET() {
 
 /** Guarda la identidad de voz (reference_id + nombre). */
 export async function PUT(request: Request) {
+  if (!esAdmin()) return NextResponse.json({ error: SOLO_ADMIN }, { status: 403 });
   const body = (await request.json().catch(() => null)) as VozCfg | null;
   const reference_id = typeof body?.reference_id === 'string' ? body.reference_id.trim().slice(0, 200) : '';
   const nombre = typeof body?.nombre === 'string' ? body.nombre.trim().slice(0, 80) : '';
@@ -32,6 +36,7 @@ export async function PUT(request: Request) {
 
 /** Genera audio a partir de texto con la voz del personaje. */
 export async function POST(request: Request) {
+  if (!esAdmin()) return NextResponse.json({ error: SOLO_ADMIN }, { status: 403 });
   const key = fishKey();
   if (!key) {
     return NextResponse.json({ error: 'Falta la clave de Fish Audio (FISH_AUDIO_API_KEY). Cargala en Vercel.' }, { status: 400 });
@@ -72,6 +77,7 @@ export async function POST(request: Request) {
 
 /** Borra un audio por su URL. */
 export async function DELETE(request: Request) {
+  if (!esAdmin()) return NextResponse.json({ error: SOLO_ADMIN }, { status: 403 });
   const url = new URL(request.url).searchParams.get('url');
   if (!url) return NextResponse.json({ error: 'Falta el audio.' }, { status: 400 });
   await removeObject(url);

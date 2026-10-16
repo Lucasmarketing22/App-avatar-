@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 
-import { borrarVideosVencidos } from '@/lib/limpieza';
+import { borrarVideosVencidosDeTodos } from '@/lib/limpieza';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
  * Limpieza diaria (Vercel Cron, ver vercel.json): borra los videos con más de
- * 2 días. Es pública en el middleware para que el Cron pueda llamarla; si hay
+ * 2 días (de todas las cuentas). Es pública en el middleware para que el Cron pueda llamarla; si hay
  * CRON_SECRET en Vercel se exige, y si no, solo acepta llamadas del Cron.
  * Solo borra lo que ya venció, así que repetirla no hace daño.
  */
@@ -18,6 +18,6 @@ export async function GET(request: Request) {
   const permitido = secreto ? auth === `Bearer ${secreto}` : agente.includes('vercel-cron');
   if (!permitido) return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });
 
-  const borrados = await borrarVideosVencidos();
+  const borrados = await borrarVideosVencidosDeTodos();
   return NextResponse.json({ ok: true, borrados });
 }

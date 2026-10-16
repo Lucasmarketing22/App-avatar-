@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { describirCuerpo, medidasDe } from '@/lib/estudio/prompt';
-import { createTask } from '@/lib/ia/kie';
-import { registrarTarea, urlDeAviso } from '@/lib/tareas';
+import { pedirTarea } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -36,13 +35,13 @@ export async function POST(request: Request) {
   if (!imageUrl) return NextResponse.json({ error: 'Elegí la foto de tu modelo.' }, { status: 400 });
   if (!videoUrl) return NextResponse.json({ error: 'Subí el video de referencia.' }, { status: 400 });
 
-  const aviso = urlDeAviso(request);
   // Video subido CON sonido: al terminar, el servidor le pega ese audio al video final.
   const audio = typeof body?.audioOriginal === 'string' ? body.audioOriginal : undefined;
   const dur = Number(body?.dur) || undefined;
 
   if (body?.modo === 'reemplazar') {
-    const result = await createTask(
+    const result = await pedirTarea(
+      request,
       'wan/2-2-animate-replace',
       {
         video_url: videoUrl,
@@ -50,10 +49,9 @@ export async function POST(request: Request) {
         resolution: body?.calidad === '480p' ? '480p' : '720p',
         nsfw_checker: false,
       },
-      aviso,
+      { tipo: 'video', audio, dur },
     );
-    if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
-    await registrarTarea(result.taskId, { tipo: 'video', audio, dur });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json({ taskId: result.taskId });
   }
 
@@ -63,7 +61,8 @@ export async function POST(request: Request) {
     (body?.fijo ?? '').trim() ? `Fixed traits (always): ${(body?.fijo ?? '').trim().slice(0, 800)}.` : '',
     (body?.prompt ?? '').trim(),
   ].filter(Boolean).join(' ');
-  const result = await createTask(
+  const result = await pedirTarea(
+    request,
     body?.motor === 'kling26' ? 'kling-2.6/motion-control' : 'kling-3.0/motion-control',
     {
       prompt: (extra ? `${PROMPT_MOVER} ${extra}` : PROMPT_MOVER).slice(0, 2500),
@@ -72,9 +71,8 @@ export async function POST(request: Request) {
       character_orientation: body?.orientacion === 'image' ? 'image' : 'video',
       mode: body?.calidad === '1080p' ? '1080p' : '720p',
     },
-    aviso,
+    { tipo: 'video', prompt: (body?.prompt ?? '').trim() || undefined, audio, dur },
   );
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
-  await registrarTarea(result.taskId, { tipo: 'video', prompt: (body?.prompt ?? '').trim() || undefined, audio, dur });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ taskId: result.taskId });
 }

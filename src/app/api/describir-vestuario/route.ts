@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { verImagen } from '@/lib/ia/texto';
+import { cobrarAhora, puedeGastar, TEXTO_ESTIMADO } from '@/lib/saldo';
 import { readJson, writeJson } from '@/lib/storage';
 
 export const runtime = 'nodejs';
@@ -24,8 +25,12 @@ export async function POST(request: Request) {
   const guardadas = await readJson<Record<string, string>>('vestuarios-desc', {});
   if (guardadas[url]) return NextResponse.json({ descripcion: guardadas[url] });
 
+  // Las cuentas necesitan saldo (la IA de texto cobra muy poco; se descuenta lo que informa Kie).
+  const permiso = await puedeGastar(TEXTO_ESTIMADO);
+  if (!permiso.ok) return NextResponse.json({ error: permiso.error }, { status: permiso.status });
   const r = await verImagen(url, PEDIDO);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 });
+  await cobrarAhora(permiso, r.credits);
   const descripcion = r.texto.replace(/\s+/g, ' ').slice(0, 900);
   const claves = Object.keys(guardadas);
   const resto = claves.length > 400 ? Object.fromEntries(claves.slice(-300).map((k) => [k, guardadas[k]])) : guardadas;

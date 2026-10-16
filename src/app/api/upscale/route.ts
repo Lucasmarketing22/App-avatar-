@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { createTask } from '@/lib/ia/kie';
-import { registrarTarea, urlDeAviso } from '@/lib/tareas';
+import { pedirTarea } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -16,8 +15,7 @@ export async function POST(request: Request) {
   if (!url) return NextResponse.json({ error: 'Falta la imagen a mejorar.' }, { status: 400 });
   const factor = body?.factor === '4' ? '4' : '2';
 
-  const result = await createTask('topaz/image-upscale', { image_url: url, upscale_factor: factor }, urlDeAviso(request));
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
-  await registrarTarea(result.taskId, { tipo: 'foto' });
+  const result = await pedirTarea(request, 'topaz/image-upscale', { image_url: url, upscale_factor: factor }, { tipo: 'foto' });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ taskId: result.taskId });
 }

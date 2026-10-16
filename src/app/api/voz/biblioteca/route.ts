@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { esAdmin, SOLO_ADMIN } from '@/lib/cuenta';
 import { FISH_API, fishKey } from '@/lib/fish';
 
 export const runtime = 'nodejs';
@@ -16,6 +17,7 @@ type FishModelo = {
 
 /** Biblioteca pública de voces de Fish Audio (buscar, idioma, mujer/hombre). */
 export async function GET(request: Request) {
+  if (!esAdmin()) return NextResponse.json({ error: SOLO_ADMIN }, { status: 403 });
   const q = new URL(request.url).searchParams;
   const params = new URLSearchParams({
     page_size: '12',

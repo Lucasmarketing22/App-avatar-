@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { esAdmin, SOLO_ADMIN } from '@/lib/cuenta';
 import { FISH_API, errorFish, fishKey } from '@/lib/fish';
 import { uploadPublic } from '@/lib/storage';
 
@@ -13,6 +14,7 @@ type Candidato = { audio_base64?: string; text?: string; signature?: string; voi
 
 /** Crea 3 opciones de voz a partir de una descripción (Fish Audio Voice Design). */
 export async function POST(request: Request) {
+  if (!esAdmin()) return NextResponse.json({ error: SOLO_ADMIN }, { status: 403 });
   const key = fishKey();
   if (!key) return NextResponse.json({ error: 'Falta la clave de Fish Audio (FISH_AUDIO_API_KEY). Cargala en Vercel.' }, { status: 400 });
   const body = (await request.json().catch(() => null)) as { instruccion?: string } | null;

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { limpiarGuiones, pedidoGuiones } from '@/lib/estudio/hablados';
 import { pedirDatos } from '@/lib/ia/texto';
+import { cobrarAhora, puedeGastar, TEXTO_ESTIMADO } from '@/lib/saldo';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -49,9 +50,13 @@ export async function POST(request: Request) {
   const nombre = typeof b?.nombre === 'string' ? b.nombre.trim().slice(0, 60) : '';
   const extra = typeof b?.extra === 'string' ? b.extra.trim().slice(0, 400) : '';
 
+  // Las cuentas necesitan saldo (la IA de texto cobra muy poco; se descuenta lo que informa Kie).
+  const permiso = await puedeGastar(TEXTO_ESTIMADO);
+  if (!permiso.ok) return NextResponse.json({ error: permiso.error }, { status: permiso.status });
   const r = await pedirDatos(pedidoGuiones({ tema, idioma, dur, nombre, escenario, extra }), HERRAMIENTA);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 });
+  await cobrarAhora(permiso, r.credits);
   const guiones = limpiarGuiones(r.datos);
   if (!guiones.length) return NextResponse.json({ error: 'La IA no devolvió guiones. Probá de nuevo.' }, { status: 502 });
-  return NextResponse.json({ guiones, credits: r.credits });
+  return NextResponse.json({ guiones, credits: typeof r.credits === 'number' ? r.credits * permiso.mult : undefined });
 }

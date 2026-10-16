@@ -1,10 +1,13 @@
 import 'server-only';
 
+import { CUENTA_ADMIN } from '@/lib/auth';
 import { pegarAudio } from '@/lib/audio';
 import { registrarCosto } from '@/lib/costos';
+import { conCuenta, cuentaActual } from '@/lib/cuenta';
 import { urlDeMotion } from '@/lib/ffmpeg';
 import { aplicarGrano } from '@/lib/grain';
-import { getTask } from '@/lib/ia/kie';
+import { createTask, getTask } from '@/lib/ia/kie';
+import { cobrarTarea, estimarKie, liberarReserva, puedeGastar, reservar } from '@/lib/saldo';
 import { readJsonEn, uploadPublic, writeJsonEn } from '@/lib/storage';
 
 /**
@@ -30,6 +33,11 @@ export type Tarea = {
   url?: string;
   credits?: number;
   aviso?: string;
+  /** De quién es (sin esto = del administrador, como las tareas viejas). */
+  cuenta?: string;
+  /** Multiplicador de precio y saldo reservado al pedirla (para cobrar al terminar). */
+  mult?: number;
+  reserva?: number;
   ts: number;
 };
 
@@ -39,18 +47,53 @@ export async function leerTarea(taskId: string): Promise<Tarea | null> {
   return readJsonEn<Tarea | null>(ruta(taskId), null);
 }
 
-/** Anota un pedido recién creado (no frena si falla: el celular igual consulta). */
+/**
+ * La ficha de una tarea, solo si es de la cuenta del pedido, con el costo en
+ * los créditos de esa cuenta (lo que se le cobró).
+ */
+export async function fichaPropia(taskId: string): Promise<Tarea | null> {
+  const f = await leerTarea(taskId);
+  const cuenta = cuentaActual();
+  if (!f || (f.cuenta || CUENTA_ADMIN) !== cuenta) return null;
+  if (cuenta !== CUENTA_ADMIN && typeof f.credits === 'number') return { ...f, credits: f.credits * (f.mult ?? 1) };
+  return f;
+}
+
+/** Anota un pedido recién creado (reintenta una vez: de esta ficha depende a quién se le cobra y dónde se guarda). */
 export async function registrarTarea(taskId: string, datos: Omit<Tarea, 'ts'>): Promise<void> {
   const audio = datos.audio && urlDeMotion(datos.audio) ? datos.audio : undefined;
   const refs = Array.isArray(datos.refs) ? datos.refs.filter((u) => typeof u === 'string' && u.startsWith('http')).slice(0, 8) : undefined;
-  await writeJsonEn(ruta(taskId), {
+  const ficha = {
     ...datos,
+    cuenta: datos.cuenta ?? (cuentaActual() || undefined),
     prompt: datos.prompt?.slice(0, 6000),
     refs,
     audio,
     dur: typeof datos.dur === 'number' && Number.isFinite(datos.dur) && datos.dur > 0 ? Math.min(60, datos.dur) : undefined,
     ts: Date.now(),
-  }).catch(() => undefined);
+  };
+  const r = await writeJsonEn(ruta(taskId), ficha).catch(() => ({ ok: false }));
+  if (!r.ok) await writeJsonEn(ruta(taskId), ficha).catch(() => undefined);
+}
+
+/**
+ * Pide una creación a la IA cobrándosela a la cuenta del pedido: estima el
+ * costo, revisa que le alcance el saldo, crea la tarea, aparta el saldo y
+ * anota la ficha. El administrador no tiene límite.
+ */
+export async function pedirTarea(
+  request: Request,
+  model: string,
+  input: Record<string, unknown>,
+  datos: Omit<Tarea, 'ts' | 'cuenta' | 'mult' | 'reserva'>,
+): Promise<{ ok: true; taskId: string } | { ok: false; error: string; status: number }> {
+  const permiso = await puedeGastar(await estimarKie(model, input, datos.dur));
+  if (!permiso.ok) return permiso;
+  const result = await createTask(model, input, urlDeAviso(request));
+  if (!result.ok) return { ok: false, error: result.error, status: 502 };
+  await reservar(permiso, result.taskId);
+  await registrarTarea(result.taskId, { ...datos, cuenta: permiso.cuenta, mult: permiso.mult, reserva: permiso.reserva });
+  return { ok: true, taskId: result.taskId };
 }
 
 /** Dirección para que Kie avise cuando termina. */
@@ -63,16 +106,37 @@ export type Estado =
   | { state: 'fail'; error: string }
   | { state: 'success'; url: string; kind: 'image' | 'video'; credits?: number; stored: boolean; aviso?: string };
 
-/** Consulta la tarea y, si terminó, guarda el resultado (una sola vez). */
-export async function terminarTarea(taskId: string): Promise<Estado> {
+/**
+ * Consulta la tarea y, si terminó, guarda el resultado (una sola vez) en la
+ * carpeta de su cuenta y le cobra. Con `quien`, solo responde si la tarea es
+ * de esa cuenta (nadie puede espiar las creaciones de otra persona).
+ */
+export async function terminarTarea(taskId: string, quien?: string): Promise<Estado> {
   const ficha = await leerTarea(taskId);
+  const duena = ficha?.cuenta || CUENTA_ADMIN;
+  if (quien !== undefined && quien !== duena) return { state: 'fail', error: 'No se encontró esta creación.' };
+  const estado = await conCuenta(duena, () => terminarDe(taskId, ficha, duena));
+  // Cada persona ve lo que se le cobró (créditos de Kie × su multiplicador), no lo que cobró Kie.
+  if (estado.state === 'success' && typeof estado.credits === 'number' && duena !== CUENTA_ADMIN) {
+    estado.credits = estado.credits * (ficha?.mult ?? 1);
+  }
+  return estado;
+}
+
+async function terminarDe(taskId: string, ficha: Tarea | null, duena: string): Promise<Estado> {
   if (ficha?.url) {
     return { state: 'success', url: ficha.url, kind: ficha.tipo === 'video' ? 'video' : 'image', credits: ficha.credits, stored: true, aviso: ficha.aviso };
   }
 
   const task = await getTask(taskId);
   if (task.state === 'running') return { state: 'running' };
-  if (task.state === 'fail') return { state: 'fail', error: task.error };
+  if (task.state === 'fail') {
+    await liberarReserva(duena, taskId);
+    return { state: 'fail', error: task.error };
+  }
+
+  // Se cobra apenas termina bien (repetirlo no cobra dos veces).
+  await cobrarTarea(duena, taskId, task.credits, ficha?.mult ?? 1, ficha?.reserva ?? 0).catch(() => undefined);
 
   // Guardamos cuánto costó este tipo de generación (para estimar las próximas).
   await registrarCosto(task.costoClave, task.credits).catch(() => undefined);

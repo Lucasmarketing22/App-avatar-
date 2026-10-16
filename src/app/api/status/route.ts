@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { cuentaActual } from '@/lib/cuenta';
 import { terminarTarea } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
@@ -13,5 +14,6 @@ export async function GET(request: Request) {
   if (!taskId) {
     return NextResponse.json({ error: 'Falta el identificador de la tarea.' }, { status: 400 });
   }
-  return NextResponse.json(await terminarTarea(taskId));
+  // Solo la cuenta que la pidió puede consultarla.
+  return NextResponse.json(await terminarTarea(taskId, cuentaActual()));
 }

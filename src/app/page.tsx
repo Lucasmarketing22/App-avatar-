@@ -17,6 +17,7 @@ import { esperarTarea, prefSinSonido, quitarSonido, subirImagen } from '@/lib/cl
 import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
+import Cuentas from '@/components/Cuentas';
 
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, describirCuerpo, medidasDe, pistaCuerpo, pistaFija, pistaVestuario, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
@@ -29,7 +30,7 @@ const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
-type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados';
+type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados' | 'cuentas';
 
 const ASPECTS = ['3:4', '1:1', '4:5', '9:16', '16:9', '4:3'];
 
@@ -97,6 +98,10 @@ export default function Estudio() {
   // Aviso de saldo bajo: se cierra con la ×, y vuelve si el saldo sigue bajando.
   const [saldoVisto, setSaldoVisto] = useState<number | null>(null);
   const [costos, setCostos] = useState<Record<string, { credits: number }>>({});
+  // Quién usa la app: el administrador (saldo de Kie, panel de cuentas) o una cuenta (su saldo en la app).
+  const [yo, setYo] = useState<{ admin: boolean; nombre: string } | null>(null);
+  // Precio de cada cuenta: créditos de Kie × multiplicador (1 para el administrador).
+  const [mult, setMult] = useState(1);
   const [costoMsg, setCostoMsg] = useState('');
   const [espacio, setEspacio] = useState<{ total: number; carpetas: Record<string, number>; archivos: number } | null>(null);
   // Al entrar a la Galería consultamos cuánto espacio se está usando.
@@ -109,6 +114,7 @@ export default function Estudio() {
       const d = await fetch('/api/saldo').then((r) => r.json());
       if (typeof d.credits === 'number') setSaldo(d.credits);
       if (d.costos && typeof d.costos === 'object') setCostos(d.costos);
+      if (typeof d.mult === 'number') setMult(d.mult);
     } catch { /* sin saldo */ }
   }
   /** Último costo conocido (en créditos) de un tipo de generación, o null. */
@@ -204,6 +210,11 @@ export default function Estudio() {
   useEffect(() => {
     (async () => {
       try {
+        // Si la sesión venció o la cuenta se pausó, vuelve a la pantalla de entrada.
+        const quien = await fetch('/api/yo', { cache: 'no-store' });
+        if (quien.status === 401) { await fetch('/api/logout', { method: 'POST' }).catch(() => undefined); location.href = '/login'; return; }
+        const yoD = await quien.json().catch(() => null);
+        if (yoD) setYo({ admin: !!yoD.admin, nombre: String(yoD.nombre ?? '') });
         const [p, v, c] = await Promise.all([
           fetch('/api/personaje').then((r) => r.json()),
           fetch('/api/vestidos').then((r) => r.json()),
@@ -797,6 +808,7 @@ export default function Estudio() {
         <button className={`rail-ic ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><Icon name="voz" /><span>Hablados</span></button>
         <button className={`rail-ic ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><Icon name="motion" /><span>Motion</span></button>
         <button className={`rail-ic ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><Icon name="lienzo" /><span>Lienzo</span></button>
+        {yo?.admin ? <button className={`rail-ic ${vista === 'cuentas' ? 'on' : ''}`} onClick={() => setVista('cuentas')}><Icon name="user" /><span>Cuentas</span></button> : null}
         <div className="rail-sep" />
         <button className="rail-ic" onClick={() => { setVista('crear'); setAbierto('personaje'); }} title="Personaje"><Icon name="user" /><span>Personaje</span></button>
         <button className="rail-ic" onClick={() => { setVista('crear'); setAbierto('vestidos'); }} title="Vestido"><Icon name="shirt" /><span>Vestido</span></button>
@@ -815,9 +827,11 @@ export default function Estudio() {
       <div className="content"><div className="content-inner">
         <header className="topbar">
           <div className="logo">musa<span className="g">.studio</span></div>
-          <span className="pill">Estudio</span>
+          {yo?.admin ? <button className="hdr-cuentas" onClick={() => setVista('cuentas')} title="Cuentas"><span className="emo">👥 </span>Cuentas</button> : <span className="pill">Estudio</span>}
           <button className="hdr-salir" onClick={salir} title="Salir">Salir</button>
-          <div className="stat"><b>{creaciones.length}</b> creaciones<br />{modeloLabel}{saldo !== null ? <><br /><span className="saldo">💳 <b>{fmtCred(saldo)}</b> créditos</span><br /><span className="saldo">≈ {fmtUsd(saldo)}</span></> : null}</div>
+          <div className="stat"><b>{creaciones.length}</b> creaciones<br />{modeloLabel}{saldo !== null ? (yo && !yo.admin
+            ? <><br /><span className="saldo">💳 <b>{fmtUsd(saldo)}</b></span><br /><span className="saldo">tu saldo</span></>
+            : <><br /><span className="saldo">💳 <b>{fmtCred(saldo)}</b> créditos</span><br /><span className="saldo">≈ {fmtUsd(saldo)}</span></>) : null}</div>
         </header>
 
         {saldo !== null && saldo < SALDO_BAJO && (saldoVisto === null || saldo < saldoVisto - 50) ? (() => {
@@ -826,11 +840,11 @@ export default function Estudio() {
             <div className="saldo-bajo" role="alert">
               <span>⚠️</span>
               <div>
-                <b>Te queda poco saldo en Kie: {fmtCred(saldo)} créditos (≈ {fmtUsd(saldo)}).</b>
+                <b>{yo && !yo.admin ? `Te queda poco saldo: ${fmtUsd(saldo)}.` : `Te queda poco saldo en Kie: ${fmtCred(saldo)} créditos (≈ ${fmtUsd(saldo)}).`}</b>
                 {typeof ultMotion === 'number' && saldo < ultMotion
                   ? <> No te alcanza para un video de Motion (el último costó ≈ {fmtUsd(ultMotion)}).</>
                   : <> Cargá saldo antes de crear videos, así no se corta a mitad de camino.</>}
-                {' '}<a href="https://kie.ai" target="_blank" rel="noreferrer">Cargar en Kie ↗</a>
+                {' '}{yo && !yo.admin ? <>Pedile una recarga a quien te dio el acceso.</> : <a href="https://kie.ai" target="_blank" rel="noreferrer">Cargar en Kie ↗</a>}
               </div>
               <button aria-label="Cerrar aviso" onClick={() => setSaldoVisto(saldo)}>×</button>
             </div>
@@ -1159,6 +1173,11 @@ export default function Estudio() {
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🎙️ Hablados</h1><Guia id="hablados" /></div>
         ) : vista === 'lienzo' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 8 }}>🧩 Lienzo</h1><Guia id="lienzo" /></div>
+        ) : vista === 'cuentas' ? (
+          <>
+            <div className="h1-row"><h1 className="h1" style={{ marginBottom: 10 }}>👥 Cuentas</h1></div>
+            {yo?.admin ? <Cuentas /> : <p className="sub">Solo el administrador puede ver esto.</p>}
+          </>
         ) : vista === 'voz' ? (
           <>
             <div className="h1-row"><h1 className="h1" style={{ marginBottom: 10 }}>🎙️ Voz de {personaje.nombre || 'tu modelo'}</h1><Guia id="voz" /></div>
@@ -1168,7 +1187,7 @@ export default function Estudio() {
           /* ----- GALERÍA ----- */
           <>
             <div className="h1-row"><h1 className="h1" style={{ marginBottom: 10 }}>Mis creaciones</h1><Guia id="galeria" /></div>
-            {espacio ? <MedidorEspacio uso={espacio} /> : null}
+            {espacio && yo?.admin ? <MedidorEspacio uso={espacio} /> : null}
             <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
               <button className={`opt ${galTab === 'fotos' ? 'on' : ''}`} onClick={() => setGalTab('fotos')}>🖼️ Fotos ({creaciones.length})</button>
               <button className={`opt ${galTab === 'videos' ? 'on' : ''}`} onClick={() => setGalTab('videos')}>🎬 Videos ({videos.length})</button>
@@ -1250,6 +1269,7 @@ export default function Estudio() {
                 setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)]);
               }}
               onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
+              mult={mult}
               onTrabajo={setHabladosTrabajo}
               onPublicar={(url, tipo) => setPublicar({ url, tipo })}
               onGuardar={(url, tipo) => setGuardar({ url, tipo })}
@@ -1273,6 +1293,7 @@ export default function Estudio() {
                 setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: c.modelo, refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)]);
               }}
               onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
+              mult={mult}
               onTrabajo={setLienzoTrabajo}
               onPublicar={(url, tipo) => setPublicar({ url, tipo })}
               onGuardar={(url, tipo) => setGuardar({ url, tipo })}
