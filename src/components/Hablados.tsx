@@ -27,6 +27,8 @@ type Props = {
   onPublicar: (url: string, tipo: 'foto' | 'video') => void;
   onGuardar: (url: string, tipo: 'foto' | 'video') => void;
   onSaldo: () => void;
+  /** Precio de la cuenta: créditos de Kie × esto (1 para el administrador). */
+  mult?: number;
 };
 
 /** Todo lo que hay que recordar (se guarda en el celu por si se cierra la app). */
@@ -92,7 +94,7 @@ const listaKie = (motor: Motor, calidad: string, dur: number): number | null =>
   motor === 'omni' ? (OMNI[dur] ?? null) : dur * (calidad === '1080p' ? 27 : 20);
 
 export default function Hablados(props: Props) {
-  const { modelas, activoId, vestidos, costo, estimar, saldo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
+  const { modelas, activoId, vestidos, costo, estimar, saldo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo, mult = 1 } = props;
   const [e, setE] = useState<Estado>(VACIO);
   const eRef = useRef(e); eRef.current = e;
   const set = (p: Partial<Estado>) => setE((x) => ({ ...x, ...p }));
@@ -277,7 +279,8 @@ export default function Hablados(props: Props) {
   /* ----- 6. Video ----- */
   const durVideo = durValida(e.motor, e.dur);
   const claveVideo = e.motor === 'omni' ? `gemini-omni-video|${e.calidad}` : `kling-3.0/video|${e.calidad === '1080p' ? 'pro' : 'std'}`;
-  const lista = listaKie(e.motor, e.calidad, durVideo);
+  const listaK = listaKie(e.motor, e.calidad, durVideo);
+  const lista = listaK === null ? null : listaK * mult;
   const estimado: Estimado = estimar(claveVideo, durVideo) ?? (lista !== null ? { creditos: lista, porSegundo: true } : null);
   async function crearVideo() {
     if (!modelo || !e.elegida || !e.texto.trim() || creandoVideo) return;
@@ -461,7 +464,7 @@ export default function Hablados(props: Props) {
         <button className={`btn-grad ${escribiendo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 8 }} disabled={escribiendo} onClick={escribirGuiones}>
           {escribiendo ? 'Escribiendo… (unos segundos)' : e.guiones.length ? '🔄 Escribir otros 3' : '✨ Escribir 3 guiones'}
         </button>
-        <p className="vr-nota">Gancho para frenar el scroll, desarrollo y cierre, medidos para {e.dur} s. Se cobra en créditos de Kie (muy poco); abajo te muestro cuánto costó.{typeof e.guionCred === 'number' ? ` Último: ${fmt(e.guionCred)} créditos.` : ''}</p>
+        <p className="vr-nota">Gancho para frenar el scroll, desarrollo y cierre, medidos para {e.dur} s. Se cobra en créditos (muy poco); abajo te muestro cuánto costó.{typeof e.guionCred === 'number' ? ` Último: ${fmt(e.guionCred)} créditos.` : ''}</p>
         {errorGuion ? <p className="errbox" style={{ margin: '8px 0 0' }}>{errorGuion}</p> : null}
         {e.guiones.length ? (
           <>
@@ -533,7 +536,7 @@ export default function Hablados(props: Props) {
         <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo || !e.elegida || !e.texto.trim()} onClick={() => setConfirmar(true)}>
           {creandoVideo ? 'Creando video… (unos minutos)' : e.resultado ? '🔄 Crear otro video' : '🎬 Crear video'}
         </button>
-        <p className="vr-nota">{estimado ? `Va a costar ≈ ${fmt(estimado.creditos)} créditos (${usd(estimado.creditos)})${estimar(claveVideo, durVideo) ? '' : ', según el precio publicado por Kie'}.` : 'El costo exacto lo vas a ver después del primer video con este motor.'}</p>
+        <p className="vr-nota">{estimado ? `Va a costar ≈ ${fmt(estimado.creditos)} créditos (${usd(estimado.creditos)})${estimar(claveVideo, durVideo) ? '' : ', según el precio de lista'}.` : 'El costo exacto lo vas a ver después del primer video con este motor.'}</p>
         {e.resultado ? (
           <div style={{ marginTop: 12 }}>
             <video className="vr-vid" src={e.resultado} controls playsInline preload="metadata" />

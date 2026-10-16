@@ -89,7 +89,7 @@ export default function ConfirmarVideo(p: {
           {p.extra ? <small>Incluye la foto de inicio que se prepara antes.</small> : null}
           <div><span>Tu saldo</span><b>{p.saldo === null ? '—' : `${fmt(p.saldo)} créditos (≈ ${usd(p.saldo)})`}</b></div>
         </div>
-        {noAlcanza ? <p className="errbox" style={{ margin: '8px 0 0' }}>No te alcanza el saldo para este video. Cargá créditos en Kie o hacé el video más corto.</p> : null}
+        {noAlcanza ? <p className="errbox" style={{ margin: '8px 0 0' }}>No te alcanza el saldo para este video. Cargá saldo o hacé el video más corto.</p> : null}
 
         <div className="cv-checks">
           {items.map((t, i) => (

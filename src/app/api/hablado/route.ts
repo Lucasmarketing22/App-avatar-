@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 
 import { componerVideoHablado, durValida, VOCES_OMNI, type Motor } from '@/lib/estudio/hablados';
 import { guardarConfig, idModeloValido, leerConfig } from '@/lib/hablados';
-import { createTask, crearVozOmni } from '@/lib/ia/kie';
-import { registrarTarea, urlDeAviso } from '@/lib/tareas';
+import { crearVozOmni } from '@/lib/ia/kie';
+import { pedirTarea } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     gestos: typeof b?.gestos === 'string' ? b.gestos : '', fijo: typeof b?.fijo === 'string' ? b.fijo : '',
     cuerpo: typeof b?.cuerpo === 'string' ? b.cuerpo.slice(0, 200) : '',
   });
-  const aviso = urlDeAviso(request);
+  const datos = { tipo: 'video' as const, prompt: texto, dur };
 
   let result;
   if (motor === 'kling3') {
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     // La muestra de voz se toma de lo guardado (no de lo que mande el celular).
     const id = idModeloValido(b?.modeloId) ? b!.modeloId! : '';
     const voz = id ? (await leerConfig()).modelos?.[id]?.voz?.url : undefined;
-    result = await createTask('kling-3.0/video', {
+    result = await pedirTarea(request, 'kling-3.0/video', {
       prompt,
       image_urls: [b!.foto],
       sound: true,
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
         element_input_urls: caras,
         ...(voz ? { element_input_audio_urls: [voz] } : {}),
       }],
-    }, aviso);
+    }, datos);
   } else {
     // Voz del catálogo de Omni: se registra una vez por modelo y por voz.
     const preset = VOCES_OMNI.some((v) => v.id === b?.vozOmni) ? b!.vozOmni! : VOCES_OMNI[0].id;
@@ -78,17 +78,16 @@ export async function POST(request: Request) {
         await guardarConfig({ ...c, modelos }).catch(() => undefined);
       }
     }
-    result = await createTask('gemini-omni-video', {
+    result = await pedirTarea(request, 'gemini-omni-video', {
       prompt,
       image_urls: [b!.foto, ...caras.slice(0, 2)],
       ...(audioId ? { audio_ids: [audioId] } : {}),
       duration: String(dur),
       aspect_ratio: '9:16',
       resolution: pro ? '1080p' : '720p',
-    }, aviso);
+    }, datos);
   }
 
-  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 502 });
-  await registrarTarea(result.taskId, { tipo: 'video', prompt: texto, dur });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
   return NextResponse.json({ taskId: result.taskId });
 }

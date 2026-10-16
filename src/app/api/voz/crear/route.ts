@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { esAdmin, SOLO_ADMIN } from '@/lib/cuenta';
 import { FISH_API, errorFish, fishKey } from '@/lib/fish';
 
 export const runtime = 'nodejs';
@@ -10,6 +11,7 @@ export const maxDuration = 60;
  * Audio (modelo privado, modo rápido) y devuelve su ID para usarla siempre.
  */
 export async function POST(request: Request) {
+  if (!esAdmin()) return NextResponse.json({ error: SOLO_ADMIN }, { status: 403 });
   const key = fishKey();
   if (!key) return NextResponse.json({ error: 'Falta la clave de Fish Audio (FISH_AUDIO_API_KEY). Cargala en Vercel.' }, { status: 400 });
   const body = (await request.json().catch(() => null)) as { audioUrl?: string; texto?: string; firma?: string | null; nombre?: string } | null;

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { listPublic, readJson, removeObject } from '@/lib/storage';
-import { leerTarea, taskIdDeUrl } from '@/lib/tareas';
+import { fichaPropia, taskIdDeUrl } from '@/lib/tareas';
 import type { Meta } from '@/app/api/meta/route';
 
 export const runtime = 'nodejs';
@@ -21,7 +21,7 @@ export async function GET() {
   ]);
   const ordenados = blobs.sort((a, b) => b.uploadedAt - a.uploadedAt);
   const fichas = await Promise.all(
-    ordenados.slice(0, CON_DATOS).map((b) => (meta[b.url] ? Promise.resolve(null) : leerTarea(taskIdDeUrl(b.url)))),
+    ordenados.slice(0, CON_DATOS).map((b) => (meta[b.url] ? Promise.resolve(null) : fichaPropia(taskIdDeUrl(b.url)))),
   );
   const items = ordenados.map((b, i) => {
     const m = meta[b.url] ?? (fichas[i]?.prompt ? fichas[i] : undefined);

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { readJson } from '@/lib/storage';
-import { leerTarea, taskIdDeUrl } from '@/lib/tareas';
+import { esAdmin } from '@/lib/cuenta';
+import { fichaPropia, taskIdDeUrl } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -16,8 +17,10 @@ export type Meta = Record<string, { prompt: string; modelo?: string; refs?: stri
 export async function GET(request: Request) {
   const url = new URL(request.url).searchParams.get('url') ?? '';
   if (!url.startsWith('http')) return NextResponse.json({ error: 'Falta la foto.' }, { status: 400 });
-  const t = await leerTarea(taskIdDeUrl(url));
+  const t = await fichaPropia(taskIdDeUrl(url));
   if (t?.prompt) return NextResponse.json({ prompt: t.prompt, modelo: t.modelo, refs: t.refs, aspect: t.aspect, credits: t.credits });
+  // Los datos viejos son solo del administrador.
+  if (!esAdmin()) return NextResponse.json({});
   const viejo = (await readJson<Meta>('meta', {}))[url];
   return NextResponse.json(viejo ?? {});
 }

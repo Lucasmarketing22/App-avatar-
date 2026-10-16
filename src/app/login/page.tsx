@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -17,7 +18,7 @@ export default function LoginPage() {
       const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ usuario, password }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -66,14 +67,35 @@ export default function LoginPage() {
           musa<span style={{ color: '#4f35e8' }}>.studio</span>
         </div>
         <p style={{ marginTop: 0, color: '#55525c', fontSize: 14 }}>
-          Ingresá la contraseña para entrar.
+          Ingresá tu usuario y tu contraseña.
         </p>
+        <input
+          type="text"
+          value={usuario}
+          onChange={(e) => setUsuario(e.target.value)}
+          placeholder="Usuario"
+          autoCapitalize="none"
+          autoCorrect="off"
+          autoComplete="username"
+          autoFocus
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            height: 44,
+            borderRadius: 10,
+            border: '1px solid #d6d0c6',
+            padding: '0 12px',
+            fontSize: 15,
+            fontFamily: 'inherit',
+            marginBottom: 10,
+          }}
+        />
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Contraseña"
-          autoFocus
+          autoComplete="current-password"
           style={{
             width: '100%',
             boxSizing: 'border-box',

@@ -1,24 +1,33 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { SESSION_COOKIE, sessionToken } from '@/lib/auth';
+import { CUENTA_ADMIN, HEADER_CUENTA, HEADER_VERSION, SESSION_COOKIE, leerToken } from '@/lib/auth';
 
 /**
- * Candado de la app: todo requiere haber entrado con la contraseña única,
- * excepto la propia pantalla de login y su API.
+ * Candado de la app: todo requiere haber entrado (administrador o una cuenta),
+ * excepto la pantalla de login y unas pocas rutas públicas.
+ * A cada pedido le anota de qué cuenta es (encabezado interno), así cada
+ * persona solo ve y guarda lo suyo. Ese encabezado nunca se acepta desde afuera.
  */
 const PUBLIC_PATHS = new Set(['/login', '/api/login', '/api/health', '/api/kie-callback', '/api/cleanup']);
 
+function seguir(request: NextRequest, cuenta?: string, version = 0) {
+  const headers = new Headers(request.headers);
+  headers.delete(HEADER_CUENTA);
+  headers.delete(HEADER_VERSION);
+  if (cuenta) { headers.set(HEADER_CUENTA, cuenta); headers.set(HEADER_VERSION, String(version)); }
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
+  if (PUBLIC_PATHS.has(pathname)) return seguir(request);
 
   const password = process.env.APP_PASSWORD;
   // Si todavía no se configuró la contraseña, no bloqueamos (primer arranque).
-  if (!password) return NextResponse.next();
+  if (!password) return seguir(request, CUENTA_ADMIN);
 
-  const expected = await sessionToken(password);
-  const cookie = request.cookies.get(SESSION_COOKIE)?.value;
-  if (cookie === expected) return NextResponse.next();
+  const sesion = await leerToken(request.cookies.get(SESSION_COOKIE)?.value, password);
+  if (sesion) return seguir(request, sesion.cuenta, sesion.version);
 
   if (pathname.startsWith('/api/')) {
     return NextResponse.json({ error: 'No autorizado.' }, { status: 401 });

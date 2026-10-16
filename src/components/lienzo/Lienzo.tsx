@@ -34,6 +34,8 @@ type Props = {
   onPublicar: (url: string, tipo: 'foto' | 'video') => void;
   onGuardar: (url: string, tipo: 'foto' | 'video') => void;
   onSaldo: () => void;
+  /** Precio de la cuenta: créditos de Kie × esto (1 para el administrador). */
+  mult?: number;
 };
 
 /** Lo que "sale" de una caja hacia las cajas conectadas. */
@@ -85,7 +87,7 @@ function metaVideo(file: File): Promise<number> {
 
 /* ===================== Lienzo ===================== */
 export default function Lienzo(props: Props) {
-  const { modelas, activoId, vestidos, galeria, galerias, costo, estimar, saldo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo } = props;
+  const { modelas, activoId, vestidos, galeria, galerias, costo, estimar, saldo, claveFoto, onCreacion, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo, mult = 1 } = props;
   const [nodes, setNodes] = useState<Nodo[]>([]);
   const [edges, setEdges] = useState<Cable[]>([]);
   const [view, setView] = useState<Vista>({ x: 20, y: 110, z: 0.8 });
@@ -674,6 +676,7 @@ export default function Lienzo(props: Props) {
                   entradas={(p) => entradas(n.id, p, nodes, edges)}
                   salidaDe={salidaDe}
                   costo={costo}
+                  mult={mult}
                   claveFoto={claveFoto}
                   correrFoto={() => correrFoto(n.id)}
                   correrMotion={() => pedirMotion(n.id)}
@@ -732,6 +735,7 @@ function CuerpoNodo(p: {
   entradas: (puerto: string) => Nodo[];
   salidaDe: (n: Nodo) => Salida | null;
   costo: (clave: string) => number | null;
+  mult: number;
   claveFoto: (modelo: string) => string;
   correrFoto: () => void;
   correrMotion: () => void;
@@ -823,13 +827,15 @@ function CuerpoNodo(p: {
       const aud = p.entradas('audio').map(p.salidaDe)[0];
       const dur = aud?.tipo === 'audio' ? aud.dur ?? 0 : 0;
       const imgOk = !!p.entradas('imagen').map(p.salidaDe)[0];
-      const estimado = dur ? Math.ceil(dur) * def.porSeg : null;
+      // Precio por segundo de la cuenta (Kie × su multiplicador).
+      const porSeg = def.porSeg * p.mult;
+      const estimado = dur ? Math.ceil(dur) * porSeg : null;
       return (
         <>
           <div className="lz-lista">
             {HABLAR.map((h) => (
               <button key={h.id} className={`lz-opc ${motor === h.id ? 'on' : ''}`} onClick={() => set({ motor: h.id })}>
-                <b>{h.label}</b><span>{h.desc} · {h.porSeg} cr/s</span>
+                <b>{h.label}</b><span>{h.desc} · {h.porSeg * p.mult} cr/s</span>
               </button>
             ))}
           </div>
@@ -839,7 +845,7 @@ function CuerpoNodo(p: {
           </button>
           <p className="lz-nota">
             {!imgOk ? 'Falta la foto. ' : ''}{!aud ? 'Falta el audio. ' : ''}
-            {estimado !== null ? `≈ ${estimado} créditos (≈ US$ ${(estimado * 0.005).toFixed(2).replace('.', ',')}) por ${Math.ceil(dur)} s de audio.` : `${def.porSeg} créditos por segundo de audio.`}
+            {estimado !== null ? `≈ ${estimado} créditos (≈ US$ ${(estimado * 0.005).toFixed(2).replace('.', ',')}) por ${Math.ceil(dur)} s de audio.` : `${porSeg} créditos por segundo de audio.`}
           </p>
           {corriendo ? <p className="lz-nota">Tarda unos minutos. Podés seguir usando la app.</p> : null}
           {err}

@@ -66,7 +66,7 @@ async function intentarGemini(pedido: string, herramienta: Herramienta): Promise
   const r = await chatGemini([{ type: 'text', text: `${pedido}\n\nIMPORTANT: answer ONLY with one JSON object that matches this JSON schema (no tool call, no markdown, no other text):\n${JSON.stringify(herramienta.input_schema)}` }]);
   if (!r.ok) return { ok: false, error: r.error, reintentar: false, definitivo: false };
   const datos = jsonDe(r.texto);
-  return datos !== null ? { ok: true, datos } : { ok: false, error: 'La IA de respaldo no devolvió el formato esperado.', reintentar: false, definitivo: false };
+  return datos !== null ? { ok: true, datos, credits: r.credits } : { ok: false, error: 'La IA de respaldo no devolvió el formato esperado.', reintentar: false, definitivo: false };
 }
 
 /**
@@ -124,12 +124,12 @@ function leerSSE(crudo: string): { content: Bloque[] } | null {
  * Endpoint verificado en docs.kie.ai: POST /gemini-3-5-flash-openai/v1/chat/completions
  * con formato OpenAI; las imágenes van como { type: 'image_url', image_url: { url } }.
  */
-export async function verImagen(url: string, pedido: string): Promise<{ ok: true; texto: string } | { ok: false; error: string }> {
+export async function verImagen(url: string, pedido: string): Promise<{ ok: true; texto: string; credits?: number } | { ok: false; error: string }> {
   return chatGemini([{ type: 'text', text: pedido }, { type: 'image_url', image_url: { url } }]);
 }
 
 /** Un mensaje a Gemini 3.5 Flash (formato OpenAI). Reintenta si Kie está saturado. */
-async function chatGemini(contenido: unknown[]): Promise<{ ok: true; texto: string } | { ok: false; error: string }> {
+async function chatGemini(contenido: unknown[]): Promise<{ ok: true; texto: string; credits?: number } | { ok: false; error: string }> {
   if (!process.env.KIE_API_KEY) return { ok: false, error: 'Falta configurar la clave de Kie (KIE_API_KEY).' };
   let error = '';
   for (let i = 0; i < 2; i++) {
@@ -141,10 +141,11 @@ async function chatGemini(contenido: unknown[]): Promise<{ ok: true; texto: stri
         cache: 'no-store',
         body: JSON.stringify({ stream: false, messages: [{ role: 'user', content: contenido }] }),
       });
-      const d = (await res.json().catch(() => null)) as { code?: number; msg?: string; choices?: { message?: { content?: unknown } }[] } | null;
+      const d = (await res.json().catch(() => null)) as { code?: number; msg?: string; credits_consumed?: number; choices?: { message?: { content?: unknown } }[] } | null;
       const c = d?.choices?.[0]?.message?.content;
       const texto = typeof c === 'string' ? c : Array.isArray(c) ? c.map((x) => (typeof x === 'object' && x && 'text' in x ? String((x as { text: unknown }).text) : '')).join(' ') : '';
-      if (res.ok && texto.trim()) return { ok: true, texto: texto.trim() };
+      // Si Kie informa cuánto costó, se usa para cobrárselo a la cuenta.
+      if (res.ok && texto.trim()) return { ok: true, texto: texto.trim(), credits: typeof d?.credits_consumed === 'number' ? d.credits_consumed : undefined };
       const code = typeof d?.code === 'number' && d.code !== 200 ? d.code : res.ok ? undefined : res.status;
       error = deKie(d?.msg, code) || 'No respondió.';
       if (code && code !== 429 && code < 500) break;
