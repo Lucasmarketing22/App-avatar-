@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { componerVideoHablado, durValida, VOCES_OMNI, type Motor } from '@/lib/estudio/hablados';
+import { componerVideoHablado, durValida, VOCES_OMNI, type Motor, type UsoProducto } from '@/lib/estudio/hablados';
 import { guardarConfig, idModeloValido, leerConfig } from '@/lib/hablados';
 import { crearVozOmni } from '@/lib/ia/kie';
 import { pedirTarea } from '@/lib/tareas';
@@ -20,7 +20,7 @@ const esUrl = (u: unknown): u is string => typeof u === 'string' && u.startsWith
 export async function POST(request: Request) {
   const b = (await request.json().catch(() => null)) as {
     motor?: string; modeloId?: string; foto?: string; caras?: string[]; texto?: string; idioma?: string;
-    escenario?: string; grabacion?: string; gestos?: string; fijo?: string; cuerpo?: string; dur?: number; calidad?: string; vozOmni?: string;
+    escenario?: string; grabacion?: string; gestos?: string; fijo?: string; cuerpo?: string; dur?: number; calidad?: string; vozOmni?: string; producto?: string;
   } | null;
 
   const motor: Motor = b?.motor === 'omni' ? 'omni' : 'kling3';
@@ -32,11 +32,12 @@ export async function POST(request: Request) {
   const escenario = typeof b?.escenario === 'string' ? b.escenario.trim().slice(0, 400) : '';
   const dur = durValida(motor, Number(b?.dur));
   const pro = b?.calidad === '1080p';
+  const producto: UsoProducto | undefined = b?.producto === 'puesto' || b?.producto === 'mano' ? b.producto : undefined;
 
   const prompt = componerVideoHablado({
     motor, dur, texto, idioma, escenario, grabacion: String(b?.grabacion ?? ''),
     gestos: typeof b?.gestos === 'string' ? b.gestos : '', fijo: typeof b?.fijo === 'string' ? b.fijo : '',
-    cuerpo: typeof b?.cuerpo === 'string' ? b.cuerpo.slice(0, 200) : '',
+    cuerpo: typeof b?.cuerpo === 'string' ? b.cuerpo.slice(0, 200) : '', producto,
   });
   const datos = { tipo: 'video' as const, prompt: texto, dur };
 
