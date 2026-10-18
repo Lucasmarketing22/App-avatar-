@@ -8,7 +8,7 @@ import { AVISO_FALLO_ROPA, vestuarioATexto } from '@/lib/cliente/vestuario';
 import { componerNodoFoto, medidasDe, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ESCENARIO_UGC, ESCENARIOS, ESTILOS, GRABACIONES, IDIOMA_DEFECTO, VOCES_OMNI, componerFotoUGC, durValida, palabrasMax, pistaFotoInicial,
-  type Guion, type Motor, type UsoProducto,
+  type FondoUGC, type Guion, type Motor, type UsoProducto,
 } from '@/lib/estudio/hablados';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 import ModoRopa from '@/components/ModoRopa';
@@ -41,6 +41,8 @@ type Estado = {
   /** UGC: foto del producto (va tal cual a la IA: es la que manda). */
   prodUrl: string;
   prodUso: UsoProducto;
+  /** UGC: conservar el lugar exacto del cuadro o crear uno parecido. */
+  fondoUgc: FondoUGC;
   escenario: string;
   escenarioTexto: string;
   grabacion: string;
@@ -79,7 +81,7 @@ type Estado = {
   guionCred?: number;
 };
 const VACIO: Estado = {
-  modo: 'hablado', ref: null, prodUrl: '', prodUso: 'puesto',
+  modo: 'hablado', ref: null, prodUrl: '', prodUso: 'puesto', fondoUgc: 'exacto',
   escenario: 'sillon', escenarioTexto: '', grabacion: 'apoyado', ropa: 'foto', ropaUrl: '', ropaTexto: '', instr: '', fotoModelo: 'nanopro',
   fotos: [], elegida: '', fotoTask: '', idioma: '', tema: '', extra: '', dur: 10, guiones: [], guionSel: -1, texto: '', gestos: '', caption: '', traduccion: '', traduccionDe: '',
   motor: 'omni', calidad: '720p', vozOmni: VOCES_OMNI[0].id, videoTask: '', resultado: '',
@@ -167,7 +169,7 @@ export default function Hablados(props: Props) {
   function empezarOtro() {
     if ((creandoFoto || creandoVideo) && !window.confirm('Hay algo creándose. ¿Empezar otro igual? (lo que termine va a aparecer en tu galería)')) return;
     // Se mantiene lo que suele repetirse: escenario, cámara, idioma, motor.
-    setE((x) => ({ ...VACIO, modo: x.modo, prodUso: x.prodUso, escenario: x.escenario, escenarioTexto: x.escenarioTexto, grabacion: x.grabacion, idioma: x.idioma, motor: x.motor, calidad: x.calidad, vozOmni: x.vozOmni, dur: x.dur, fotoModelo: x.fotoModelo }));
+    setE((x) => ({ ...VACIO, modo: x.modo, prodUso: x.prodUso, fondoUgc: x.fondoUgc, escenario: x.escenario, escenarioTexto: x.escenarioTexto, grabacion: x.grabacion, idioma: x.idioma, motor: x.motor, calidad: x.calidad, vozOmni: x.vozOmni, dur: x.dur, fotoModelo: x.fotoModelo }));
     setError('');
   }
   function cambiarModo(modo: Estado['modo']) {
@@ -281,7 +283,7 @@ export default function Hablados(props: Props) {
     const caras = modelo.refs.slice(0, 3);
     const cuerpo = modelo.entero || modelo.medio;
     const imageUrls = [e.ref.url, ...caras, ...(cuerpo ? [cuerpo] : []), e.prodUrl];
-    const prompt = componerFotoUGC({ caras: caras.length, conCuerpo: !!cuerpo, uso: e.prodUso, instr: e.instr, cuerpo: modelo.cuerpo, fijo: modelo.promptFijo });
+    const prompt = componerFotoUGC({ caras: caras.length, conCuerpo: !!cuerpo, uso: e.prodUso, fondo: e.fondoUgc, instr: e.instr, cuerpo: modelo.cuerpo, fijo: modelo.promptFijo });
     try {
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: '9:16', modelo: e.fotoModelo }) });
       const d = await res.json().catch(() => ({}));
@@ -450,6 +452,14 @@ export default function Hablados(props: Props) {
                 📷 Subir captura
               </label>
             </div>
+            <div className="vr-tit chico">🏙️ El lugar</div>
+            <div className="lz-chips">
+              <button className={`opt ${e.fondoUgc === 'exacto' ? 'on' : ''}`} onClick={() => set({ fondoUgc: 'exacto' })}>📍 Mismo lugar exacto</button>
+              <button className={`opt ${e.fondoUgc === 'parecido' ? 'on' : ''}`} onClick={() => set({ fondoUgc: 'parecido' })}>🔄 Lugar parecido</button>
+            </div>
+            <p className="vr-nota" style={{ marginTop: 0 }}>{e.fondoUgc === 'exacto'
+              ? 'Se queda el fondo del video (calle, autos, encuadre; también la mano y el micrófono si hay entrevistador) y solo cambia la persona. Puede no salir idéntico al píxel.'
+              : 'Mismo tipo de lugar y encuadre, pero otro sitio: sirve para que no se note de qué video salió.'}</p>
           </>
         ) : (
           <>
@@ -599,7 +609,7 @@ export default function Hablados(props: Props) {
         <button className={`btn-grad ${escribiendo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 8 }} disabled={escribiendo} onClick={escribirGuiones}>
           {escribiendo ? 'Escribiendo… (unos segundos)' : e.guiones.length ? '🔄 Escribir otros 3' : '✨ Escribir 3 guiones'}
         </button>
-        <p className="vr-nota">{ugc ? 'Reseña, problema → solución y hallazgo: hablan solo de lo que escribiste (no inventan precios ni resultados). ' : ''}Gancho para frenar el scroll, desarrollo y cierre, medidos para {e.dur} s. Se cobra en créditos (muy poco); abajo te muestro cuánto costó.{typeof e.guionCred === 'number' ? ` Último: ${fmt(e.guionCred)} créditos.` : ''}</p>
+        <p className="vr-nota">{ugc ? 'Opinión honesta, situación → producto y “mirá esto”: hablan solo de lo que escribiste (no inventan precios, resultados ni experiencias). ' : ''}Gancho para frenar el scroll, desarrollo y cierre, medidos para {e.dur} s. Se cobra en créditos (muy poco); abajo te muestro cuánto costó.{typeof e.guionCred === 'number' ? ` Último: ${fmt(e.guionCred)} créditos.` : ''}</p>
         {errorGuion ? <p className="errbox" style={{ margin: '8px 0 0' }}>{errorGuion}</p> : null}
         {e.guiones.length ? (
           <>
