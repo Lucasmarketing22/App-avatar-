@@ -61,7 +61,7 @@ function jsonDe(texto: string): unknown {
   try { return JSON.parse(m[0]); } catch { return null; }
 }
 
-/** Plan B: Gemini 3.5 Flash (también en Kie) devolviendo solo JSON. */
+/** Plan B: Gemini 3.6 Flash (también en Kie) devolviendo solo JSON. */
 async function intentarGemini(pedido: string, herramienta: Herramienta): Promise<Intento> {
   const r = await chatGemini([{ type: 'text', text: `${pedido}\n\nIMPORTANT: answer ONLY with one JSON object that matches this JSON schema (no tool call, no markdown, no other text):\n${JSON.stringify(herramienta.input_schema)}` }]);
   if (!r.ok) return { ok: false, error: r.error, reintentar: false, definitivo: false };
@@ -120,22 +120,23 @@ function leerSSE(crudo: string): { content: Bloque[] } | null {
 }
 
 /**
- * Mirar una imagen y describirla (Gemini 3.5 Flash vía Kie, misma clave).
- * Endpoint verificado en docs.kie.ai: POST /gemini-3-5-flash-openai/v1/chat/completions
+ * Mirar una imagen y describirla (Gemini 3.6 Flash vía Kie, misma clave).
+ * Endpoint verificado en docs.kie.ai: POST /gemini-3-6-flash-openai/v1/chat/completions
+ * (Kie dio de baja Gemini 3.5 Flash: sus pedidos fallan; 3.6 tiene el mismo precio y formato)
  * con formato OpenAI; las imágenes van como { type: 'image_url', image_url: { url } }.
  */
 export async function verImagen(url: string, pedido: string): Promise<{ ok: true; texto: string; credits?: number } | { ok: false; error: string }> {
   return chatGemini([{ type: 'text', text: pedido }, { type: 'image_url', image_url: { url } }]);
 }
 
-/** Un mensaje a Gemini 3.5 Flash (formato OpenAI). Reintenta si Kie está saturado. */
+/** Un mensaje a Gemini 3.6 Flash (formato OpenAI). Reintenta si Kie está saturado. */
 async function chatGemini(contenido: unknown[]): Promise<{ ok: true; texto: string; credits?: number } | { ok: false; error: string }> {
   if (!process.env.KIE_API_KEY) return { ok: false, error: 'Falta configurar la clave de Kie (KIE_API_KEY).' };
   let error = '';
   for (let i = 0; i < 2; i++) {
     if (i) await dormir(2500);
     try {
-      const res = await fetch('https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions', {
+      const res = await fetch('https://api.kie.ai/gemini-3-6-flash-openai/v1/chat/completions', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.KIE_API_KEY}`, 'Content-Type': 'application/json' },
         cache: 'no-store',
