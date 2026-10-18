@@ -43,6 +43,7 @@ export const GUIAS: Record<GuiaId, { titulo: string; pasos: string[] }> = {
       'Paso cuatro: escribí el idioma, el acento y el tono. Si tocás Dejar como predeterminado, queda guardado para la próxima.',
       'Paso cinco: elegí la duración, escribí de qué habla y tocá Escribir 3 guiones. Cada uno trae gancho, desarrollo y cierre. Tocá el que más te guste; lo podés editar.',
       'Paso seis: el motor recomendado es Gemini Omni: hasta 10 segundos, más barato, y usa siempre la misma voz de su catálogo. Kling 3.0 es más caro y se le manda la muestra de voz de tu modelo. Tocá Crear video, revisá la pantalla de confirmación con el costo y listo: el video queda en tu galería.',
+      'Para publicidad de una marca, arriba elegí UGC de producto. En el paso dos elegís un video que te guste, por ejemplo un TikTok: la app usa solo su primer cuadro como molde del lugar, la luz y el encuadre. En el paso tres subís la foto del producto, mejor sola y con fondo liso, y elegís si lo lleva puesto o lo muestra en la mano. Los guiones hablan de tu producto, no copian lo que dice el video.',
     ],
   },
   motion: {

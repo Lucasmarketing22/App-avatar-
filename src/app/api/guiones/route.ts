@@ -23,7 +23,7 @@ const HERRAMIENTA = {
           type: 'object',
           required: ['estilo', 'titulo', 'gancho', 'desarrollo', 'cierre', 'texto', 'gestos', 'caption', 'traduccion'],
           properties: {
-            estilo: { type: 'string', enum: ['storytime', 'opinion', 'consejo'] },
+            estilo: { type: 'string', enum: ['storytime', 'opinion', 'consejo', 'resena', 'problema', 'hallazgo'] },
             titulo: { type: 'string', description: 'Título corto en español para reconocerlo (máx. 6 palabras).' },
             gancho: { ...TEXTO, description: 'Primera frase (hook), en el idioma pedido.' },
             desarrollo: { ...TEXTO, description: 'Parte del medio, en el idioma pedido.' },
@@ -39,9 +39,9 @@ const HERRAMIENTA = {
   },
 };
 
-/** 3 guiones (storytime, opinión, consejo) con gancho, desarrollo y cierre. */
+/** 3 guiones (storytime, opinión, consejo; o reseña, problema, hallazgo si es UGC de producto) con gancho, desarrollo y cierre. */
 export async function POST(request: Request) {
-  const b = (await request.json().catch(() => null)) as { tema?: string; idioma?: string; dur?: number; nombre?: string; escenario?: string; extra?: string } | null;
+  const b = (await request.json().catch(() => null)) as { tema?: string; idioma?: string; dur?: number; nombre?: string; escenario?: string; extra?: string; ugc?: boolean } | null;
   const tema = typeof b?.tema === 'string' ? b.tema.trim().slice(0, 600) : '';
   if (!tema) return NextResponse.json({ error: 'Escribí de qué querés que hable.' }, { status: 400 });
   const idioma = typeof b?.idioma === 'string' && b.idioma.trim() ? b.idioma.trim().slice(0, 300) : 'English (US), casual';
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
   // Las cuentas necesitan saldo (la IA de texto cobra muy poco; se descuenta lo que informa Kie).
   const permiso = await puedeGastar(TEXTO_ESTIMADO);
   if (!permiso.ok) return NextResponse.json({ error: permiso.error }, { status: permiso.status });
-  const r = await pedirDatos(pedidoGuiones({ tema, idioma, dur, nombre, escenario, extra }), HERRAMIENTA);
+  const r = await pedirDatos(pedidoGuiones({ tema, idioma, dur, nombre, escenario, extra, ugc: b?.ugc === true }), HERRAMIENTA);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 });
   await cobrarAhora(permiso, r.credits);
   const guiones = limpiarGuiones(r.datos);

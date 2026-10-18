@@ -72,7 +72,7 @@ export function componerEditor(texto: string, nImgs: number): string {
   );
 }
 
-const REALISMO =
+export const REALISMO =
   'Keep it fully photographic and realistic: real skin texture with clearly visible pores, fine lines and small natural imperfections (not uniform or perfect skin). ' +
   'Do NOT smooth, retouch, beautify, soften or over-light the skin. Imperfect, uneven natural lighting with real shadows — no glossy, waxy or glowing highlights. ' +
   'Make it look like a raw, candid amateur smartphone snapshot, NOT a polished studio shot or an AI/beauty-filter image. ' +
