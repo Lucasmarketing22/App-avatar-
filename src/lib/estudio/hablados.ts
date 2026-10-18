@@ -1,4 +1,4 @@
-import { describirCuerpo, medidasDe, pistaCuerpo, pistaFija, pistaFotoCuerpo, REALISMO } from './prompt';
+import { describirCuerpo, medidasDe, pistaCuerpo, pistaFija, pistaFotoCuerpo } from './prompt';
 
 /**
  * "Hablados": videos de la modelo hablando a cámara, casual y creíble.
@@ -15,6 +15,9 @@ import { describirCuerpo, medidasDe, pistaCuerpo, pistaFija, pistaFotoCuerpo, RE
 export type Motor = 'kling3' | 'omni';
 /** Cómo aparece el producto en el UGC. */
 export type UsoProducto = 'puesto' | 'mano';
+/** UGC: ella habla sola a cámara, o le hacen una pregunta en la calle (entrevistador fuera de cuadro). */
+export type FormatoUGC = 'sola' | 'entrevista';
+export type VozEntrevistador = 'hombre' | 'mujer';
 
 export const ESCENARIOS: { id: string; label: string; en: string }[] = [
   { id: 'sillon', label: '🛋️ Sillón', en: 'sitting sideways on a beige fabric sofa in a lived-in living room, a window at camera-left, a few cushions and a throw blanket' },
@@ -26,6 +29,7 @@ export const ESCENARIOS: { id: string; label: string; en: string }[] = [
 ];
 
 export const GRABACIONES: { id: string; label: string; en: string; soloUgc?: boolean }[] = [
+  { id: 'entrevista', label: '🎤 Entrevista en mano', en: 'A street interviewer films her handheld with the phone\'s rear camera at chest-to-eye height, about one metre away and slightly off-axis, while their other hand holds a small microphone toward her; small natural handheld movements', soloUgc: true },
   { id: 'ref', label: '🎞️ Como en el video', en: 'The same camera setup as the opening frame: same phone, distance, height, angle and framing, with the same fixed or handheld feel (small natural breathing movements if handheld)', soloUgc: true },
   { id: 'apoyado', label: '📱 Celular apoyado', en: 'Her phone is propped up on a surface in front of her at chest height, about one metre away, recording with the front camera; the frame stays fixed with only tiny vibrations when she touches the surface' },
   { id: 'selfie', label: '🤳 Selfie en mano', en: 'She holds the phone herself at arm\'s length with one hand (front camera, slightly above eye level); small breathing-driven movements and subtle wrist drift, one late reframing when she moves, then it settles. Only her other hand is free' },
@@ -40,9 +44,9 @@ export const ESTILOS: { id: string; label: string; desc: string }[] = [
   { id: 'opinion', label: 'Opinión que genera debate', desc: 'Una postura clara que invita a comentar.' },
   { id: 'consejo', label: 'Consejo rápido', desc: 'Un tip útil y concreto, dicho con naturalidad.' },
   // UGC de producto
-  { id: 'resena', label: 'Reseña honesta', desc: 'Lo probó y cuenta qué le gustó, como a una amiga.' },
-  { id: 'problema', label: 'Problema → solución', desc: 'Un problema común y cómo el producto se lo resolvió.' },
-  { id: 'hallazgo', label: 'Hallazgo / recomendación', desc: '“Encontré esto y no puedo parar de usarlo”.' },
+  { id: 'resena', label: 'Opinión honesta', desc: 'Qué le gusta del producto y por qué, con detalles concretos.' },
+  { id: 'problema', label: 'Situación → producto', desc: 'Una situación de todos los días y cómo encaja el producto.' },
+  { id: 'hallazgo', label: '“Mirá esto”', desc: 'Lo muestra como a una amiga y señala uno o dos detalles.' },
 ];
 
 /** Duración que acepta cada motor: Kling 3.0 de 3 a 15 s; Gemini Omni 4, 6, 8 o 10 s. */
@@ -77,6 +81,8 @@ export type Guion = {
   cierre: string;
   /** Lo que dice, completo y en el idioma elegido. */
   texto: string;
+  /** Formato entrevista: la pregunta de quien entrevista (fuera de cuadro). */
+  pregunta?: string;
   /** Microgestos y acciones (en inglés, van directo al prompt del video). */
   gestos: string;
   /** Texto para publicar (en el idioma elegido). */
@@ -101,10 +107,15 @@ export function pistaFotoInicial(escenario: string, grabacion: string): string {
 /**
  * Foto inicial del UGC. Las imágenes van en este orden: 1 = primer cuadro del
  * video de referencia, después las caras, la foto de cuerpo (si hay) y al
- * final el producto. Del cuadro se toma el lugar, la luz y el encuadre (nunca
- * la persona); el producto es la autoridad sobre cómo es el producto.
+ * final el producto. Cada referencia tiene un solo papel: el cuadro da la
+ * escena y la calidad de foto (nunca la persona), las caras dan a la modelo y
+ * el producto manda sobre cómo es el producto.
+ *  - fondo 'exacto': se conserva el lugar del cuadro y solo se cambia a la persona.
+ *  - fondo 'parecido': mismo tipo de lugar y encuadre, pero otro sitio concreto.
+ * La calidad de imagen copia la del cuadro (no se fuerza nitidez ni poros extra).
  */
-export function componerFotoUGC(o: { caras: number; conCuerpo: boolean; uso: UsoProducto; instr?: string; cuerpo?: string; fijo?: string }): string {
+export type FondoUGC = 'exacto' | 'parecido';
+export function componerFotoUGC(o: { caras: number; conCuerpo: boolean; uso: UsoProducto; fondo: FondoUGC; entrevista?: boolean; instr?: string; cuerpo?: string; fijo?: string }): string {
   const lista = (a: number, b: number) => (a === b ? `Image ${a}` : `Images ${a}-${b}`);
   const ultCara = 1 + o.caras;
   const nCuerpo = o.conCuerpo ? ultCara + 1 : 0;
@@ -113,19 +124,22 @@ export function componerFotoUGC(o: { caras: number; conCuerpo: boolean; uso: Uso
   const figura = describirCuerpo(medidas);
   const prod = `Image ${nProd}`;
   return [
-    figura ? `Photorealistic vertical phone photo of a woman with ${figura}.` : 'Photorealistic vertical phone photo.',
-    'Image 1 is the opening frame of a real phone video (UGC). Use it as the realism and composition guide for the whole image, not just the layout: recreate the same kind of place and background, the same light (direction, color, softness, time of day), the same camera height, angle, lens, distance and framing, and the same phone-camera texture and depth of field. Keep a similar body position and attitude, so she looks like she is about to start talking in that same moment.',
-    'Replace the person of Image 1 completely: nothing of that person may remain (face, hair, body, clothes, accessories). Do not copy any text, captions, stickers or app interface that appear on Image 1.',
-    o.caras ? `${lista(2, ultCara)} show the woman's face and identity: the person in the result must be exactly her — same face, bone structure, face width, skin tone, freckles, eye color and hair. Do not alter, widen or round her face.` : '',
+    `Create a vertical 9:16 opening frame for a phone video${figura ? ` of a woman with ${figura}` : ''}. Each reference image has ONE job; do not mix them.`,
+    o.fondo === 'exacto'
+      ? 'SCENE REFERENCE — Image 1, the opening frame of a real phone video: keep its exact place and background, buildings or furniture, objects, vehicles, camera position, perspective, crop and framing. Replace only the person who is the subject: nothing of that person may remain (face, hair, body, clothes, accessories, or the item they wore or held); reconstruct only the background areas the replacement reveals. If an interviewer\'s hand, a microphone or other people are part of the scene, keep them as they are.'
+      : 'SCENE REFERENCE — Image 1, the opening frame of a real phone video: create the same kind of place and the same camera height, angle, distance, perspective and framing, but in a visibly different concrete location of that same type (different architecture, storefronts, walls or furniture). Do not keep the person of Image 1: nothing of that person may remain (face, hair, body, clothes, accessories, or the item they wore or held). If the format needs an interviewer\'s hand with a microphone, include one entering from the same side.',
+    'Use Image 1 as the photographic guide for the ENTIRE result, not only the layout: match its light direction and softness, exposure, color balance, shadows, reflections, depth and level of detail, and its phone-camera character, across the new woman, her clothes, the product and the surroundings. Remove any subtitles, captions, stickers or app interface from Image 1.',
+    o.caras ? `CHARACTER REFERENCE — ${lista(2, ultCara)}, her face photos: the woman must be exactly her — same face, bone structure, face width, skin tone, freckles, eye color and hairstyle. Do not alter, widen or round her face. Adapt the light and shadows on her face to the scene; do not bring over the background, lighting, pose or clothes of those photos.${o.entrevista ? '' : ' Give her a relaxed pose and gaze that fit the scene, as if she is about to start talking.'}` : '',
+    o.entrevista ? 'INTERVIEW: she is being interviewed on the spot. She looks toward an interviewer standing just beside the camera (three-quarter view, not into the lens), with a relaxed, attentive expression, about to answer. A hand holding a small handheld microphone enters the frame from that side toward her chest level (if Image 1 already has one, keep it). The interviewer\'s face and body are not visible.' : '',
     nCuerpo ? pistaFotoCuerpo(`Image ${nCuerpo}`) : '',
     pistaCuerpo(medidas),
     o.uso === 'puesto'
-      ? `${prod} is the PRODUCT and it is the authority for that item: she wears exactly that item from ${prod}, replacing the matching garment of the original outfit. Preserve its exact shape, cut, length, fit, color, material and texture, seams, zips, buttons, hardware, pockets, logos and every detail. Folds, creases, highlights and contact shadows must look physically natural on HER body under the light of the scene. The item is worn, never held or shown as an inset. If ${prod} shows a person wearing it, take ONLY the item — never that person's body, face, pose or background. The rest of her outfit is simple and fits the place, so the product stands out.`
-      : `${prod} is the PRODUCT and it is the authority for that item: she holds exactly that product naturally in one hand at chest height, turned so its front and label face the camera, at its correct real-world size. Preserve its exact shape, proportions, color, material, packaging, label, logo and printed text — never invent, change or blur letters. Her fingers wrap around it naturally (correct number of fingers, no merging with the product). Her outfit is casual and fits the place.`,
+      ? `PRODUCT REFERENCE — ${prod}: it is the authority for the item. Dress her in exactly that item, replacing the matching garment of the original outfit. Preserve its visible cut, length, color, material, seams, closures, hardware, pockets, logos and proportions — do not invent details that are not visible. Fit, folds, contact shadows and highlights must look physically natural on HER body under the scene\'s light. It is worn, never held, never shown as an inset, and only once (no duplicate garments). If ${prod} shows a person wearing it, take ONLY the item, never that person\'s body, face, pose or background. The rest of her outfit is simple and fits the place, so the product stands out.`
+      : `PRODUCT REFERENCE — ${prod}: it is the authority for the product. She holds exactly that product naturally in one hand, front and label toward the camera, at its correct real-world size. Preserve its visible shape, proportions, color, material, packaging, label, logo and printed text — never invent, change or blur letters, and do not invent details that are not visible. Natural fingers around it (no merging with the product). Only one product, no duplicates. Her outfit is casual and fits the place.`,
     o.instr?.trim() ? `Also: ${o.instr.trim().replace(/[.\s]+$/, '')}.` : '',
     figura ? 'Remember: keep her exact figure described above.' : '',
     pistaFija(o.fijo, !figura),
-    REALISMO,
+    'Keep it as natural as the original frame: no beauty retouching, no artificial skin texture, no cinematic grading, no added grain, no extra sharpening, no text and no redesigned logos.',
   ].filter(Boolean).join(' ');
 }
 
@@ -150,6 +164,8 @@ export function componerVideoHablado(o: {
   cuerpo?: string;
   /** UGC de producto: el producto del primer cuadro tiene que quedar idéntico. */
   producto?: UsoProducto;
+  /** UGC entrevista: la pregunta la hace alguien fuera de cuadro y ella responde. */
+  entrevista?: { pregunta: string; voz: VozEntrevistador };
 }): string {
   const g = GRABACIONES.find((x) => x.id === o.grabacion) ?? GRABACION_DEF;
   const ella = o.motor === 'kling3' ? '@mila' : 'the woman';
@@ -163,14 +179,22 @@ export function componerVideoHablado(o: {
     sujeto,
     fijo ? `Her fixed traits: ${fijo.slice(0, 300)}` : '',
     medidasDe(o.cuerpo, o.fijo) ? `BODY: keep exactly the figure of the first frame (${describirCuerpo(medidasDe(o.cuerpo, o.fijo))}) in every movement.` : '',
-    o.producto ? `SETTING / LIGHT: ${o.escenario.trim()}. The light of the first frame stays consistent.` : `SETTING / LIGHT: ${o.escenario.trim()}. Motivated natural light from the window; light direction stays consistent.`,
+    o.producto ? 'SETTING / LIGHT: exactly the place, background and light of the first frame, unchanged.' : `SETTING / LIGHT: ${o.escenario.trim()}. Motivated natural light from the window; light direction stays consistent.`,
     o.producto ? `PRODUCT: the ${o.producto === 'puesto' ? 'item she wears' : 'product in her hand'} stays exactly as in the first frame (shape, color, material, logo, details)${o.producto === 'mano' ? ', label readable; she may tilt it toward the camera once' : ''}. No other products.` : '',
     `CAMERA: ${g.en}.`,
-    `ACTION: An unguarded, unperformed moment. ${ella} talks to the camera as if to a close friend, ${o.producto ? 'sharing something she genuinely likes, not a sales pitch' : 'not presenting'}. Micro-gestures with a reason: a brief glance away while she thinks, eyebrows lifting on the key word, a small exhale or soft laugh, a hand that moves naturally once and rests again. Natural blinking, a quiet breath before the first word.${o.gestos ? ` ${o.gestos.trim().slice(0, 400)}` : ''}`,
-    `DIALOGUE: ${ella} speaks in the language and accent described as "${o.idioma.trim()}"${voz}, conversational delivery with natural pauses between phrases (do not rush, leave a short silence where it fits): "${o.texto.trim()}"`,
-    'AUDIO: phone-microphone perspective, close natural voice with faint room reflections, quiet room tone. No music, no narration, no sound effects added in post.',
-    'SKIN: visible pores, natural skin-color variation, freckles stable through movement, a few flyaways catching the light; mostly matte cheeks.',
-    'CONSTRAINTS: no beauty smoothing, no waxy skin, no forced presenter smile, no repeated gestures on a loop, no exaggerated camera shake, no subtitles or text on screen, no extra people talking, no morphing fingers. Keep her face, outfit and the place consistent.',
+    o.entrevista
+      ? `ACTION: A spontaneous street-interview moment. ${o.motor === 'kling3' ? ella : 'The woman'} listens to the question looking at the off-camera interviewer beside the camera, then answers to them (not to the lens), relaxed and genuine, with small natural gestures and a brief glance at the product when she mentions it. Natural blinking.${o.gestos ? ` ${o.gestos.trim().slice(0, 300)}` : ''}`
+      : `ACTION: An unguarded, unperformed moment. ${ella} talks to the camera as if to a close friend, ${o.producto ? 'sharing something she genuinely likes, not a sales pitch' : 'not presenting'}. Micro-gestures with a reason: a brief glance away while she thinks, eyebrows lifting on the key word, a small exhale or soft laugh, a hand that moves naturally once and rests again. Natural blinking, a quiet breath before the first word.${o.gestos ? ` ${o.gestos.trim().slice(0, 400)}` : ''}`,
+    o.entrevista
+      ? `DIALOGUE (two speakers, in the language and accent described as "${o.idioma.trim()}"): first the INTERVIEWER, off camera (a ${o.entrevista.voz === 'mujer' ? 'woman' : 'man'}'s voice, slightly farther from the microphone), asks: "${o.entrevista.pregunta.trim()}" — a short natural pause — then ${ella} answers${voz}, conversational, with natural pauses (do not rush): "${o.texto.trim()}". Only these two voices; her lips move only when she speaks.`
+      : `DIALOGUE: ${ella} speaks in the language and accent described as "${o.idioma.trim()}"${voz}, conversational delivery with natural pauses between phrases (do not rush, leave a short silence where it fits): "${o.texto.trim()}"`,
+    o.producto
+      ? 'AUDIO: phone-microphone perspective, close natural voice, with the real ambient sound of that place kept low under her voice. No music, no narration, no sound effects added in post.'
+      : 'AUDIO: phone-microphone perspective, close natural voice with faint room reflections, quiet room tone. No music, no narration, no sound effects added in post.',
+    o.producto
+      ? 'SKIN: keep the same natural level of detail, softness and light as the first frame (no added sharpening or texture); freckles stable through movement.'
+      : 'SKIN: visible pores, natural skin-color variation, freckles stable through movement, a few flyaways catching the light; mostly matte cheeks.',
+    `CONSTRAINTS: no beauty smoothing, no waxy skin, no forced presenter smile, no repeated gestures on a loop, no exaggerated camera shake, no subtitles or text on screen, ${o.entrevista ? 'the interviewer stays off camera (only the hand with the microphone may show), no other voices' : 'no extra people talking'}, no morphing fingers${o.producto ? ', no product morphing' : ''}. Keep her face, outfit and the place consistent.`,
   ];
   // Kling acepta hasta 2500 caracteres y Omni hasta 20000. Si no entra, primero
   // sale la línea de piel (la más prescindible) y después se recorta el final.
@@ -181,15 +205,19 @@ export function componerVideoHablado(o: {
 }
 
 /** Pedido a la IA de texto para los 3 guiones (estilo Estratega AvatarHype). */
-export function pedidoGuiones(o: { tema: string; idioma: string; dur: number; nombre: string; escenario: string; extra?: string; ugc?: boolean }): string {
+export function pedidoGuiones(o: { tema: string; idioma: string; dur: number; nombre: string; escenario: string; extra?: string; ugc?: boolean; entrevista?: boolean }): string {
   const max = palabrasMax(o.dur);
   const estilos = o.ugc
     ? [
       'Write exactly 3 scripts, one per style. This is a UGC video: she naturally talks about the product in the topic, in her own words (the creator brings the product; never copy another video\'s lines):',
-      '1. "resena": an honest mini review — she tried it and says what she likes, with one concrete detail.',
-      '2. "problema": a common, relatable problem and how this product solved it for her.',
-      '3. "hallazgo": "I found this and can\'t stop using it" — excited discovery, one concrete reason.',
-      'Name the product the way the creator wrote it. Only mention features and benefits written in the topic or notes — never invent prices, discounts, ingredients, results, numbers or claims.',
+      '1. "resena": her honest opinion — what she likes about it and why, based on one or two concrete details from the topic.',
+      '2. "problema": a relatable everyday situation and how this product fits it, using only the benefits written in the topic.',
+      '3. "hallazgo": she shows it like to a friend ("look at this") and points out one or two concrete details.',
+      'Name the product the way the creator wrote it. Only mention features and benefits written in the topic or notes — never invent prices, discounts, ingredients, results, numbers, claims, or personal experiences (no "I\'ve used it for months", no before/after stories, no results she got).',
+      'Sound like a real person, not an ad: short sentences, contractions, everyday words, few fillers, no forced slang, no formal advertising language, no long feature lists.',
+      ...(o.entrevista ? [
+        'FORMAT: a street interview. An interviewer off camera asks her ONE short, simple question (put it in "pregunta", in the same language, e.g. about what she is wearing or using today — it can mention the product category but should not sound like an ad), and she answers spontaneously in that style. "gancho", "desarrollo", "cierre" and "texto" are only HER answer. The answer starts directly (no greeting, no "great question").',
+      ] : []),
     ]
     : [
       'Write exactly 3 scripts, one per style:',
@@ -201,14 +229,14 @@ export function pedidoGuiones(o: { tema: string; idioma: string; dur: number; no
     `You write short talking-to-camera scripts for ${o.nombre || 'an AI influencer'}, a young woman who posts casual selfie videos on TikTok and Instagram Reels.`,
     `Topic / idea: ${o.tema.trim()}`,
     o.extra?.trim() ? `Extra notes from the creator: ${o.extra.trim()}` : '',
-    `Language and tone for everything she SAYS: ${o.idioma.trim()}. Write the spoken lines natively in that language (not translated-sounding), with natural contractions and filler words a real person would use.`,
-    `The video lasts ${o.dur} seconds, so the full spoken text must be at most ${max} words (fewer is better: she needs room for pauses and breaths).`,
+    `Language and tone for everything she SAYS: ${o.idioma.trim()}. Write the spoken lines natively in that language (not translated-sounding), with natural contractions${o.ugc ? '' : ' and filler words a real person would use'}.`,
+    `The video lasts ${o.dur} seconds, so the full spoken text${o.entrevista ? ' (question + her answer together)' : ''} must be at most ${max} words (fewer is better: she needs room for pauses and breaths).`,
     `She is ${o.escenario.trim()}.`,
     ...estilos,
     'Each script needs: a hook that stops the scroll in the first 2 seconds (curiosity, tension or a bold statement — never "Hi guys" or a greeting), a short development, and a closing line that invites a comment or a follow (soft, not salesy).',
     'Also write "gestos": 1-2 short sentences IN ENGLISH with the micro-gestures and small actions that fit the script (e.g. "She glances away and laughs softly before the hook, then leans in slightly on the key line"). Keep them subtle and motivated.',
     'And "caption": a short post caption in the same language as the spoken text, with 3-5 relevant hashtags.',
-    'And "traduccion": a faithful translation into Rioplatense Spanish (Argentina) of the full spoken text ("texto"), so the creator understands exactly what she says.',
+    `And "traduccion": a faithful translation into Rioplatense Spanish (Argentina) of the full spoken text ("texto")${o.entrevista ? ', starting with the question as "Pregunta: …" and then "Ella: …"' : ''}, so the creator understands exactly what she says.`,
     'Nothing explicit, no medical/financial claims, no mention of being AI.',
     'Answer by calling the tool entregar_guiones. If you cannot call tools, answer ONLY with the JSON object {"guiones": [ ... ]} using exactly those field names, with no other text.',
   ].filter(Boolean).join('\n');
@@ -226,6 +254,7 @@ export function limpiarGuiones(x: unknown): Guion[] {
       titulo: s(o.titulo, 80),
       gancho, desarrollo, cierre,
       texto: s(o.texto, 900) || [gancho, desarrollo, cierre].filter(Boolean).join(' '),
+      pregunta: s(o.pregunta, 200),
       gestos: s(o.gestos, 400),
       caption: s(o.caption, 400),
       traduccion: s(o.traduccion, 1200),

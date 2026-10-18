@@ -981,7 +981,7 @@ export default function Estudio() {
                     <div className="grid-cards">
                       {creaciones.slice(0, 6).map((c) => (
                         <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
-                          <Image src={c.url} alt="creación" fill sizes="(max-width: 600px) 45vw, 160px" unoptimized={false} />
+                          <Image src={c.url} alt="creación" fill sizes="(max-width: 600px) 50vw, 320px" unoptimized={false} />
                           <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
                         </div>
                       ))}
@@ -1204,7 +1204,7 @@ export default function Estudio() {
                 <div className="grid-cards stagger">
                   {creaciones.map((c) => (
                     <div key={c.id} className="tile" onClick={() => { setMotion(''); setLightbox(c); }}>
-                      <Image src={c.url} alt="creación" fill sizes="(max-width: 600px) 45vw, 160px" unoptimized={false} />
+                      <Image src={c.url} alt="creación" fill sizes="(max-width: 600px) 50vw, 320px" unoptimized={false} />
                       <button className="xbtn" title="Eliminar" onClick={(e) => { e.stopPropagation(); borrarCreacion(c); }}>🗑️</button>
                     </div>
                   ))}
@@ -1695,7 +1695,7 @@ function GaleriaGrid(props: {
         const s = it.id === sel;
         return (
           <div key={it.id} className={`tile ${s ? 'sel' : ''}`} onClick={() => onSelect(it.id)}>
-            <Image src={it.url} alt="" fill sizes="(max-width: 600px) 45vw, 160px" />
+            <Image src={it.url} alt="" fill sizes="(max-width: 600px) 50vw, 320px" />
             {s ? <span className="badge">Elegida</span> : null}
             <button className="xbtn" onClick={(ev) => { ev.stopPropagation(); onDelete(it.id); }}>×</button>
           </div>
