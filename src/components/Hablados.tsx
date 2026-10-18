@@ -8,7 +8,7 @@ import { AVISO_FALLO_ROPA, vestuarioATexto } from '@/lib/cliente/vestuario';
 import { componerNodoFoto, medidasDe, type RolImagen } from '@/lib/estudio/prompt';
 import {
   ESCENARIO_UGC, ESCENARIOS, ESTILOS, GRABACIONES, IDIOMA_DEFECTO, VOCES_OMNI, componerFotoUGC, durValida, palabrasMax, pistaFotoInicial,
-  type FondoUGC, type Guion, type Motor, type UsoProducto,
+  type FondoUGC, type FormatoUGC, type Guion, type Motor, type UsoProducto, type VozEntrevistador,
 } from '@/lib/estudio/hablados';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 import ModoRopa from '@/components/ModoRopa';
@@ -43,6 +43,11 @@ type Estado = {
   prodUso: UsoProducto;
   /** UGC: conservar el lugar exacto del cuadro o crear uno parecido. */
   fondoUgc: FondoUGC;
+  /** UGC: habla sola a cámara o le hacen una pregunta en la calle. */
+  formato: FormatoUGC;
+  /** Entrevista: la pregunta (fuera de cuadro) y la voz de quien pregunta. */
+  pregunta: string;
+  vozEnt: VozEntrevistador;
   escenario: string;
   escenarioTexto: string;
   grabacion: string;
@@ -81,7 +86,7 @@ type Estado = {
   guionCred?: number;
 };
 const VACIO: Estado = {
-  modo: 'hablado', ref: null, prodUrl: '', prodUso: 'puesto', fondoUgc: 'exacto',
+  modo: 'hablado', ref: null, prodUrl: '', prodUso: 'puesto', fondoUgc: 'exacto', formato: 'sola', pregunta: '', vozEnt: 'hombre',
   escenario: 'sillon', escenarioTexto: '', grabacion: 'apoyado', ropa: 'foto', ropaUrl: '', ropaTexto: '', instr: '', fotoModelo: 'nanopro',
   fotos: [], elegida: '', fotoTask: '', idioma: '', tema: '', extra: '', dur: 10, guiones: [], guionSel: -1, texto: '', gestos: '', caption: '', traduccion: '', traduccionDe: '',
   motor: 'omni', calidad: '720p', vozOmni: VOCES_OMNI[0].id, videoTask: '', resultado: '',
@@ -130,6 +135,7 @@ export default function Hablados(props: Props) {
   const nombre = modelo?.nombre || 'tu modelo';
   const voz = modelo ? voces[modelo.id] : undefined;
   const ugc = e.modo === 'ugc';
+  const entrevista = ugc && e.formato === 'entrevista';
   const escenarioEn = ugc ? ESCENARIO_UGC : e.escenario === 'otro' ? e.escenarioTexto.trim() : (ESCENARIOS.find((x) => x.id === e.escenario)?.en ?? ESCENARIOS[0].en);
   const idioma = e.idioma.trim() || idiomaDef || IDIOMA_DEFECTO;
 
@@ -169,7 +175,7 @@ export default function Hablados(props: Props) {
   function empezarOtro() {
     if ((creandoFoto || creandoVideo) && !window.confirm('Hay algo creándose. ¿Empezar otro igual? (lo que termine va a aparecer en tu galería)')) return;
     // Se mantiene lo que suele repetirse: escenario, cámara, idioma, motor.
-    setE((x) => ({ ...VACIO, modo: x.modo, prodUso: x.prodUso, fondoUgc: x.fondoUgc, escenario: x.escenario, escenarioTexto: x.escenarioTexto, grabacion: x.grabacion, idioma: x.idioma, motor: x.motor, calidad: x.calidad, vozOmni: x.vozOmni, dur: x.dur, fotoModelo: x.fotoModelo }));
+    setE((x) => ({ ...VACIO, modo: x.modo, prodUso: x.prodUso, fondoUgc: x.fondoUgc, formato: x.formato, vozEnt: x.vozEnt, escenario: x.escenario, escenarioTexto: x.escenarioTexto, grabacion: x.grabacion, idioma: x.idioma, motor: x.motor, calidad: x.calidad, vozOmni: x.vozOmni, dur: x.dur, fotoModelo: x.fotoModelo }));
     setError('');
   }
   function cambiarModo(modo: Estado['modo']) {
@@ -283,7 +289,7 @@ export default function Hablados(props: Props) {
     const caras = modelo.refs.slice(0, 3);
     const cuerpo = modelo.entero || modelo.medio;
     const imageUrls = [e.ref.url, ...caras, ...(cuerpo ? [cuerpo] : []), e.prodUrl];
-    const prompt = componerFotoUGC({ caras: caras.length, conCuerpo: !!cuerpo, uso: e.prodUso, fondo: e.fondoUgc, instr: e.instr, cuerpo: modelo.cuerpo, fijo: modelo.promptFijo });
+    const prompt = componerFotoUGC({ caras: caras.length, conCuerpo: !!cuerpo, uso: e.prodUso, fondo: e.fondoUgc, entrevista, instr: e.instr, cuerpo: modelo.cuerpo, fijo: modelo.promptFijo });
     try {
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: '9:16', modelo: e.fotoModelo }) });
       const d = await res.json().catch(() => ({}));
@@ -321,7 +327,7 @@ export default function Hablados(props: Props) {
     try {
       const r = await fetch('/api/guiones', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tema: e.tema, extra: e.extra, idioma, dur: e.dur, nombre: modelo?.nombre, escenario: escenarioEn, ugc }),
+        body: JSON.stringify({ tema: e.tema, extra: e.extra, idioma, dur: e.dur, nombre: modelo?.nombre, escenario: escenarioEn, ugc, entrevista }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !Array.isArray(d.guiones)) throw new Error(d.error ?? 'No se pudieron escribir los guiones.');
@@ -334,7 +340,7 @@ export default function Hablados(props: Props) {
     const g = e.guiones[i];
     if (!g) return;
     setErrorGuion('');
-    set({ guionSel: i, texto: g.texto, gestos: g.gestos ?? '', caption: g.caption ?? '', traduccion: g.traduccion ?? '', traduccionDe: g.traduccion ? g.texto : '' });
+    set({ guionSel: i, texto: g.texto, pregunta: g.pregunta ?? '', gestos: g.gestos ?? '', caption: g.caption ?? '', traduccion: g.traduccion ?? '', traduccionDe: g.traduccion ? g.texto : '' });
   }
   async function traducir() {
     const texto = e.texto.trim();
@@ -367,6 +373,7 @@ export default function Hablados(props: Props) {
           motor: e.motor, modeloId: modelo.id, foto: e.elegida, caras: [...modelo.refs.slice(0, 3), ...(modelo.entero || modelo.medio ? [(modelo.entero || modelo.medio) as string] : [])], texto: e.texto, idioma, escenario: escenarioEn,
           grabacion: e.grabacion, gestos: e.gestos, fijo: modelo.promptFijo, cuerpo: modelo.cuerpo, dur: durVideo, calidad: e.calidad, vozOmni: e.vozOmni,
           ...(ugc ? { producto: e.prodUso } : {}),
+          ...(entrevista && e.pregunta.trim() ? { pregunta: e.pregunta, vozEntrevistador: e.vozEnt } : {}),
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -390,7 +397,7 @@ export default function Hablados(props: Props) {
   }
 
   const costoFoto = costo(claveFoto(e.fotoModelo));
-  const palabras = contar(e.texto);
+  const palabras = contar(e.texto) + (entrevista ? contar(e.pregunta) : 0);
   const max = palabrasMax(durVideo);
   const n = (k: number) => <span className="vr-n">{k}</span>;
 
@@ -460,6 +467,12 @@ export default function Hablados(props: Props) {
             <p className="vr-nota" style={{ marginTop: 0 }}>{e.fondoUgc === 'exacto'
               ? 'Se queda el fondo del video (calle, autos, encuadre; también la mano y el micrófono si hay entrevistador) y solo cambia la persona. Puede no salir idéntico al píxel.'
               : 'Mismo tipo de lugar y encuadre, pero otro sitio: sirve para que no se note de qué video salió.'}</p>
+            <div className="vr-tit chico">🗣️ Formato</div>
+            <div className="lz-chips">
+              <button className={`opt ${e.formato === 'sola' ? 'on' : ''}`} onClick={() => set({ formato: 'sola', grabacion: e.grabacion === 'entrevista' ? 'ref' : e.grabacion })}>🤳 Habla a cámara</button>
+              <button className={`opt ${e.formato === 'entrevista' ? 'on' : ''}`} onClick={() => set({ formato: 'entrevista', grabacion: e.grabacion === 'ref' ? 'ref' : 'entrevista' })}>🎤 Entrevista en la calle</button>
+            </div>
+            {entrevista ? <p className="vr-nota" style={{ marginTop: 0 }}>Alguien que no se ve le hace una pregunta corta y {nombre} responde mirando a quien pregunta (no a la cámara). En la foto aparece la mano con el micrófono.</p> : null}
           </>
         ) : (
           <>
@@ -618,7 +631,8 @@ export default function Hablados(props: Props) {
               {e.guiones.map((g, i) => (
                 <div key={i} role="button" tabIndex={0} className={`hb-guion ${e.guionSel === i ? 'on' : ''}`} onClick={() => elegirGuion(i)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') elegirGuion(i); }}>
                   <b>{e.guionSel === i ? '✅ Elegido · ' : ''}{ESTILOS.find((x) => x.id === g.estilo)?.label ?? g.estilo}{g.titulo ? ` · ${g.titulo}` : ''}</b>
-                  <p><span className="hb-et">Gancho</span>{g.gancho}</p>
+                  {g.pregunta ? <p><span className="hb-et">Pregunta</span>{g.pregunta}</p> : null}
+                  <p><span className="hb-et">{g.pregunta ? 'Respuesta' : 'Gancho'}</span>{g.gancho}</p>
                   <p><span className="hb-et">Desarrollo</span>{g.desarrollo}</p>
                   <p><span className="hb-et">Cierre</span>{g.cierre}</p>
                   {g.traduccion ? <p className="hb-trad">🇦🇷 {g.traduccion}</p> : null}
@@ -627,7 +641,17 @@ export default function Hablados(props: Props) {
             </div>
           </>
         ) : null}
-        <div className="vr-tit chico" style={{ marginTop: 12 }}>🗣️ Lo que va a decir <span className="vr-nota" style={{ margin: 0, fontWeight: 600 }}>(podés editarlo o escribirlo vos)</span></div>
+        {entrevista ? (
+          <>
+            <div className="vr-tit chico" style={{ marginTop: 12 }}>🎤 La pregunta <span className="vr-nota" style={{ margin: 0, fontWeight: 600 }}>(la hace alguien que no se ve)</span></div>
+            <input className="input" value={e.pregunta} onChange={(ev) => set({ pregunta: ev.target.value })} placeholder="Ej: What are you wearing today?" style={{ width: '100%', boxSizing: 'border-box' }} />
+            <div className="lz-chips" style={{ marginTop: 6 }}>
+              <button className={`opt ${e.vozEnt === 'hombre' ? 'on' : ''}`} onClick={() => set({ vozEnt: 'hombre' })}>🎙️ Voz de hombre</button>
+              <button className={`opt ${e.vozEnt === 'mujer' ? 'on' : ''}`} onClick={() => set({ vozEnt: 'mujer' })}>🎙️ Voz de mujer</button>
+            </div>
+          </>
+        ) : null}
+        <div className="vr-tit chico" style={{ marginTop: 12 }}>🗣️ {entrevista ? 'Lo que responde' : 'Lo que va a decir'} <span className="vr-nota" style={{ margin: 0, fontWeight: 600 }}>(podés editarlo o escribirlo vos)</span></div>
         <textarea className="textarea" value={e.texto} onChange={(ev) => set({ texto: ev.target.value })} placeholder="Elegí un guion de arriba o escribí acá lo que dice, en el idioma del video." style={{ height: 90 }} />
         {e.texto.trim() ? (
           <>
@@ -673,12 +697,13 @@ export default function Hablados(props: Props) {
           </>
         ) : null}
         {!e.elegida ? <p className="vr-nota">👆 Falta aprobar la foto inicial (paso 3).</p> : null}
+        {e.elegida && e.texto.trim() && entrevista && !e.pregunta.trim() ? <p className="vr-nota">👆 Falta la pregunta del entrevistador (paso 5).</p> : null}
         {e.elegida && !e.texto.trim() ? (
           <button className="btn-ghost" style={{ width: '100%', marginTop: 6, fontSize: 13 }} onClick={() => pasoGuion.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
             👆 Falta el guion: elegí uno o escribilo en el paso 5
           </button>
         ) : null}
-        <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo || !e.elegida || !e.texto.trim()} onClick={() => setConfirmar(true)}>
+        <button className={`btn-grad shine ${creandoVideo ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={creandoVideo || !e.elegida || !e.texto.trim() || (entrevista && !e.pregunta.trim())} onClick={() => setConfirmar(true)}>
           {creandoVideo ? 'Creando video… (unos minutos)' : e.resultado ? '🔄 Crear otro video' : '🎬 Crear video'}
         </button>
         <p className="vr-nota">{estimado ? `Va a costar ≈ ${fmt(estimado.creditos)} créditos (${usd(estimado.creditos)})${estimar(claveVideo, durVideo) ? '' : ', según el precio de lista'}.` : 'El costo exacto lo vas a ver después del primer video con este motor.'}</p>
@@ -700,7 +725,7 @@ export default function Hablados(props: Props) {
       {confirmar && e.elegida ? (
         <ConfirmarVideo
           foto={e.elegida}
-          guion={e.texto}
+          guion={entrevista && e.pregunta.trim() ? `🎤 ${e.pregunta.trim()} — ${e.texto}` : e.texto}
           dur={durVideo}
           motor={`${e.motor === 'omni' ? 'Gemini Omni' : 'Kling 3.0'} · ${e.calidad}`}
           estimado={estimado}
@@ -708,7 +733,7 @@ export default function Hablados(props: Props) {
           nombre={nombre}
           items={[
             ugc ? `La foto inicial es la que quiero: el producto se ve bien, lugar y encuadre` : `La foto inicial es la que quiero: ropa, lugar y encuadre`,
-            `El guion entra en ${durVideo} s sin que hable apurada`,
+            entrevista ? `La pregunta y la respuesta entran en ${durVideo} s sin apuro` : `El guion entra en ${durVideo} s sin que hable apurada`,
             e.motor === 'kling3' ? (voz ? `Ya subí la muestra de voz de ${nombre}` : `Sé que sin muestra de voz va a inventar una voz`) : `Elegí la voz de Omni que quiero`,
           ]}
           onCrear={crearVideo}

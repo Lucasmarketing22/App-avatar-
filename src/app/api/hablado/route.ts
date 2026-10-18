@@ -20,7 +20,7 @@ const esUrl = (u: unknown): u is string => typeof u === 'string' && u.startsWith
 export async function POST(request: Request) {
   const b = (await request.json().catch(() => null)) as {
     motor?: string; modeloId?: string; foto?: string; caras?: string[]; texto?: string; idioma?: string;
-    escenario?: string; grabacion?: string; gestos?: string; fijo?: string; cuerpo?: string; dur?: number; calidad?: string; vozOmni?: string; producto?: string;
+    escenario?: string; grabacion?: string; gestos?: string; fijo?: string; cuerpo?: string; dur?: number; calidad?: string; vozOmni?: string; producto?: string; pregunta?: string; vozEntrevistador?: string;
   } | null;
 
   const motor: Motor = b?.motor === 'omni' ? 'omni' : 'kling3';
@@ -33,11 +33,14 @@ export async function POST(request: Request) {
   const dur = durValida(motor, Number(b?.dur));
   const pro = b?.calidad === '1080p';
   const producto: UsoProducto | undefined = b?.producto === 'puesto' || b?.producto === 'mano' ? b.producto : undefined;
+  // Entrevista (solo UGC): la pregunta la hace alguien fuera de cuadro.
+  const pregunta = producto && typeof b?.pregunta === 'string' ? b.pregunta.trim().slice(0, 200) : '';
+  const entrevista = pregunta ? { pregunta, voz: b?.vozEntrevistador === 'mujer' ? 'mujer' as const : 'hombre' as const } : undefined;
 
   const prompt = componerVideoHablado({
     motor, dur, texto, idioma, escenario, grabacion: String(b?.grabacion ?? ''),
     gestos: typeof b?.gestos === 'string' ? b.gestos : '', fijo: typeof b?.fijo === 'string' ? b.fijo : '',
-    cuerpo: typeof b?.cuerpo === 'string' ? b.cuerpo.slice(0, 200) : '', producto,
+    cuerpo: typeof b?.cuerpo === 'string' ? b.cuerpo.slice(0, 200) : '', producto, entrevista,
   });
   const datos = { tipo: 'video' as const, prompt: texto, dur };
 
