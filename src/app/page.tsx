@@ -10,6 +10,7 @@ import Lienzo from '@/components/lienzo/Lienzo';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
 import Hablados from '@/components/Hablados';
+import Escenas from '@/components/Escenas';
 import { AVISO_FALLO_ROPA, describirVestuario, prefModoRopa, textoVestuario } from '@/lib/cliente/vestuario';
 import ModoRopa from '@/components/ModoRopa';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
@@ -30,7 +31,7 @@ const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
-type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados' | 'cuentas';
+type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados' | 'escenas' | 'cuentas';
 
 const ASPECTS = ['3:4', '1:1', '4:5', '9:16', '16:9', '4:3'];
 
@@ -191,6 +192,9 @@ export default function Estudio() {
   const [habladosAbierto, setHabladosAbierto] = useState(false);
   const [habladosTrabajo, setHabladosTrabajo] = useState('');
   useEffect(() => { if (vista === 'hablados') setHabladosAbierto(true); }, [vista]);
+  const [escenasAbierto, setEscenasAbierto] = useState(false);
+  const [escenasTrabajo, setEscenasTrabajo] = useState('');
+  useEffect(() => { if (vista === 'escenas') setEscenasAbierto(true); }, [vista]);
 
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -806,6 +810,7 @@ export default function Estudio() {
         <button className={`rail-ic ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><Icon name="galeria" /><span>Galería</span></button>
         <button className={`rail-ic ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><Icon name="viral" /><span>Viral</span></button>
         <button className={`rail-ic ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><Icon name="voz" /><span>Hablados</span></button>
+        <button className={`rail-ic ${vista === 'escenas' ? 'on' : ''}`} onClick={() => setVista('escenas')}><Icon name="film" /><span>Escenas</span></button>
         <button className={`rail-ic ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><Icon name="motion" /><span>Motion</span></button>
         <button className={`rail-ic ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><Icon name="lienzo" /><span>Lienzo</span></button>
         {yo?.admin ? <button className={`rail-ic ${vista === 'cuentas' ? 'on' : ''}`} onClick={() => setVista('cuentas')}><Icon name="user" /><span>Cuentas</span></button> : null}
@@ -1170,7 +1175,9 @@ export default function Estudio() {
         ) : vista === 'viral' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🔥 Recrear viral</h1><Guia id="viral" /></div>
         ) : vista === 'hablados' ? (
-          <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🎙️ Hablados</h1><Guia id="hablados" /></div>
+          <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🎙️ Hablados</h1><button className="btn-soft" onClick={() => setVista('escenas')} style={{ padding: '6px 12px', fontSize: 13 }}>🎬 Escenas con 2 personas</button><Guia id="hablados" /></div>
+        ) : vista === 'escenas' ? (
+          <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🎬 Escenas</h1></div>
         ) : vista === 'lienzo' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 8 }}>🧩 Lienzo</h1><Guia id="lienzo" /></div>
         ) : vista === 'cuentas' ? (
@@ -1277,6 +1284,21 @@ export default function Estudio() {
             />
           </div>
         ) : null}
+        {escenasAbierto ? (
+          <div style={{ display: vista === 'escenas' ? 'block' : 'none' }}>
+            <Escenas
+              estimar={estimarVideo}
+              saldo={saldo}
+              onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
+              mult={mult}
+              onTrabajo={setEscenasTrabajo}
+              onPublicar={(url, tipo) => setPublicar({ url, tipo })}
+              onGuardar={(url, tipo) => setGuardar({ url, tipo })}
+              onSaldo={cargarSaldo}
+              onVolver={() => setVista('hablados')}
+            />
+          </div>
+        ) : null}
         {lienzoAbierto ? (
           <div style={{ display: vista === 'lienzo' ? 'block' : 'none' }}>
             <Lienzo
@@ -1331,6 +1353,7 @@ export default function Estudio() {
           lienzoTrabajo,
           viralTrabajo,
           habladosTrabajo,
+          escenasTrabajo,
         ].filter(Boolean);
         return trabajos.length ? (
           <div className="genfloat" role="status" aria-live="polite">
