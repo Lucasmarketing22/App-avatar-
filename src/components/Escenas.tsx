@@ -52,6 +52,11 @@ const SIETE_DIAS = 7 * 24 * 60 * 60 * 1000;
 const fmt = (n: number) => Math.round(n).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
 const contar = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
+/** Lo que se dice: el texto entre comillas ("…" o “…”). Sin comillas, no se puede separar de las indicaciones. */
+const hablado = (t: string): string | null => {
+  const frases = t.match(/"[^"\n]+"|“[^”\n]+”/g);
+  return frases ? frases.join(' ').replace(/["“”]/g, '') : null;
+};
 /**
  * Precios publicados por Kie para Seedance 2.5 sin video de entrada, por
  * segundo (kie.ai/seedance-2-5, revisados el 20/10/2026). El paso del borrador
@@ -133,7 +138,8 @@ export default function Escenas(props: Props) {
     ? (estimar('bytedance/seedance-2-5-draft|1080p', borradorVigente.dur) ?? { creditos: SEG['1080p'] * borradorVigente.dur * mult, porSegundo: true })
     : null;
   const personas = e.refs.filter((r) => PERSONAS.includes(r.rol));
-  const palabras = contar(e.texto);
+  const dicho = hablado(e.texto);
+  const palabras = contar(dicho ?? e.texto);
   const max = palabrasMax(e.dur);
   const puede = personas.length > 0 && !!e.texto.trim() && !creando;
 
@@ -239,7 +245,11 @@ export default function Escenas(props: Props) {
           placeholder={'Ej: Handheld smartphone video in a cozy bedroom, one continuous shot. Person A holds the phone and films Person B.\nPerson A (excited, to camera): "Look at her skin."\nPerson B (laughs, touches her hair): "Every single strand."\n…'}
         />
         {e.texto.trim() ? (
-          <p className={palabras > max * 1.6 ? 'lz-err' : 'vr-nota'}>{palabras} palabras en total. {palabras > max * 1.6 ? `Es mucho texto para ${e.dur} s: si los diálogos son largos, van a hablar apuradas o se cortan.` : `Para ${e.dur} s, que lo hablado no pase de unas ${max} palabras.`}</p>
+          dicho !== null ? (
+            <p className={palabras > max ? 'lz-err' : 'vr-nota'}>🗣️ {palabras} palabras habladas (lo que está entre comillas). {palabras > max ? `Para ${e.dur} s conviene hasta unas ${max}: si no, van a hablar apuradas o se cortan.` : `Entra bien en ${e.dur} s.`}</p>
+          ) : (
+            <p className="vr-nota">Poné lo que dicen <b>entre comillas</b> (ej. Person A: {'"Hi!"'}) así la IA sabe qué es diálogo y la app cuenta si entra en {e.dur} s.</p>
+          )
         ) : null}
       </div>
 
