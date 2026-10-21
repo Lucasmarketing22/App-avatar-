@@ -186,6 +186,8 @@ export async function ajustarSaldo(cuenta: string, creditos: number, nota: strin
  * real que cobró Kie por ese mismo tipo de creación.
  */
 const OMNI: Record<number, number> = { 4: 63, 6: 84, 8: 105, 10: 126 };
+/** Seedance 2.5 sin video de entrada, por segundo (kie.ai/seedance-2-5, revisado el 20/10/2026). */
+export const SEEDANCE_SEG: Record<string, number> = { '480p': 28, '720p': 63, '1080p': 158 };
 /** Si nunca se hizo ese tipo de creación, se aparta esto por las dudas (no es un precio: al terminar se cobra lo real). */
 const RESERVA_SIN_DATOS = 200;
 
@@ -193,11 +195,14 @@ export async function estimarKie(model: string, input: Record<string, unknown>, 
   const d = Number(dur ?? input.duration) || 0;
   if (model === 'gemini-omni-video' && OMNI[d]) return OMNI[d];
   if (model === 'kling-3.0/video' && d > 0) return d * (input.mode === 'pro' ? 27 : 20);
+  if (model === 'bytedance/seedance-2-5' && d > 0) return d * (SEEDANCE_SEG[String(input.resolution)] ?? SEEDANCE_SEG['720p']);
   const v = input.mode ?? input.resolution ?? input.quality;
   const clave = `${model}|${typeof v === 'string' ? v : ''}`;
   const costos = await leerCostos();
   const seg = costos[`${clave}|seg`]?.credits;
   if (typeof seg === 'number' && d > 0) return seg * d;
+  // Borrador → 1080p: Kie no publica su precio; mientras no haya uno real, se aparta como un 1080p entero.
+  if (model === 'bytedance/seedance-2-5-draft' && d > 0) return d * SEEDANCE_SEG['1080p'];
   const ult = costos[clave]?.credits;
   return typeof ult === 'number' ? ult : RESERVA_SIN_DATOS;
 }
