@@ -1,4 +1,5 @@
 import { describirCuerpo, medidasDe, pistaCuerpo, pistaFija, pistaFotoCuerpo } from './prompt';
+import type { Genero } from './genero';
 
 /**
  * "Hablados": videos de la modelo hablando a cámara, casual y creíble.
@@ -56,7 +57,7 @@ export function durValida(motor: Motor, d: number): number {
   return Math.min(15, Math.max(3, n));
 }
 
-/** Voces del catálogo de Gemini Omni (solo femeninas). */
+/** Voces femeninas del catálogo de Gemini Omni. */
 export const VOCES_OMNI: { id: string; label: string }[] = [
   { id: 'callirrhoe', label: 'Relajada' },
   { id: 'leda', label: 'Joven' },
@@ -65,6 +66,17 @@ export const VOCES_OMNI: { id: string; label: string }[] = [
   { id: 'aoede', label: 'Enérgica' },
   { id: 'despina', label: 'Suave' },
 ];
+/** Voces masculinas del catálogo de Gemini Omni (docs.kie.ai, gemini-omni-audio). */
+export const VOCES_OMNI_HOMBRE: { id: string; label: string }[] = [
+  { id: 'achird', label: 'Amigable' },
+  { id: 'puck', label: 'Alegre' },
+  { id: 'fenrir', label: 'Joven' },
+  { id: 'zubenelgenubi', label: 'Casual' },
+  { id: 'charon', label: 'Grave' },
+  { id: 'umbriel', label: 'Suave' },
+];
+/** Las voces que corresponden al personaje. */
+export const vocesOmni = (genero?: Genero) => (genero === 'hombre' ? VOCES_OMNI_HOMBRE : VOCES_OMNI);
 
 export const IDIOMA_DEFECTO = 'Inglés de Estados Unidos, casual, como hablándole a una amiga';
 

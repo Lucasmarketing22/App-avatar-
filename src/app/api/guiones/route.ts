@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { enGenero, generoValido } from '@/lib/estudio/genero';
 import { limpiarGuiones, pedidoGuiones } from '@/lib/estudio/hablados';
 import { pedirDatos } from '@/lib/ia/texto';
 import { cobrarAhora, puedeGastar, TEXTO_ESTIMADO } from '@/lib/saldo';
@@ -42,7 +43,7 @@ const HERRAMIENTA = {
 
 /** 3 guiones (storytime, opinión, consejo; o reseña, problema, hallazgo si es UGC de producto) con gancho, desarrollo y cierre. */
 export async function POST(request: Request) {
-  const b = (await request.json().catch(() => null)) as { tema?: string; idioma?: string; dur?: number; nombre?: string; escenario?: string; extra?: string; ugc?: boolean; entrevista?: boolean } | null;
+  const b = (await request.json().catch(() => null)) as { tema?: string; idioma?: string; dur?: number; nombre?: string; escenario?: string; extra?: string; ugc?: boolean; entrevista?: boolean; genero?: string } | null;
   const tema = typeof b?.tema === 'string' ? b.tema.trim().slice(0, 600) : '';
   if (!tema) return NextResponse.json({ error: 'Escribí de qué querés que hable.' }, { status: 400 });
   const idioma = typeof b?.idioma === 'string' && b.idioma.trim() ? b.idioma.trim().slice(0, 300) : 'English (US), casual';
@@ -54,7 +55,8 @@ export async function POST(request: Request) {
   // Las cuentas necesitan saldo (la IA de texto cobra muy poco; se descuenta lo que informa Kie).
   const permiso = await puedeGastar(TEXTO_ESTIMADO);
   if (!permiso.ok) return NextResponse.json({ error: permiso.error }, { status: permiso.status });
-  const r = await pedirDatos(pedidoGuiones({ tema, idioma, dur, nombre, escenario, extra, ugc: b?.ugc === true, entrevista: b?.ugc === true && b?.entrevista === true }), HERRAMIENTA);
+  const pedido = pedidoGuiones({ tema, idioma, dur, nombre, escenario, extra, ugc: b?.ugc === true, entrevista: b?.ugc === true && b?.entrevista === true });
+  const r = await pedirDatos(enGenero(pedido, generoValido(b?.genero)), HERRAMIENTA);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 });
   await cobrarAhora(permiso, r.credits);
   const guiones = limpiarGuiones(r.datos);
