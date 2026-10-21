@@ -32,9 +32,9 @@ export const ESCENARIOS: { id: string; label: string; en: string }[] = [
 export const GRABACIONES: { id: string; label: string; en: string; soloUgc?: boolean }[] = [
   { id: 'entrevista', label: '🎤 Entrevista en mano', en: 'A street interviewer films her handheld with the phone\'s rear camera at chest-to-eye height, about one metre away and slightly off-axis, while their other hand holds a small microphone toward her; small natural handheld movements', soloUgc: true },
   { id: 'ref', label: '🎞️ Como en el video', en: 'The same camera setup as the opening frame: same phone, distance, height, angle and framing, with the same fixed or handheld feel (small natural breathing movements if handheld)', soloUgc: true },
-  { id: 'apoyado', label: '📱 Celular apoyado', en: 'Her phone is propped up on a surface in front of her at chest height, about one metre away, recording with the front camera; the frame stays fixed with only tiny vibrations when she touches the surface' },
+  { id: 'apoyado', label: '📱 Celular apoyado', en: 'Her phone is propped up on a surface in front of her at chest height, about one metre away, recording with the front camera; that phone is the camera itself, so it never appears in the frame (no phone, stand or tripod visible); the frame stays fixed with only tiny vibrations when she touches the surface' },
   { id: 'selfie', label: '🤳 Selfie en mano', en: 'She holds the phone herself at arm\'s length with one hand (front camera, slightly above eye level); small breathing-driven movements and subtle wrist drift, one late reframing when she moves, then it settles. Only her other hand is free' },
-  { id: 'amiga', label: '👭 La filma alguien', en: 'A friend seated opposite records with the phone\'s rear camera at chest height, about one metre away; slightly off-center framing, small handheld breathing movements' },
+  { id: 'amiga', label: '👭 La filma alguien', en: 'A friend seated opposite records with the phone\'s rear camera at chest height, about one metre away (the friend and their phone are never visible); slightly off-center framing, small handheld breathing movements' },
 ];
 
 /** Celular apoyado: la forma de grabar por defecto. */
@@ -206,7 +206,7 @@ export function componerVideoHablado(o: {
     o.producto
       ? 'SKIN: keep the same natural level of detail, softness and light as the first frame (no added sharpening or texture); freckles stable through movement.'
       : 'SKIN: visible pores, natural skin-color variation, freckles stable through movement, a few flyaways catching the light; mostly matte cheeks.',
-    `CONSTRAINTS: no beauty smoothing, no waxy skin, no forced presenter smile, no repeated gestures on a loop, no exaggerated camera shake, no subtitles or text on screen, ${o.entrevista ? 'the interviewer stays off camera (only the hand with the microphone may show), no other voices' : 'no extra people talking'}, no morphing fingers${o.producto ? ', no product morphing' : ''}. Keep her face, outfit and the place consistent.`,
+    `CONSTRAINTS: no beauty smoothing, no waxy skin, no forced presenter smile, no repeated gestures on a loop, no exaggerated camera shake, no subtitles or text on screen, the phone that records is never visible in the frame, ${o.entrevista ? 'the interviewer stays off camera (only the hand with the microphone may show), no other voices' : 'no extra people talking'}, no morphing fingers${o.producto ? ', no product morphing' : ''}. Keep her face, outfit and the place consistent.`,
   ];
   // Kling acepta hasta 2500 caracteres y Omni hasta 20000. Si no entra, primero
   // sale la línea de piel (la más prescindible) y después se recorta el final.
