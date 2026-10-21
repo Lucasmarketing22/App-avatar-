@@ -25,7 +25,7 @@ import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
 import { MODELOS, type ModeloId } from '@/lib/ia/models';
 
-type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; voz?: VozModelo; promptFijo?: string };
+type Personaje = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; voz?: VozModelo; promptFijo?: string; genero?: 'mujer' | 'hombre' };
 type FotoCuerpo = 'entero' | 'medio';
 const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
@@ -1429,6 +1429,14 @@ export default function Estudio() {
                 </div>
               );
             })}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginTop: 16 }}>
+            Es…
+            <div className="lz-chips" style={{ marginTop: 6 }}>
+              <button className={`opt ${personaje.genero !== 'hombre' ? 'on' : ''}`} onClick={() => guardarPersonaje({ ...personaje, genero: undefined })}>👩 Mujer</button>
+              <button className={`opt ${personaje.genero === 'hombre' ? 'on' : ''}`} onClick={() => guardarPersonaje({ ...personaje, genero: 'hombre' })}>👨 Hombre</button>
+            </div>
+            <span className="sub" style={{ display: 'block', fontSize: 12, fontWeight: 400, marginTop: 4 }}>En Hablados cambia cómo se le habla a la IA y qué voces aparecen.</span>
           </div>
           <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginTop: 16 }}>
             Nombre (opcional)

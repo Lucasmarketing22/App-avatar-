@@ -5,15 +5,16 @@ import Image from 'next/image';
 
 import { aspectoMasCercano, cuadroDeArchivo, esperarTarea, subirAMotion, subirImagen } from '@/lib/cliente/video';
 import { AVISO_FALLO_ROPA, vestuarioATexto } from '@/lib/cliente/vestuario';
+import { enGenero, type Genero } from '@/lib/estudio/genero';
 import { componerNodoFoto, medidasDe, type RolImagen } from '@/lib/estudio/prompt';
 import {
-  ESCENARIO_UGC, ESCENARIOS, ESTILOS, GRABACIONES, IDIOMA_DEFECTO, VOCES_OMNI, componerFotoUGC, durValida, palabrasMax, pistaFotoInicial,
+  ESCENARIO_UGC, ESCENARIOS, ESTILOS, GRABACIONES, IDIOMA_DEFECTO, VOCES_OMNI, componerFotoUGC, durValida, palabrasMax, pistaFotoInicial, vocesOmni,
   type FondoUGC, type FormatoUGC, type Guion, type Motor, type UsoProducto, type VozEntrevistador,
 } from '@/lib/estudio/hablados';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 import ModoRopa from '@/components/ModoRopa';
 
-type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string };
+type Modelo = { id: string; nombre: string; refs: string[]; cuerpo?: string; entero?: string; medio?: string; promptFijo?: string; genero?: Genero };
 type Props = {
   modelas: Modelo[];
   activoId: string;
@@ -122,6 +123,7 @@ export default function Hablados(props: Props) {
   const [errorGuion, setErrorGuion] = useState('');
   const pasoGuion = useRef<HTMLDivElement | null>(null);
   const [subiendoRopa, setSubiendoRopa] = useState(false);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [subiendoRef, setSubiendoRef] = useState(false);
   const [subiendoVoz, setSubiendoVoz] = useState(0);
   const [procesandoVoz, setProcesandoVoz] = useState(false);
@@ -133,6 +135,11 @@ export default function Hablados(props: Props) {
 
   const modelo = modelas.find((m) => m.id === activoId) ?? modelas[0];
   const nombre = modelo?.nombre || 'tu modelo';
+  const genero = modelo?.genero;
+  const hombre = genero === 'hombre';
+  /** Voces de Omni según el personaje (si la guardada es del otro catálogo, la primera de este). */
+  const vocesCat = vocesOmni(genero);
+  const vozSel = vocesCat.some((v) => v.id === e.vozOmni) ? e.vozOmni : vocesCat[0].id;
   const voz = modelo ? voces[modelo.id] : undefined;
   const ugc = e.modo === 'ugc';
   const entrevista = ugc && e.formato === 'entrevista';
@@ -250,6 +257,16 @@ export default function Hablados(props: Props) {
     setSubiendoRopa(true); setError('');
     try { set({ ropa: 'foto', ropaUrl: await subirImagen(f), ropaDesc: '' }); } catch { setError('No se pudo subir la foto de la ropa.'); } finally { setSubiendoRopa(false); }
   }
+  /** Foto inicial propia (ej. hecha gratis en Flow): queda aprobada directamente. */
+  async function subirFotoInicial(ev: React.ChangeEvent<HTMLInputElement>) {
+    const f = ev.target.files?.[0]; ev.target.value = '';
+    if (!f) return;
+    setSubiendoFoto(true); setError('');
+    try {
+      const url = await subirImagen(f);
+      setE((x) => ({ ...x, fotos: [url, ...x.fotos].slice(0, 6), elegida: url }));
+    } catch (er) { setError(er instanceof Error && er.message ? er.message : 'No se pudo subir la foto.'); } finally { setSubiendoFoto(false); }
+  }
   async function crearFoto() {
     if (!modelo || creandoFoto) return;
     if (!modelo.refs.length) { setError(`${nombre} no tiene fotos de cara. Cargalas en su ficha.`); return; }
@@ -264,12 +281,12 @@ export default function Hablados(props: Props) {
       ...(cuerpo ? [{ url: cuerpo, rol: 'cuerpo' as const }] : []),
       ...(e.ropa === 'foto' && e.ropaUrl ? [{ url: e.ropaUrl, rol: 'vestuario' as const }] : []),
     ];
-    const ropa = e.ropa === 'texto' ? `She wears ${e.ropaTexto.trim()}.` : '';
+    const ropa = e.ropa === 'texto' ? `${hombre ? 'He' : 'She'} wears ${e.ropaTexto.trim()}.` : '';
     try {
       // La foto de la ropa no va a la IA de imagen: va su descripción (así no copia el cuerpo de quien la tiene puesta).
       const v = await vestuarioATexto(items);
       set({ ropaDesc: v.descripciones[0] ?? '', ropaAviso: v.fallo ? AVISO_FALLO_ROPA : '' });
-      const prompt = componerNodoFoto(v.items.map((x) => x.rol), [pistaFotoInicial(escenarioEn, e.grabacion), ...v.textos, ropa, e.instr], modelo.cuerpo, modelo.promptFijo);
+      const prompt = enGenero(componerNodoFoto(v.items.map((x) => x.rol), [pistaFotoInicial(escenarioEn, e.grabacion), ...v.textos, ropa, e.instr], modelo.cuerpo, modelo.promptFijo), genero);
       const imageUrls = v.items.map((x) => x.url);
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: '9:16', modelo: e.fotoModelo }) });
       const d = await res.json().catch(() => ({}));
@@ -289,7 +306,7 @@ export default function Hablados(props: Props) {
     const caras = modelo.refs.slice(0, 3);
     const cuerpo = modelo.entero || modelo.medio;
     const imageUrls = [e.ref.url, ...caras, ...(cuerpo ? [cuerpo] : []), e.prodUrl];
-    const prompt = componerFotoUGC({ caras: caras.length, conCuerpo: !!cuerpo, uso: e.prodUso, fondo: e.fondoUgc, entrevista, instr: e.instr, cuerpo: modelo.cuerpo, fijo: modelo.promptFijo });
+    const prompt = enGenero(componerFotoUGC({ caras: caras.length, conCuerpo: !!cuerpo, uso: e.prodUso, fondo: e.fondoUgc, entrevista, instr: e.instr, cuerpo: modelo.cuerpo, fijo: modelo.promptFijo }), genero);
     try {
       const res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, imageUrls, aspect: '9:16', modelo: e.fotoModelo }) });
       const d = await res.json().catch(() => ({}));
@@ -327,7 +344,7 @@ export default function Hablados(props: Props) {
     try {
       const r = await fetch('/api/guiones', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tema: e.tema, extra: e.extra, idioma, dur: e.dur, nombre: modelo?.nombre, escenario: escenarioEn, ugc, entrevista }),
+        body: JSON.stringify({ tema: e.tema, extra: e.extra, idioma, dur: e.dur, nombre: modelo?.nombre, escenario: escenarioEn, ugc, entrevista, genero }),
       });
       const d = await r.json().catch(() => ({}));
       if (!r.ok || !Array.isArray(d.guiones)) throw new Error(d.error ?? 'No se pudieron escribir los guiones.');
@@ -371,7 +388,7 @@ export default function Hablados(props: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           motor: e.motor, modeloId: modelo.id, foto: e.elegida, caras: [...modelo.refs.slice(0, 3), ...(modelo.entero || modelo.medio ? [(modelo.entero || modelo.medio) as string] : [])], texto: e.texto, idioma, escenario: escenarioEn,
-          grabacion: e.grabacion, gestos: e.gestos, fijo: modelo.promptFijo, cuerpo: modelo.cuerpo, dur: durVideo, calidad: e.calidad, vozOmni: e.vozOmni,
+          grabacion: e.grabacion, gestos: e.gestos, fijo: modelo.promptFijo, cuerpo: modelo.cuerpo, dur: durVideo, calidad: e.calidad, vozOmni: vozSel, genero,
           ...(ugc ? { producto: e.prodUso } : {}),
           ...(entrevista && e.pregunta.trim() ? { pregunta: e.pregunta, vozEntrevistador: e.vozEnt } : {}),
         }),
@@ -507,7 +524,7 @@ export default function Hablados(props: Props) {
           <span className="hb-flecha">→</span>
           <div>
             <span className="hb-caja">
-              {e.elegida || e.fotos[0] ? <Image src={e.elegida || e.fotos[0]} alt="" fill sizes="40vw" /> : <span className="hb-caja-vacia" style={{ height: '100%' }}>{creandoFoto ? 'Creando…' : ugc ? `${nombre} con el producto` : `${nombre} vestida así`}</span>}
+              {e.elegida || e.fotos[0] ? <Image src={e.elegida || e.fotos[0]} alt="" fill sizes="40vw" /> : <span className="hb-caja-vacia" style={{ height: '100%' }}>{creandoFoto ? 'Creando…' : ugc ? `${nombre} con el producto` : `${nombre} ${hombre ? 'vestido' : 'vestida'} así`}</span>}
             </span>
             <span className="vr-cap-l">{e.elegida ? '✅ Aprobada' : 'Foto final'}</span>
           </div>
@@ -575,6 +592,11 @@ export default function Hablados(props: Props) {
             {creandoFoto ? 'Creando…' : e.fotos.length ? '🔄 Crear otra' : '📸 Crear foto'}
           </button>
         </div>
+        <label className="btn-ghost vr-lbl" style={{ marginTop: 8 }}>
+          <input type="file" accept="image/*" onChange={subirFotoInicial} style={{ display: 'none' }} disabled={subiendoFoto} />
+          {subiendoFoto ? 'Subiendo…' : '📷 Subir mi propia foto inicial (gratis)'}
+        </label>
+        <p className="vr-nota" style={{ marginTop: 4 }}>¿La hiciste en otra app (ej. Flow)? Subila y queda aprobada: tiene que ser vertical, con {nombre} en el lugar y la ropa del video.</p>
         {(() => {
           const foto = !!(modelo?.entero || modelo?.medio);
           const med = medidasDe(modelo?.cuerpo, modelo?.promptFijo);
@@ -582,7 +604,7 @@ export default function Hablados(props: Props) {
             ? <p className="vr-nota">🧍 Se usa su cuerpo: foto de {modelo?.entero ? 'cuerpo entero' : 'medio cuerpo'} ✓ · medidas {med} ✓</p>
             : <p className="vr-tip" style={{ marginTop: 6 }}>⚠️ A la ficha de {nombre} le falta {!foto && !med ? 'la foto de cuerpo entero y las medidas' : !foto ? 'la foto de cuerpo entero' : 'las medidas'}: sin eso la IA no sabe cómo es su cuerpo. Cargalo en su ficha (arriba, en Personaje).</p>;
         })()}
-        <p className="vr-nota">Es el primer cuadro del video: {ugc ? `${nombre} con el producto, en el lugar y con el encuadre del video de referencia.` : `${nombre} sentada en el escenario, con encuadre de celular.`} {costoFoto === null ? '' : `${fmt(costoFoto)} créditos por foto (${usd(costoFoto)}).`}</p>
+        <p className="vr-nota">Es el primer cuadro del video: {ugc ? `${nombre} con el producto, en el lugar y con el encuadre del video de referencia.` : `${nombre} ${hombre ? 'sentado' : 'sentada'} en el escenario, con encuadre de celular.`} {costoFoto === null ? '' : `${fmt(costoFoto)} créditos por foto (${usd(costoFoto)}).`}</p>
         {e.fotos.length ? (
           <>
             <div className="vr-fotos">
@@ -691,7 +713,7 @@ export default function Hablados(props: Props) {
           <>
             <div className="vr-tit chico">🎙️ Voz (siempre la misma)</div>
             <div className="lz-chips">
-              {VOCES_OMNI.map((v) => <button key={v.id} className={`opt ${e.vozOmni === v.id ? 'on' : ''}`} onClick={() => set({ vozOmni: v.id })}>{v.label}</button>)}
+              {vocesCat.map((v) => <button key={v.id} className={`opt ${vozSel === v.id ? 'on' : ''}`} onClick={() => set({ vozOmni: v.id })}>{v.label}</button>)}
             </div>
             <p className="vr-nota">La voz es del catálogo de Omni (no la muestra del paso 1), pero siempre la misma.</p>
           </>

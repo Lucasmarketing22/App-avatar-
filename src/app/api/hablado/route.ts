@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { componerVideoHablado, durValida, VOCES_OMNI, type Motor, type UsoProducto } from '@/lib/estudio/hablados';
+import { enGenero, generoValido } from '@/lib/estudio/genero';
+import { componerVideoHablado, durValida, vocesOmni, type Motor, type UsoProducto } from '@/lib/estudio/hablados';
 import { guardarConfig, idModeloValido, leerConfig } from '@/lib/hablados';
 import { crearVozOmni } from '@/lib/ia/kie';
 import { pedirTarea } from '@/lib/tareas';
@@ -20,10 +21,12 @@ const esUrl = (u: unknown): u is string => typeof u === 'string' && u.startsWith
 export async function POST(request: Request) {
   const b = (await request.json().catch(() => null)) as {
     motor?: string; modeloId?: string; foto?: string; caras?: string[]; texto?: string; idioma?: string;
-    escenario?: string; grabacion?: string; gestos?: string; fijo?: string; cuerpo?: string; dur?: number; calidad?: string; vozOmni?: string; producto?: string; pregunta?: string; vozEntrevistador?: string;
+    escenario?: string; grabacion?: string; gestos?: string; fijo?: string; cuerpo?: string; dur?: number; calidad?: string; vozOmni?: string; producto?: string; pregunta?: string; vozEntrevistador?: string; genero?: string;
   } | null;
 
   const motor: Motor = b?.motor === 'omni' ? 'omni' : 'kling3';
+  // Hombre o mujer: los prompts se escriben para una mujer y se pasan a masculino si hace falta.
+  const genero = generoValido(b?.genero);
   if (!esUrl(b?.foto)) return NextResponse.json({ error: 'Falta la foto inicial aprobada.' }, { status: 400 });
   const caras = Array.isArray(b?.caras) ? b!.caras.filter(esUrl).slice(0, 4) : [];
   const texto = typeof b?.texto === 'string' ? b.texto.trim().slice(0, 900) : '';
@@ -37,11 +40,11 @@ export async function POST(request: Request) {
   const pregunta = producto && typeof b?.pregunta === 'string' ? b.pregunta.trim().slice(0, 200) : '';
   const entrevista = pregunta ? { pregunta, voz: b?.vozEntrevistador === 'mujer' ? 'mujer' as const : 'hombre' as const } : undefined;
 
-  const prompt = componerVideoHablado({
+  const prompt = enGenero(componerVideoHablado({
     motor, dur, texto, idioma, escenario, grabacion: String(b?.grabacion ?? ''),
     gestos: typeof b?.gestos === 'string' ? b.gestos : '', fijo: typeof b?.fijo === 'string' ? b.fijo : '',
     cuerpo: typeof b?.cuerpo === 'string' ? b.cuerpo.slice(0, 200) : '', producto, entrevista,
-  });
+  }), genero);
   const datos = { tipo: 'video' as const, prompt: texto, dur };
 
   let result;
@@ -59,21 +62,23 @@ export async function POST(request: Request) {
       multi_shots: false,
       kling_elements: [{
         name: 'mila',
-        description: 'the woman who talks to the camera',
+        description: genero === 'hombre' ? 'the man who talks to the camera' : 'the woman who talks to the camera',
         element_input_urls: caras,
         ...(voz ? { element_input_audio_urls: [voz] } : {}),
       }],
     }, datos);
   } else {
     // Voz del catálogo de Omni: se registra una vez por modelo y por voz.
-    const preset = VOCES_OMNI.some((v) => v.id === b?.vozOmni) ? b!.vozOmni! : VOCES_OMNI[0].id;
+    const voces = vocesOmni(genero);
+    const preset = voces.some((v) => v.id === b?.vozOmni) ? b!.vozOmni! : voces[0].id;
     let audioId = '';
     if (idModeloValido(b?.modeloId)) {
       const c = await leerConfig();
       audioId = c.modelos?.[b!.modeloId!]?.omni?.[preset] ?? '';
       if (!audioId) {
-        const v = await crearVozOmni(preset, `Hablados ${preset}`,
-          'A young woman in her twenties with a natural, casual conversational voice: warm, a little playful, relaxed pace, like talking to a close friend in a selfie video. Not a narrator, not an announcer.');
+        const v = await crearVozOmni(preset, `Hablados ${preset}`, genero === 'hombre'
+          ? 'A man with a natural, casual conversational voice: warm, confident, relaxed pace, like talking to a friend in a selfie video. Not a narrator, not an announcer.'
+          : 'A young woman in her twenties with a natural, casual conversational voice: warm, a little playful, relaxed pace, like talking to a close friend in a selfie video. Not a narrator, not an announcer.');
         if (!v.ok) return NextResponse.json({ error: v.error }, { status: 502 });
         audioId = v.audioId;
         const modelos = { ...(c.modelos ?? {}) };
