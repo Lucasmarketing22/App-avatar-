@@ -105,11 +105,15 @@ export default function Estudio() {
   const [mult, setMult] = useState(1);
   const [costoMsg, setCostoMsg] = useState('');
   const [espacio, setEspacio] = useState<{ total: number; carpetas: Record<string, number>; archivos: number } | null>(null);
-  // Al entrar a la Galería consultamos cuánto espacio se está usando.
+  // Al entrar a la Galería consultamos cuánto espacio se está usando, una sola
+  // vez por visita a la app: medirlo recorre todos los archivos y cada página
+  // cuenta como operación de Vercel Blob (el plan gratis tiene 2.000 por mes).
+  const espacioPedido = useRef(false);
   useEffect(() => {
-    if (vista !== 'galeria') return;
+    if (vista !== 'galeria' || espacioPedido.current) return;
+    espacioPedido.current = true;
     fetch('/api/espacio').then((r) => (r.ok ? r.json() : null)).then((d) => { if (d && typeof d.total === 'number') setEspacio(d); }).catch(() => undefined);
-  }, [vista, creaciones.length, videos.length]);
+  }, [vista]);
   async function cargarSaldo() {
     try {
       const d = await fetch('/api/saldo').then((r) => r.json());
@@ -211,33 +215,77 @@ export default function Estudio() {
     if (vidTimer.current) clearTimeout(vidTimer.current);
   }, []);
 
+  // Si la sesión vence con la app abierta, cualquier pedido responde 401: en vez
+  // de mostrar todo vacío, volvemos a la pantalla de entrada.
   useEffect(() => {
-    (async () => {
-      try {
-        // Si la sesión venció o la cuenta se pausó, vuelve a la pantalla de entrada.
-        const quien = await fetch('/api/yo', { cache: 'no-store' });
-        if (quien.status === 401) { await fetch('/api/logout', { method: 'POST' }).catch(() => undefined); location.href = '/login'; return; }
-        const yoD = await quien.json().catch(() => null);
-        if (yoD) setYo({ admin: !!yoD.admin, nombre: String(yoD.nombre ?? '') });
-        const [p, v, c] = await Promise.all([
-          fetch('/api/personaje').then((r) => r.json()),
-          fetch('/api/vestidos').then((r) => r.json()),
-          fetch('/api/creaciones').then((r) => r.json()),
-        ]);
-        if (p && Array.isArray(p.lista)) { setModelas(p.lista); setActivoId(p.activo ?? p.lista[0]?.id ?? ''); }
-        if (v && Array.isArray(v.items)) setVestidos(v.items);
-        if (c && Array.isArray(c.items)) setCreaciones(c.items);
-        try { const vd = await fetch('/api/videos').then((r) => r.json()); if (Array.isArray(vd.items)) setVideos(vd.items); } catch { /* */ }
-        cargarSaldo();
-        const gals: Record<string, Item[]> = {};
-        await Promise.all(GALERIAS.map(async (g) => {
-          try { const d = await fetch(`/api/galeria?tipo=${g.key}`).then((r) => r.json()); gals[g.key] = Array.isArray(d.items) ? d.items : []; }
-          catch { gals[g.key] = []; }
-        }));
-        setGalerias(gals);
-      } catch { /* vacío */ } finally { setCargando(false); }
-    })();
+    const original = window.fetch;
+    window.fetch = async (...args: Parameters<typeof fetch>) => {
+      const res = await original(...args);
+      const url = typeof args[0] === 'string' ? args[0] : args[0] instanceof URL ? args[0].href : args[0].url;
+      const ruta = url.startsWith('http') ? (url.startsWith(location.origin) ? url.slice(location.origin.length) : '') : url;
+      if (res.status === 401 && ruta.startsWith('/api/') && !ruta.startsWith('/api/login') && !ruta.startsWith('/api/logout')) {
+        await original('/api/logout', { method: 'POST' }).catch(() => undefined);
+        location.href = '/login';
+      }
+      return res;
+    };
+    return () => { window.fetch = original; };
   }, []);
+
+  /**
+   * Pide un JSON a la app. Si falla (red lenta o el servidor tardó demasiado),
+   * lo intenta una vez más. Antes, una sola carga fallida dejaba toda la app
+   * vacía (0 creaciones, sin personajes) aunque todo estuviera guardado.
+   */
+  async function pedirJson<T>(url: string): Promise<T> {
+    for (let i = 0; i < 2; i++) {
+      try {
+        const r = await fetch(url, { cache: 'no-store' });
+        if (r.ok) return (await r.json()) as T;
+      } catch { /* reintentamos */ }
+      if (i === 0) await new Promise((ok) => setTimeout(ok, 1500));
+    }
+    throw new Error(url);
+  }
+
+  // Lo que no se pudo cargar al abrir (se muestra un aviso con "Reintentar").
+  const [faltaCargar, setFaltaCargar] = useState<string[]>([]);
+
+  async function cargarEstudio() {
+    setCargando(true);
+    setFaltaCargar([]);
+    try {
+      const yoD = await pedirJson<{ admin?: boolean; nombre?: string }>('/api/yo').catch(() => null);
+      if (yoD) setYo({ admin: !!yoD.admin, nombre: String(yoD.nombre ?? '') });
+      const fallas: string[] = [];
+      // Cada cosa por separado: si una falla, las demás se muestran igual.
+      await Promise.all([
+        pedirJson<{ lista?: Personaje[]; activo?: string }>('/api/personaje')
+          .then((p) => { if (Array.isArray(p.lista)) { setModelas(p.lista); setActivoId(p.activo ?? p.lista[0]?.id ?? ''); } })
+          .catch(() => fallas.push('personajes')),
+        pedirJson<{ items?: Item[] }>('/api/vestidos')
+          .then((v) => { if (Array.isArray(v.items)) setVestidos(v.items); })
+          .catch(() => fallas.push('vestidos')),
+        pedirJson<{ items?: Creacion[] }>('/api/creaciones')
+          .then((c) => { if (Array.isArray(c.items)) setCreaciones(c.items); })
+          .catch(() => fallas.push('creaciones')),
+        pedirJson<{ items?: Creacion[] }>('/api/videos')
+          .then((vd) => { if (Array.isArray(vd.items)) setVideos(vd.items); })
+          .catch(() => fallas.push('videos')),
+      ]);
+      cargarSaldo();
+      const gals: Record<string, Item[]> = {};
+      await Promise.all(GALERIAS.map(async (g) => {
+        try { const d = await pedirJson<{ items?: Item[] }>(`/api/galeria?tipo=${g.key}`); gals[g.key] = Array.isArray(d.items) ? d.items : []; }
+        catch { gals[g.key] = []; if (!fallas.includes('galerías')) fallas.push('galerías'); }
+      }));
+      setGalerias(gals);
+      setFaltaCargar(fallas);
+    } finally { setCargando(false); }
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { cargarEstudio(); }, []);
 
 
   useEffect(() => {
@@ -855,6 +903,14 @@ export default function Estudio() {
             </div>
           );
         })() : null}
+
+        {!cargando && faltaCargar.length ? (
+          <div className="saldo-bajo" role="alert">
+            <span>⚠️</span>
+            <div><b>No se pudieron cargar tus {faltaCargar.join(', ')}.</b> Tus cosas siguen guardadas: fue la conexión o el servidor tardó demasiado.</div>
+            <button aria-label="Reintentar" style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', textDecoration: 'underline' }} onClick={() => cargarEstudio()}>Reintentar</button>
+          </div>
+        ) : null}
 
         {cargando ? (
           <p className="sub">Cargando tu estudio…</p>
