@@ -141,7 +141,8 @@ export default function Escenas(props: Props) {
   const dicho = hablado(e.texto);
   const palabras = contar(dicho ?? e.texto);
   const max = palabrasMax(e.dur);
-  const puede = personas.length > 0 && !!e.texto.trim() && !creando;
+  // Sin personas también se puede: tomas de lugares u objetos (recorrido de una casa, B-roll de producto).
+  const puede = e.refs.length > 0 && !!e.texto.trim() && !creando;
 
   async function crearVideo() {
     if (!puede) return;
@@ -232,7 +233,7 @@ export default function Escenas(props: Props) {
           ))}
         </div>
         {e.refs.length ? (
-          <p className="vr-nota">{PERSONAS.filter((p) => e.refs.some((r) => r.rol === p)).map((p) => `${rolLabel(p)}: ${e.refs.filter((r) => r.rol === p).length} foto${e.refs.filter((r) => r.rol === p).length > 1 ? 's' : ''}`).join(' · ') || '⚠️ Falta marcar al menos una foto como Persona A.'}</p>
+          <p className="vr-nota">{PERSONAS.filter((p) => e.refs.some((r) => r.rol === p)).map((p) => `${rolLabel(p)}: ${e.refs.filter((r) => r.rol === p).length} foto${e.refs.filter((r) => r.rol === p).length > 1 ? 's' : ''}`).join(' · ') || 'Sin personas: sirve para tomas de lugares u objetos (por ejemplo, el recorrido de una casa).'}</p>
         ) : null}
       </div>
 
@@ -274,8 +275,8 @@ export default function Escenas(props: Props) {
         <p className="vr-nota">{e.calidad === 'borrador'
           ? 'Primero probá en borrador (barato). Si te gusta, lo pasás a 1080p con la misma escena: así la calidad final se paga una sola vez.'
           : 'Directo en esta calidad: si algo sale mal, se cobra igual. Conviene probar antes en borrador.'}</p>
-        {!personas.length ? <p className="vr-nota">👆 Falta al menos una foto marcada como persona (paso 1).</p> : null}
-        {personas.length && !e.texto.trim() ? <p className="vr-nota">👆 Falta escribir la escena (paso 2).</p> : null}
+        {!e.refs.length ? <p className="vr-nota">👆 Falta al menos una foto de referencia (paso 1).</p> : null}
+        {e.refs.length && !e.texto.trim() ? <p className="vr-nota">👆 Falta escribir la escena (paso 2).</p> : null}
         <button className={`btn-grad shine ${creando ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={!puede} onClick={() => setConfirmar(true)}>
           {creando ? 'Creando… (puede tardar más de 10 minutos)' : e.resultado ? '🔄 Crear otra versión' : e.calidad === 'borrador' ? '🧪 Crear borrador' : '🎬 Crear video'}
         </button>
@@ -301,9 +302,9 @@ export default function Escenas(props: Props) {
 
       {error ? <p className="errbox" style={{ margin: '12px 0' }}>{error}</p> : null}
       <button className="btn-ghost" style={{ width: '100%', marginTop: 12 }} onClick={empezarOtra}>🔁 Empezar otra escena</button>
-      {confirmar && personas[0] ? (
+      {confirmar && e.refs[0] ? (
         <ConfirmarVideo
-          foto={personas[0].url}
+          foto={(personas[0] ?? e.refs[0]).url}
           guion={e.texto}
           dur={e.dur}
           motor={`Seedance 2.5 · ${e.calidad === 'borrador' ? 'borrador 480p' : e.calidad}`}

@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   const refs = (Array.isArray(b?.refs) ? b!.refs : [])
     .filter((r) => esUrl(r?.url) && typeof r?.rol === 'string' && ROLES[r.rol])
     .slice(0, 9) as { url: string; rol: string }[];
-  if (!refs.some((r) => ['a', 'b', 'c'].includes(r.rol))) return NextResponse.json({ error: 'Subí al menos una foto de una persona.' }, { status: 400 });
+  if (!refs.length) return NextResponse.json({ error: 'Subí al menos una foto de referencia.' }, { status: 400 });
   const texto = typeof b?.texto === 'string' ? b.texto.trim().slice(0, 8000) : '';
   if (!texto) return NextResponse.json({ error: 'Falta la descripción de la escena con los diálogos.' }, { status: 400 });
   const calidad = b?.calidad === '1080p' || b?.calidad === '720p' ? b.calidad : 'borrador';
