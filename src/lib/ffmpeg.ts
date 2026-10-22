@@ -39,3 +39,12 @@ export function urlDeMotion(url: unknown): URL | null {
     return u.hostname.endsWith('.public.blob.vercel-storage.com') && u.pathname.startsWith('/motion/') ? u : null;
   } catch { return null; }
 }
+
+/** Un video terminado de la Galería (videos/ o u/<cuenta>/videos/) en nuestro almacenamiento. */
+export function urlDeVideoPropio(url: unknown): URL | null {
+  if (typeof url !== 'string') return null;
+  try {
+    const u = new URL(url);
+    return u.hostname.endsWith('.public.blob.vercel-storage.com') && /^\/(u\/[a-z0-9._-]+\/)?videos\//.test(u.pathname) ? u : null;
+  } catch { return null; }
+}

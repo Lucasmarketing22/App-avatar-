@@ -445,6 +445,7 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
 .lz-menu-ic { font-size: 22px; width: 36px; text-align: center; }
 .lz-tag { font-style: normal; font-size: 10px; font-weight: 800; color: #fff; background: var(--violeta); border-radius: 999px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
 .pub-btn.dl { left: auto; right: 8px; background: rgba(20,12,24,.72); box-shadow: none; }
+.pub-btn.mej { bottom: 84px; background: rgba(20,12,24,.72); box-shadow: none; }
 
 .lz-x.dup { right: 42px; font-size: 15px; }
 .lz-barra2 { position: absolute; top: 54px; left: 10px; right: 10px; z-index: 5; display: flex; gap: 6px; align-items: center; }

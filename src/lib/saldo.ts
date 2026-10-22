@@ -196,6 +196,8 @@ export async function estimarKie(model: string, input: Record<string, unknown>, 
   if (model === 'gemini-omni-video' && OMNI[d]) return OMNI[d];
   if (model === 'kling-3.0/video' && d > 0) return d * (input.mode === 'pro' ? 27 : 20);
   if (model === 'bytedance/seedance-2-5' && d > 0) return d * (SEEDANCE_SEG[String(input.resolution)] ?? SEEDANCE_SEG['720p']);
+  // Topaz (mejorar un video): 8 créditos por segundo en x1/x2 y 14 en x4 (kie.ai/topaz-video-upscaler).
+  if (model === 'topaz/video-upscale' && d > 0) return d * (input.upscale_factor === '4' ? 14 : 8);
   const v = input.mode ?? input.resolution ?? input.quality;
   const clave = `${model}|${typeof v === 'string' ? v : ''}`;
   const costos = await leerCostos();

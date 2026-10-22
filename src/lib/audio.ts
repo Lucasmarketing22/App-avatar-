@@ -3,7 +3,7 @@ import 'server-only';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import { conCarpetaTemporal, correrFfmpeg, urlDeMotion } from '@/lib/ffmpeg';
+import { conCarpetaTemporal, correrFfmpeg, urlDeMotion, urlDeVideoPropio } from '@/lib/ffmpeg';
 
 const tieneAudio = (log: string) => /Stream #\d+:\d+(\[[^\]]*\])?(\([^)]*\))?: Audio/.test(log);
 
@@ -15,7 +15,8 @@ const tieneAudio = (log: string) => /Stream #\d+:\d+(\[[^\]]*\])?(\([^)]*\))?: A
  * Devuelve los bytes nuevos, o null si el original no tenía sonido.
  */
 export async function pegarAudio(video: Uint8Array, original: string): Promise<{ bytes: Uint8Array | null; error?: string }> {
-  const a = urlDeMotion(original);
+  // El original puede ser un video subido (motion/) o uno de la Galería (al mejorarlo con Topaz).
+  const a = urlDeMotion(original) ?? urlDeVideoPropio(original);
   if (!a) return { bytes: null, error: 'El video original no es válido.' };
   try {
     return await conCarpetaTemporal(async (dir) => {
