@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { borrarVideosVencidos } from '@/lib/limpieza';
+import { borrarVencidos } from '@/lib/limpieza';
 import { listPublic, removeObject } from '@/lib/storage';
 
 export const runtime = 'nodejs';
@@ -8,10 +8,12 @@ export const runtime = 'nodejs';
 /** Lista los videos guardados en la carpeta videos/. */
 export async function GET() {
   // Por si el Cron diario no corrió: al abrir la app también se borran los
-  // videos con más de 2 días.
-  await borrarVideosVencidos().catch(() => 0);
+  // videos con más de 2 días. Usamos la misma lista (cada list() cuenta como
+  // operación de Vercel Blob; antes se listaba tres veces por apertura).
   const blobs = await listPublic('videos/');
+  const vencidos = await borrarVencidos(blobs).catch(() => new Set<string>());
   const items = blobs
+    .filter((b) => !vencidos.has(b.url))
     .sort((a, b) => b.uploadedAt - a.uploadedAt)
     .map((b) => ({ id: b.pathname, url: b.url, ts: b.uploadedAt }));
   return NextResponse.json({ items });

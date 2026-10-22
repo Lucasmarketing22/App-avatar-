@@ -15,7 +15,7 @@ export const SESSION_COOKIE = 'musa_session';
 export const HEADER_CUENTA = 'x-musa-cuenta';
 export const HEADER_VERSION = 'x-musa-version';
 export const CUENTA_ADMIN = 'admin';
-export const DURACION_SESION_S = 60 * 60 * 24 * 30;
+export const DURACION_SESION_S = 60 * 60 * 24 * 90;
 
 const enc = new TextEncoder();
 const hex = (b: ArrayBuffer) => Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
