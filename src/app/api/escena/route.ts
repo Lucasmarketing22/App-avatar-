@@ -8,8 +8,8 @@ const esUrl = (u: unknown): u is string => typeof u === 'string' && u.startsWith
 
 /** Qué es cada foto de referencia (así la IA sabe quién es quién). */
 const ROLES: Record<string, string> = {
-  a: 'Person A (a character: keep her face, hair, body and outfit exactly)',
-  b: 'Person B (a character: keep her face, hair, body and outfit exactly)',
+  a: 'Person A (a character: keep their face, hair, body and outfit exactly)',
+  b: 'Person B (a character: keep their face, hair, body and outfit exactly)',
   c: 'Person C (a character: keep their face, hair, body and outfit exactly)',
   lugar: 'the location (keep the room, furniture, light and colors)',
   ropa: 'an outfit to wear',
