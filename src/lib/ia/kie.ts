@@ -109,6 +109,33 @@ export async function getTask(taskId: string): Promise<TaskStatus> {
   return { state: 'running' };
 }
 
+/**
+ * Datos con los que se pidió una tarea (modelo, parámetros y fecha), para saber
+ * si un video es un borrador de Seedance que todavía se puede pasar a 1080p.
+ * Devuelve null si no se pudo consultar.
+ */
+export async function infoTarea(taskId: string): Promise<{ model: string; input: Record<string, unknown>; creado: number } | null> {
+  if (!process.env.KIE_API_KEY) return null;
+  try {
+    const res = await fetch(`${BASE}/jobs/recordInfo?taskId=${encodeURIComponent(taskId)}`, {
+      headers: { Authorization: `Bearer ${process.env.KIE_API_KEY}` },
+      cache: 'no-store',
+    });
+    const d = ((await res.json().catch(() => null)) as { data?: { model?: string; param?: string; createTime?: number } } | null)?.data;
+    if (!res.ok || !d?.model) return null;
+    let input: Record<string, unknown> = {};
+    try {
+      const p = JSON.parse(d.param ?? '{}') as { input?: unknown };
+      input = ((typeof p.input === 'string' ? JSON.parse(p.input) : p.input) ?? {}) as Record<string, unknown>;
+    } catch { /* sin parámetros */ }
+    // createTime viene en milisegundos (o en segundos en tareas viejas).
+    const t = Number(d.createTime) || 0;
+    return { model: d.model, input, creado: t > 0 && t < 1e12 ? t * 1000 : t };
+  } catch {
+    return null;
+  }
+}
+
 /** Traduce mensajes de error del proveedor a español claro. */
 function friendlyMessage(msg?: string): string {
   const m = (msg ?? '').toLowerCase();

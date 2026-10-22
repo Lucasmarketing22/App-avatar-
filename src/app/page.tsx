@@ -7,6 +7,7 @@ import { upload } from '@vercel/blob/client';
 import Guardar from '@/components/Guardar';
 import Guia from '@/components/Guia';
 import Lienzo from '@/components/lienzo/Lienzo';
+import Mejorar from '@/components/Mejorar';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
 import Hablados from '@/components/Hablados';
@@ -14,7 +15,7 @@ import Escenas from '@/components/Escenas';
 import { AVISO_FALLO_ROPA, describirVestuario, prefModoRopa, textoVestuario } from '@/lib/cliente/vestuario';
 import ModoRopa from '@/components/ModoRopa';
 import VozEstudio, { type VozModelo } from '@/components/VozEstudio';
-import { esperarTarea, prefSinSonido, quitarSonido, subirImagen } from '@/lib/cliente/video';
+import { esperarTarea, prefSinSonido, quitarSonido, subirAMotion, subirImagen } from '@/lib/cliente/video';
 import ElegirSonido from '@/components/ElegirSonido';
 import RevisarVideo from '@/components/RevisarVideo';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
@@ -85,6 +86,10 @@ export default function Estudio() {
   const [videos, setVideos] = useState<Creacion[]>([]);
   const [publicar, setPublicar] = useState<{ url: string; tipo: 'foto' | 'video'; prompt?: string } | null>(null);
   const [guardar, setGuardar] = useState<{ url: string; tipo: 'foto' | 'video' } | null>(null);
+  // Mejorar la calidad de un video (Topaz HD o borrador de Seedance → 1080p).
+  const [mejorarUrl, setMejorarUrl] = useState<string | null>(null);
+  const [subiendoMejora, setSubiendoMejora] = useState(0);
+  const [errorMejora, setErrorMejora] = useState('');
   const [galTab, setGalTab] = useState<'fotos' | 'videos'>('fotos');
 
   const [abierto, setAbierto] = useState<string | null>(null);
@@ -831,6 +836,19 @@ export default function Estudio() {
     setResultUrls((prev) => prev.filter((x) => x !== c.url));
     try { await fetch(`/api/creaciones?url=${encodeURIComponent(c.url)}`, { method: 'DELETE' }); } catch { /* */ }
   }
+  /** Sube un video del celular para mejorarlo (Topaz acepta hasta 50 MB). */
+  async function subirParaMejorar(f: File | undefined) {
+    if (!f) return;
+    setErrorMejora('');
+    if (f.size > 50 * 1024 * 1024) { setErrorMejora('El video pesa más de 50 MB, el máximo que acepta el mejorador. Recortalo o exportalo más liviano.'); return; }
+    setSubiendoMejora(1);
+    try {
+      const url = await subirAMotion(f, `mejorar-${crypto.randomUUID()}`, (p) => setSubiendoMejora(p));
+      setMejorarUrl(url);
+    } catch (e) {
+      setErrorMejora(e instanceof Error ? e.message : 'No se pudo subir el video.');
+    } finally { setSubiendoMejora(0); }
+  }
   async function borrarVideo(v: Creacion) {
     if (typeof window !== 'undefined' && !window.confirm('¿Eliminar este video? No se puede deshacer.')) return;
     setVideos((prev) => prev.filter((x) => x.id !== v.id));
@@ -1273,8 +1291,16 @@ export default function Estudio() {
                   ))}
                 </div>
               )
-            ) : (
-              videos.length === 0 ? (
+            ) : (<>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 10px' }}>
+                <label className="btn-soft" style={{ cursor: subiendoMejora ? 'wait' : 'pointer' }}>
+                  <input type="file" accept="video/mp4,video/quicktime,video/*" style={{ display: 'none' }} disabled={!!subiendoMejora}
+                    onChange={(e) => { subirParaMejorar(e.target.files?.[0]); e.target.value = ''; }} />
+                  {subiendoMejora ? `Subiendo… ${subiendoMejora}%` : '⬆ Subir un video para mejorar su calidad'}
+                </label>
+              </div>
+              {errorMejora ? <p className="errbox" style={{ margin: '0 0 10px' }}>{errorMejora}</p> : null}
+              {videos.length === 0 ? (
                 <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no hay videos. Abrí una foto y tocá “🎬 Crear video”.</p></div>
               ) : (
                 <>
@@ -1287,12 +1313,13 @@ export default function Estudio() {
                       <button className="xbtn" title="Eliminar" onClick={() => borrarVideo(v)}>🗑️</button>
                       <button className="pub-btn" onClick={() => setPublicar({ url: v.url, tipo: 'video', prompt: v.prompt })}>📤 Publicar</button>
                       <button className="pub-btn dl" onClick={() => setGuardar({ url: v.url, tipo: 'video' })}>⬇ Guardar</button>
+                      <button className="pub-btn mej" onClick={() => setMejorarUrl(v.url)}>✨ Mejorar</button>
                     </div>
                   ))}
                 </div>
                 </>
-              )
-            )}
+              )}
+            </>)}
           </>
         )}
         {viralAbierto ? (
@@ -1440,6 +1467,11 @@ export default function Estudio() {
       })() : null}
 
       {guardar ? <Guardar url={guardar.url} tipo={guardar.tipo} onClose={() => setGuardar(null)} /> : null}
+      {mejorarUrl ? (
+        <Mejorar url={mejorarUrl} mult={mult}
+          onVideo={(u) => setVideos((prev) => [{ id: u, url: u, ts: Date.now() }, ...prev.filter((x) => x.url !== u)])}
+          onClose={() => setMejorarUrl(null)} />
+      ) : null}
       {publicar ? <Publicar url={publicar.url} tipo={publicar.tipo} prompt={publicar.prompt} nombre={personaje.nombre} onClose={() => setPublicar(null)} /> : null}
 
       {/* ===== MODALES ===== */}
