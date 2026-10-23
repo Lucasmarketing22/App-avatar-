@@ -35,6 +35,9 @@ type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
 type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados' | 'escenas' | 'cuentas';
+/** Secciones escondidas del menú (Lucas no las usa). El código sigue: sacarlas de acá las vuelve a mostrar. */
+const OCULTAS: Vista[] = ['viral', 'hablados'];
+const visible = (v: Vista) => !OCULTAS.includes(v);
 
 const ASPECTS = ['3:4', '1:1', '4:5', '9:16', '16:9', '4:3'];
 
@@ -922,8 +925,8 @@ export default function Estudio() {
         <div className="rail-logo">m</div>
         <button className={`rail-ic ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><Icon name="sparkles" /><span>Crear</span></button>
         <button className={`rail-ic ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><Icon name="galeria" /><span>Galería</span></button>
-        <button className={`rail-ic ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><Icon name="viral" /><span>Viral</span></button>
-        <button className={`rail-ic ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><Icon name="voz" /><span>Hablados</span></button>
+        {visible('viral') ? <button className={`rail-ic ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><Icon name="viral" /><span>Viral</span></button> : null}
+        {visible('hablados') ? <button className={`rail-ic ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><Icon name="voz" /><span>Hablados</span></button> : null}
         <button className={`rail-ic ${vista === 'escenas' ? 'on' : ''}`} onClick={() => setVista('escenas')}><Icon name="film" /><span>Escenas</span></button>
         <button className={`rail-ic ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><Icon name="motion" /><span>Motion</span></button>
         <button className={`rail-ic ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><Icon name="lienzo" /><span>Lienzo</span></button>
@@ -1455,7 +1458,7 @@ export default function Estudio() {
               onPublicar={(url, tipo) => setPublicar({ url, tipo })}
               onGuardar={(url, tipo) => setGuardar({ url, tipo })}
               onSaldo={cargarSaldo}
-              onVolver={() => setVista('hablados')}
+              onVolver={visible('hablados') ? () => setVista('hablados') : undefined}
             />
           </div>
         ) : null}
@@ -1488,8 +1491,9 @@ export default function Estudio() {
       {/* Nav inferior (mobile) */}
       <nav className="tabbar">
         <button className={`tab ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><span className="ti"><Icon name="sparkles" /></span>Crear</button>
-        <button className={`tab ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><span className="ti"><Icon name="viral" /></span>Viral</button>
-        <button className={`tab ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><span className="ti"><Icon name="voz" /></span>Hablados</button>
+        <button className={`tab ${vista === 'escenas' ? 'on' : ''}`} onClick={() => setVista('escenas')}><span className="ti"><Icon name="film" /></span>Escenas</button>
+        {visible('viral') ? <button className={`tab ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><span className="ti"><Icon name="viral" /></span>Viral</button> : null}
+        {visible('hablados') ? <button className={`tab ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><span className="ti"><Icon name="voz" /></span>Hablados</button> : null}
         <button className={`tab ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><span className="ti"><Icon name="galeria" /></span>Galería</button>
         <button className={`tab ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><span className="ti"><Icon name="motion" /></span>Motion</button>
         <button className={`tab ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><span className="ti"><Icon name="lienzo" /></span>Lienzo</button>
