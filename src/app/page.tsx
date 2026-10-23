@@ -7,6 +7,7 @@ import { upload } from '@vercel/blob/client';
 import Guardar from '@/components/Guardar';
 import Guia from '@/components/Guia';
 import Lienzo from '@/components/lienzo/Lienzo';
+import Editar from '@/components/Editar';
 import Mejorar from '@/components/Mejorar';
 import { HD_TOPAZ_ACTIVO } from '@/lib/mejorar';
 import Publicar from '@/components/Publicar';
@@ -118,6 +119,8 @@ export default function Estudio() {
   const [guardar, setGuardar] = useState<{ url: string; tipo: 'foto' | 'video' } | null>(null);
   // Mejorar la calidad de un video (Topaz HD o borrador de Seedance → 1080p).
   const [mejorarUrl, setMejorarUrl] = useState<string | null>(null);
+  // Edición automática (cortes + subtítulos en español) de un video de la Galería.
+  const [editarUrl, setEditarUrl] = useState<string | null>(null);
   const [subiendoMejora, setSubiendoMejora] = useState(0);
   const [errorMejora, setErrorMejora] = useState('');
   const [galTab, setGalTab] = useState<'fotos' | 'videos'>('fotos');
@@ -1391,9 +1394,12 @@ export default function Estudio() {
                       <video src={v.url} controls playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                       <span className="vence">⏳ {venceEn(v.ts)}</span>
                       <button className="xbtn" title="Eliminar" onClick={() => borrarVideo(v)}>🗑️</button>
-                      <button className="pub-btn" onClick={() => setPublicar({ url: v.url, tipo: 'video', prompt: v.prompt })}>📤 Publicar</button>
-                      <button className="pub-btn dl" onClick={() => setGuardar({ url: v.url, tipo: 'video' })}>⬇ Guardar</button>
-                      <button className="pub-btn mej" onClick={() => setMejorarUrl(v.url)}>✨ Mejorar</button>
+                      <div className="tile-acc">
+                        <button className="pub-btn edi" onClick={() => setEditarUrl(v.url)}>✂️ Editar</button>
+                        <button className="pub-btn mej" onClick={() => setMejorarUrl(v.url)}>✨ Mejorar</button>
+                        <button className="pub-btn" onClick={() => setPublicar({ url: v.url, tipo: 'video', prompt: v.prompt })}>📤 Publicar</button>
+                        <button className="pub-btn dl" onClick={() => setGuardar({ url: v.url, tipo: 'video' })}>⬇ Guardar</button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1552,6 +1558,12 @@ export default function Estudio() {
         <Mejorar url={mejorarUrl} mult={mult}
           onVideo={(u) => setVideos((prev) => [{ id: u, url: u, ts: Date.now() }, ...prev.filter((x) => x.url !== u)])}
           onClose={() => setMejorarUrl(null)} />
+      ) : null}
+      {editarUrl ? (
+        <Editar url={editarUrl}
+          onVideo={(u) => setVideos((prev) => [{ id: u, url: u, ts: Date.now() }, ...prev.filter((x) => x.url !== u)])}
+          onGuardar={(u) => { setEditarUrl(null); setGuardar({ url: u, tipo: 'video' }); }}
+          onClose={() => setEditarUrl(null)} />
       ) : null}
       {publicar ? <Publicar url={publicar.url} tipo={publicar.tipo} prompt={publicar.prompt} nombre={personaje.nombre} onClose={() => setPublicar(null)} /> : null}
 
