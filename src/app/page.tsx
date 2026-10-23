@@ -8,6 +8,7 @@ import Guardar from '@/components/Guardar';
 import Guia from '@/components/Guia';
 import Lienzo from '@/components/lienzo/Lienzo';
 import Mejorar from '@/components/Mejorar';
+import { HD_TOPAZ_ACTIVO } from '@/lib/mejorar';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
 import Hablados from '@/components/Hablados';
@@ -1368,13 +1369,13 @@ export default function Estudio() {
                 </div>
               )
             ) : (<>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 10px' }}>
+              {HD_TOPAZ_ACTIVO ? <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 10px' }}>
                 <label className="btn-soft" style={{ cursor: subiendoMejora ? 'wait' : 'pointer' }}>
                   <input type="file" accept="video/mp4,video/quicktime,video/*" style={{ display: 'none' }} disabled={!!subiendoMejora}
                     onChange={(e) => { subirParaMejorar(e.target.files?.[0]); e.target.value = ''; }} />
                   {subiendoMejora ? `Subiendo… ${subiendoMejora}%` : '⬆ Subir un video para mejorar su calidad'}
                 </label>
-              </div>
+              </div> : null}
               {errorMejora ? <p className="errbox" style={{ margin: '0 0 10px' }}>{errorMejora}</p> : null}
               {videos.length === 0 ? (
                 <div className="panel"><p className="sub" style={{ margin: 0 }}>Todavía no hay videos. Abrí una foto y tocá “🎬 Crear video”.</p></div>

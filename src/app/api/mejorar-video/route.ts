@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 
 import { conCarpetaTemporal, correrFfmpeg, duracionDeLog, urlDeMotion, urlDeVideoPropio } from '@/lib/ffmpeg';
 import { infoTarea } from '@/lib/ia/kie';
+import { HD_TOPAZ_ACTIVO } from '@/lib/mejorar';
 import { estimarKie } from '@/lib/saldo';
 import { uploadPublic } from '@/lib/storage';
 import { pedirTarea, taskIdDeUrl } from '@/lib/tareas';
@@ -99,13 +100,14 @@ export async function POST(request: Request) {
 
   if (b?.modo === '1080') {
     const o = await opciones(url, dur);
-    if (!o.borrador) return NextResponse.json({ error: 'Solo los borradores de Escenas se pueden pasar a 1080p. Para este video usá "Mejorar a HD".' }, { status: 400 });
-    if (!o.vigente) return NextResponse.json({ error: 'Pasaron más de 7 días desde el borrador: Seedance ya no lo acepta. Usá "Mejorar a HD".' }, { status: 400 });
+    if (!o.borrador) return NextResponse.json({ error: 'Solo los borradores de Escenas se pueden pasar a 1080p. Este video no se puede mejorar.' }, { status: 400 });
+    if (!o.vigente) return NextResponse.json({ error: 'Pasaron más de 7 días desde el borrador: Seedance ya no lo acepta.' }, { status: 400 });
     const r = await pedirTarea(request, 'bytedance/seedance-2-5-draft', { draft_task_id: o.id, resolution: '1080p' }, { tipo: 'video', prompt: 'Borrador pasado a 1080p (Seedance)', dur: o.durBorrador });
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     return NextResponse.json({ taskId: r.taskId });
   }
 
+  if (!HD_TOPAZ_ACTIVO) return NextResponse.json({ error: 'Mejorar a HD está apagado por ahora: el servicio (Topaz en Kie) está fallando.' }, { status: 503 });
   const limpio = await copiaLimpia(url);
   if (!limpio) return NextResponse.json({ error: 'No se pudo preparar el video para mejorarlo. Probá de nuevo.' }, { status: 500 });
   const r = await pedirTarea(request, 'topaz/video-upscale', { video_url: limpio, upscale_factor: '2' }, { tipo: 'video', prompt: 'Video mejorado a HD (Topaz x2)', dur, audio: url });
