@@ -12,6 +12,9 @@ const nextConfig = {
       '/api/analizar-video': ['./node_modules/ffmpeg-static/ffmpeg'],
       '/api/recortar': ['./node_modules/ffmpeg-static/ffmpeg'],
       '/api/kie-callback': ['./node_modules/ffmpeg-static/ffmpeg'],
+      '/api/replicate-callback': ['./node_modules/ffmpeg-static/ffmpeg'],
+      // Edición automática: ffmpeg y las letras de los subtítulos.
+      '/api/editar': ['./node_modules/ffmpeg-static/ffmpeg', './assets/fuentes/**/*', './assets/emojis/**/*', './assets/sfx/**/*'],
     },
   },
   images: {

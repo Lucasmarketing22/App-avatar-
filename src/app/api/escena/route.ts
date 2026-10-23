@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { pedirTarea } from '@/lib/tareas';
+import { replicateListo } from '@/lib/ia/replicate';
+import { pedirTarea, pedirTareaReplicate } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
 
@@ -22,8 +23,16 @@ const ROLES: Record<string, string> = {
  * y una descripción con los diálogos. Sonido y voces se generan juntos.
  *  - calidad 'borrador': 480p barato para probar; después se puede pasar a
  *    1080p con la misma escena ({ accion: 'final', borrador: taskId }).
+ *  - 720p se hace en Replicate (≈ 27 % más barato que en Kie, misma Seedance 2.5);
+ *    si Replicate no lo acepta, en Kie. Si Kie no acepta un borrador, se hace en
+ *    Replicate en 480p normal (ese no se puede pasar a 1080p).
  * Devuelve taskId; se consulta con /api/status (el video se guarda en videos/).
  */
+export async function GET() {
+  // Para que la pantalla muestre el precio de quien lo va a hacer.
+  return NextResponse.json({ replicate: replicateListo() });
+}
+
 export async function POST(request: Request) {
   const b = (await request.json().catch(() => null)) as {
     accion?: string; borrador?: string; refs?: { url?: string; rol?: string }[]; texto?: string;
@@ -59,7 +68,17 @@ export async function POST(request: Request) {
     texto,
   ].join('\n\n');
 
-  const result = await pedirTarea(request, 'bytedance/seedance-2-5', {
+  const datos = { tipo: 'video' as const, prompt: texto, refs: refs.map((r) => r.url), aspect: formato, dur };
+  // En Replicate las fotos se nombran [Image1], [Image2]…
+  const enReplicate = (resolution: string) => pedirTareaReplicate(request, 'bytedance/seedance-2.5', {
+    prompt: prompt.replace(/\bimage (\d)\b/gi, '[Image$1]'),
+    reference_images: refs.map((r) => r.url),
+    generate_audio: true,
+    resolution,
+    aspect_ratio: formato,
+    duration: dur,
+  }, datos);
+  const enKie = () => pedirTarea(request, 'bytedance/seedance-2-5', {
     prompt,
     reference_image_urls: refs.map((r) => r.url),
     generate_audio: true,
@@ -67,7 +86,15 @@ export async function POST(request: Request) {
     aspect_ratio: formato,
     duration: dur,
     draft: calidad === 'borrador',
-  }, { tipo: 'video', prompt: texto, refs: refs.map((r) => r.url), aspect: formato, dur });
+  }, datos);
+
+  let aviso: string | undefined;
+  let result = calidad === '720p' && replicateListo() ? await enReplicate('720p') : null;
+  if (!result?.ok) result = await enKie();
+  if (!result.ok && calidad === 'borrador' && replicateListo() && result.status !== 402) {
+    const plan = await enReplicate('480p');
+    if (plan.ok) { result = plan; aviso = 'Kie no respondió: se hace en Replicate en 480p. Este video no se puede pasar a 1080p.'; }
+  }
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
-  return NextResponse.json({ taskId: result.taskId });
+  return NextResponse.json({ taskId: result.taskId, aviso });
 }

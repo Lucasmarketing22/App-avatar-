@@ -8,7 +8,7 @@ import { CUENTA_ADMIN, HEADER_CUENTA, HEADER_VERSION, SESSION_COOKIE, leerToken 
  * A cada pedido le anota de qué cuenta es (encabezado interno), así cada
  * persona solo ve y guarda lo suyo. Ese encabezado nunca se acepta desde afuera.
  */
-const PUBLIC_PATHS = new Set(['/login', '/api/login', '/api/health', '/api/kie-callback', '/api/cleanup']);
+const PUBLIC_PATHS = new Set(['/login', '/api/login', '/api/health', '/api/kie-callback', '/api/replicate-callback', '/api/cleanup']);
 
 function seguir(request: NextRequest, cuenta?: string, version = 0) {
   const headers = new Headers(request.headers);
@@ -20,7 +20,8 @@ function seguir(request: NextRequest, cuenta?: string, version = 0) {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (PUBLIC_PATHS.has(pathname)) return seguir(request);
+  // Conector de Claude: /api/mcp revisa su propio token; el inicio de sesión (OAuth) es público.
+  if (PUBLIC_PATHS.has(pathname) || pathname === '/api/mcp' || pathname.startsWith('/api/oauth/') || pathname.startsWith('/.well-known/')) return seguir(request);
 
   const password = process.env.APP_PASSWORD;
   // Si todavía no se configuró la contraseña, no bloqueamos (primer arranque).
