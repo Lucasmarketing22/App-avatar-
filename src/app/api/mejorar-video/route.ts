@@ -6,9 +6,12 @@ import { NextResponse } from 'next/server';
 import { conCarpetaTemporal, correrFfmpeg, duracionDeLog, urlDeMotion, urlDeVideoPropio } from '@/lib/ffmpeg';
 import { infoTarea } from '@/lib/ia/kie';
 import { estimarKie } from '@/lib/saldo';
+import { uploadPublic } from '@/lib/storage';
 import { pedirTarea, taskIdDeUrl } from '@/lib/tareas';
 
 export const runtime = 'nodejs';
+// Preparar la copia limpia (bajar, convertir y subir) puede tardar unos segundos.
+export const maxDuration = 60;
 
 const SIETE_DIAS = 7 * 24 * 60 * 60 * 1000;
 const esUrl = (u: unknown): u is string => typeof u === 'string' && u.startsWith('https://');
@@ -28,6 +31,35 @@ async function medirEnServidor(url: string): Promise<number> {
       return segundos(duracionDeLog((await correrFfmpeg(['-hide_banner', '-i', archivo])).log));
     });
   } catch { return 0; }
+}
+
+/**
+ * Copia "limpia" para Topaz: solo imagen (sin audio), H.264 estándar, yuv420p,
+ * medidas pares y faststart. Con el video de Seedance tal cual (audio a 32 kHz)
+ * Topaz en Kie respondía "internal error"; así descartamos el archivo. El sonido
+ * se le vuelve a pegar al resultado desde el original (ficha.audio).
+ * Devuelve la URL de la copia (carpeta motion/, se borra a los 2 días) o null.
+ */
+async function copiaLimpia(url: string): Promise<string | null> {
+  const u = urlDeMotion(url) ?? urlDeVideoPropio(url);
+  if (!u) return null;
+  try {
+    return await conCarpetaTemporal(async (dir) => {
+      const r = await fetch(u.toString(), { cache: 'no-store' });
+      if (!r.ok) return null;
+      const entrada = path.join(dir, 'entrada');
+      const salida = path.join(dir, 'limpio.mp4');
+      await fs.writeFile(entrada, new Uint8Array(await r.arrayBuffer()));
+      const { code } = await correrFfmpeg([
+        '-hide_banner', '-y', '-i', entrada, '-map', '0:v:0', '-an',
+        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p',
+        '-c:v', 'libx264', '-profile:v', 'high', '-preset', 'veryfast', '-crf', '16', '-movflags', '+faststart', salida,
+      ]);
+      if (code !== 0) return null;
+      const subida = await uploadPublic(`motion/limpio-${crypto.randomUUID()}.mp4`, new Uint8Array(await fs.readFile(salida)), 'video/mp4');
+      return subida.url ?? null;
+    });
+  } catch { return null; }
 }
 
 /**
@@ -74,7 +106,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ taskId: r.taskId });
   }
 
-  const r = await pedirTarea(request, 'topaz/video-upscale', { video_url: url, upscale_factor: '2' }, { tipo: 'video', prompt: 'Video mejorado a HD (Topaz x2)', dur, audio: url });
+  const limpio = await copiaLimpia(url);
+  if (!limpio) return NextResponse.json({ error: 'No se pudo preparar el video para mejorarlo. Probá de nuevo.' }, { status: 500 });
+  const r = await pedirTarea(request, 'topaz/video-upscale', { video_url: limpio, upscale_factor: '2' }, { tipo: 'video', prompt: 'Video mejorado a HD (Topaz x2)', dur, audio: url });
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
   return NextResponse.json({ taskId: r.taskId });
 }
