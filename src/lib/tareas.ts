@@ -6,8 +6,9 @@ import { registrarCosto } from '@/lib/costos';
 import { conCuenta, cuentaActual } from '@/lib/cuenta';
 import { urlDeMotion } from '@/lib/ffmpeg';
 import { aplicarGrano } from '@/lib/grain';
-import { createTask, getTask } from '@/lib/ia/kie';
-import { cobrarTarea, estimarKie, liberarReserva, puedeGastar, reservar } from '@/lib/saldo';
+import { createTask, getTask, type TaskStatus } from '@/lib/ia/kie';
+import { crearPrediccion, leerPrediccion } from '@/lib/ia/replicate';
+import { cobrarTarea, estimarKie, liberarReserva, puedeGastar, reservar, USD_POR_CREDITO } from '@/lib/saldo';
 import { readJsonEn, uploadPublic, writeJsonEn } from '@/lib/storage';
 
 /**
@@ -96,6 +97,51 @@ export async function pedirTarea(
   return { ok: true, taskId: result.taskId };
 }
 
+/* ---------- Replicate (segundo proveedor) ---------- */
+
+/** Las tareas de Replicate llevan este prefijo en su id (así se sabe a quién preguntar). */
+export const PREFIJO_REPLICATE = 'rep_';
+/**
+ * Seedance 2.5 en Replicate, US$ por segundo de video, sin video de entrada
+ * (replicate.com/bytedance/seedance-2.5, revisado el 23/10/2026). En créditos
+ * de Kie (US$ 0,005) para cobrar igual que todo lo demás.
+ */
+export const SEEDANCE_REPLICATE_USD: Record<string, number> = { '480p': 0.1028, '720p': 0.2312 };
+export const seedanceReplicateCreditos = (resolucion: string, dur: number) =>
+  ((SEEDANCE_REPLICATE_USD[resolucion] ?? SEEDANCE_REPLICATE_USD['720p']) * dur) / USD_POR_CREDITO;
+
+/**
+ * Como pedirTarea, pero en Replicate. `modelo` se anota en la ficha como
+ * "replicate:<modelo>|<resolución>" para calcular lo que costó al terminar.
+ */
+export async function pedirTareaReplicate(
+  request: Request,
+  modelo: string,
+  input: Record<string, unknown>,
+  datos: Omit<Tarea, 'ts' | 'cuenta' | 'mult' | 'reserva' | 'modelo'>,
+): Promise<{ ok: true; taskId: string } | { ok: false; error: string; status: number }> {
+  const resolucion = String(input.resolution ?? '720p');
+  const permiso = await puedeGastar(seedanceReplicateCreditos(resolucion, Number(datos.dur) || 0));
+  if (!permiso.ok) return permiso;
+  const r = await crearPrediccion(modelo, input, `${new URL(request.url).origin}/api/replicate-callback`);
+  if (!r.ok) return { ok: false, error: r.error, status: 502 };
+  const taskId = `${PREFIJO_REPLICATE}${r.id}`;
+  await reservar(permiso, taskId);
+  await registrarTarea(taskId, { ...datos, modelo: `replicate:${modelo}|${resolucion}`, cuenta: permiso.cuenta, mult: permiso.mult, reserva: permiso.reserva });
+  return { ok: true, taskId };
+}
+
+/** Estado de una tarea de Replicate, con la misma forma que las de Kie. */
+async function tareaReplicate(taskId: string, ficha: Tarea | null): Promise<TaskStatus> {
+  const r = await leerPrediccion(taskId.slice(PREFIJO_REPLICATE.length));
+  if (r.estado === 'trabajando') return { state: 'running' };
+  if (r.estado === 'fallo') return { state: 'fail', error: r.error };
+  const url = typeof r.output === 'string' ? r.output : Array.isArray(r.output) && typeof r.output[0] === 'string' ? r.output[0] : '';
+  if (!url) return { state: 'fail', error: 'Replicate terminó pero no vino el video.' };
+  const resolucion = ficha?.modelo?.split('|')[1] ?? '720p';
+  return { state: 'success', imageUrl: url, credits: ficha?.dur ? seedanceReplicateCreditos(resolucion, ficha.dur) : undefined };
+}
+
 /** Dirección para que Kie avise cuando termina. */
 export function urlDeAviso(request: Request): string {
   return `${new URL(request.url).origin}/api/kie-callback`;
@@ -128,7 +174,7 @@ async function terminarDe(taskId: string, ficha: Tarea | null, duena: string): P
     return { state: 'success', url: ficha.url, kind: ficha.tipo === 'video' ? 'video' : 'image', credits: ficha.credits, stored: true, aviso: ficha.aviso };
   }
 
-  const task = await getTask(taskId);
+  const task = taskId.startsWith(PREFIJO_REPLICATE) ? await tareaReplicate(taskId, ficha) : await getTask(taskId);
   if (task.state === 'running') return { state: 'running' };
   if (task.state === 'fail') {
     await liberarReserva(duena, taskId);

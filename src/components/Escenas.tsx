@@ -63,6 +63,8 @@ const hablado = (t: string): string | null => {
  * a 1080p no tiene precio publicado: se estima como un 1080p entero.
  */
 const SEG: Record<string, number> = { '480p': 28, '720p': 63, '1080p': 158 };
+/** 720p en Replicate: US$ 0,2312 por segundo = 46,24 créditos (replicate.com, revisado el 23/10/2026). */
+const SEG_REPLICATE_720 = 0.2312 / 0.005;
 const resolucion = (c: Calidad) => (c === 'borrador' ? '480p' : c);
 /** Lo que cabe hablar en esos segundos, sin apuro (unas 2,3 palabras por segundo entre las dos). */
 const palabrasMax = (dur: number) => Math.round(dur * 2.3);
@@ -90,6 +92,9 @@ export default function Escenas(props: Props) {
 
   /* ----- recordar el progreso en el celu ----- */
   const [listo, setListo] = useState(false);
+  // ¿Está configurado Replicate? (entonces 720p se hace ahí, más barato).
+  const [replicate, setReplicate] = useState(false);
+  useEffect(() => { fetch('/api/escena', { cache: 'no-store' }).then((r) => r.json()).then((j) => setReplicate(!!j.replicate)).catch(() => undefined); }, []);
   useEffect(() => {
     vivo.current = true;
     try { const s = localStorage.getItem(CLAVE); if (s) setE({ ...VACIO, ...(JSON.parse(s) as Estado) }); } catch { /* */ }
@@ -132,7 +137,11 @@ export default function Escenas(props: Props) {
 
   /* ----- 3. Video ----- */
   const claveVideo = `bytedance/seedance-2-5|${resolucion(e.calidad)}`;
-  const estimado: Estimado = estimar(claveVideo, e.dur) ?? { creditos: SEG[resolucion(e.calidad)] * e.dur * mult, porSegundo: true };
+  // 720p se hace en Replicate cuando está configurado (más barato que Kie).
+  const porReplicate = e.calidad === '720p' && replicate;
+  const estimado: Estimado = porReplicate
+    ? { creditos: SEG_REPLICATE_720 * e.dur * mult, porSegundo: true }
+    : estimar(claveVideo, e.dur) ?? { creditos: SEG[resolucion(e.calidad)] * e.dur * mult, porSegundo: true };
   const borradorVigente = e.borrador && Date.now() - e.borrador.ts < SIETE_DIAS ? e.borrador : null;
   const estimadoFinal = borradorVigente
     ? (estimar('bytedance/seedance-2-5-draft|1080p', borradorVigente.dur) ?? { creditos: SEG['1080p'] * borradorVigente.dur * mult, porSegundo: true })
@@ -155,6 +164,7 @@ export default function Escenas(props: Props) {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.taskId) throw new Error(d.error ?? 'No se pudo crear el video.');
+      if (d.aviso) setError(d.aviso);
       set({ videoTask: d.taskId, videoEsFinal: false });
       await terminarVideo(d.taskId, x.calidad, x.dur, false);
     } catch (er) {
@@ -186,7 +196,8 @@ export default function Escenas(props: Props) {
       if (r.aviso) setError(r.aviso);
       set({
         videoTask: '', videoEsFinal: false, resultado: r.url, resultadoCalidad: calidad, videoCred: r.credits,
-        ...(calidad === 'borrador' && !final ? { borrador: { id: taskId, dur, ts: Date.now() } } : {}),
+        // Solo los borradores de Kie se pueden pasar a 1080p (los de Replicate empiezan con rep_).
+        ...(calidad === 'borrador' && !final && !taskId.startsWith('rep_') ? { borrador: { id: taskId, dur, ts: Date.now() } } : {}),
       });
       onVideo(r.url); onSaldo();
     } catch (er) {
@@ -280,7 +291,7 @@ export default function Escenas(props: Props) {
         <button className={`btn-grad shine ${creando ? 'busy' : ''}`} style={{ width: '100%', marginTop: 6 }} disabled={!puede} onClick={() => setConfirmar(true)}>
           {creando ? 'Creando… (puede tardar más de 10 minutos)' : e.resultado ? '🔄 Crear otra versión' : e.calidad === 'borrador' ? '🧪 Crear borrador' : '🎬 Crear video'}
         </button>
-        <p className="vr-nota">Va a costar ≈ {fmt(estimado?.creditos ?? 0)} créditos ({usd(estimado?.creditos ?? 0)}){estimar(claveVideo, e.dur) ? '' : ', según el precio de lista de Kie'}.</p>
+        <p className="vr-nota">Va a costar ≈ {fmt(estimado?.creditos ?? 0)} créditos ({usd(estimado?.creditos ?? 0)}){porReplicate ? ', en Replicate (más barato que Kie)' : estimar(claveVideo, e.dur) ? '' : ', según el precio de lista de Kie'}.</p>
         {e.resultado ? (
           <div style={{ marginTop: 12 }}>
             <video className="vr-vid" src={e.resultado} controls playsInline preload="metadata" />
