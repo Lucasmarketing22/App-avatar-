@@ -14,7 +14,7 @@ type Props = {
   onPublicar: (url: string, tipo: 'foto' | 'video') => void;
   onGuardar: (url: string, tipo: 'foto' | 'video') => void;
   onSaldo: () => void;
-  onVolver: () => void;
+  onVolver?: () => void;
   /** Precio de la cuenta: créditos de Kie × esto (1 para el administrador). */
   mult?: number;
 };
@@ -206,7 +206,7 @@ export default function Escenas(props: Props) {
   /* ===================== Render ===================== */
   return (
     <div className="vr">
-      <button className="btn-ghost" onClick={onVolver} style={{ padding: '6px 12px', fontSize: 13, marginBottom: 8 }}>← Volver a Hablados</button>
+      {onVolver ? <button className="btn-ghost" onClick={onVolver} style={{ padding: '6px 12px', fontSize: 13, marginBottom: 8 }}>← Volver a Hablados</button> : null}
       <p className="sub" style={{ marginTop: 0 }}>Un video de hasta <b>30 s seguidos</b> con varias personas que hablan entre sí, se mueven y tocan cosas, con voces y sonido. Lo hace <b>Seedance 2.5</b> a partir de tus fotos de referencia y de la escena que escribas.</p>
 
       {/* 1. Referencias */}

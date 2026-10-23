@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import { esperarTarea } from '@/lib/cliente/video';
+import { HD_TOPAZ_ACTIVO } from '@/lib/mejorar';
 
 const USD_POR_CREDITO = 0.005;
 const fmt = (n: number) => Math.round(n).toLocaleString('es-AR');
@@ -25,6 +26,7 @@ function medirDuracion(url: string): Promise<number> {
 /**
  * Mejorar la calidad de un video ya hecho:
  *  - "Mejorar a HD" con Topaz x2 (cualquier video; un 480p queda en 960×1708).
+ *    Apagado mientras Kie no lo arregle (ver HD_TOPAZ_ACTIVO).
  *  - "Pasar a 1080p" con Seedance (solo borradores de Escenas de hasta 7 días).
  * El resultado aparece como un video nuevo en la Galería.
  */
@@ -93,10 +95,14 @@ export default function Mejorar(props: { url: string; mult: number; onVideo: (ur
             <p className="sub" style={{ marginTop: 10 }}>Calculando precios…</p>
           ) : op ? (
             <>
-              <button className="btn-grad shine" style={{ width: '100%', marginTop: 12 }} disabled={!!trabajando} onClick={() => mejorar('hd')}>
-                {trabajando === 'hd' ? 'Mejorando… (puede tardar varios minutos)' : `🔍 Mejorar a HD · ≈ ${fmt(op.hd * mult)} créditos (${usd(op.hd * mult)})`}
-              </button>
-              <p className="sub" style={{ fontSize: 12, margin: '6px 0 0' }}>Topaz x2: el mismo video, con más nitidez en caras, pelo y ropa (un 480p queda en 960×1708). El detalle lo reconstruye la IA: no es igual a un video generado en 1080p.</p>
+              {HD_TOPAZ_ACTIVO ? (
+                <>
+                  <button className="btn-grad shine" style={{ width: '100%', marginTop: 12 }} disabled={!!trabajando} onClick={() => mejorar('hd')}>
+                    {trabajando === 'hd' ? 'Mejorando… (puede tardar varios minutos)' : `🔍 Mejorar a HD · ≈ ${fmt(op.hd * mult)} créditos (${usd(op.hd * mult)})`}
+                  </button>
+                  <p className="sub" style={{ fontSize: 12, margin: '6px 0 0' }}>Topaz x2: el mismo video, con más nitidez en caras, pelo y ropa (un 480p queda en 960×1708). El detalle lo reconstruye la IA: no es igual a un video generado en 1080p.</p>
+                </>
+              ) : null}
 
               {op.vigente && op.final !== null ? (
                 <>
@@ -107,7 +113,7 @@ export default function Mejorar(props: { url: string; mult: number; onVideo: (ur
                 </>
               ) : (
                 <p className="sub" style={{ fontSize: 12, margin: '12px 0 0' }}>
-                  {op.borrador ? '⏳ Pasar a 1080p ya no se puede: pasaron más de 7 días desde el borrador.' : 'ℹ️ Pasar a 1080p solo se puede con los borradores de Escenas (hasta 7 días).'}
+                  {op.borrador ? '⏳ Este video ya no se puede pasar a 1080p: pasaron más de 7 días desde que se creó.' : 'ℹ️ Este video no se puede mejorar: pasar a 1080p solo funciona con los videos de Escenas (hasta 7 días después de crearlos).'}
                 </p>
               )}
             </>
