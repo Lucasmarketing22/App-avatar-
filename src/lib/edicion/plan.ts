@@ -87,7 +87,7 @@ export function cuesEditados(cuesIA: CueIA[], palabras: Palabra[], tramos: Tramo
 
 /* ---------- Subtítulos en formato ASS (los dibuja ffmpeg) ---------- */
 
-const tiempoAss = (t: number) => {
+export const tiempoAss = (t: number) => {
   const cs = Math.max(0, Math.round(t * 100));
   const h = Math.floor(cs / 360000);
   const m = Math.floor((cs % 360000) / 6000);
@@ -95,10 +95,10 @@ const tiempoAss = (t: number) => {
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`;
 };
 /** Llaves y barras del texto no pueden pasar como órdenes de formato. */
-const limpiarAss = (s: string) => s.replace(/[{}\\]/g, '').replace(/\n/g, ' ');
+export const limpiarAss = (s: string) => s.replace(/[{}\\]/g, '').replace(/\n/g, ' ');
 
 /** Color #rrggbb → formato ASS &H00BBGGRR&. */
-const colorAss = (hex: string) => `&H00${hex.slice(5, 7)}${hex.slice(3, 5)}${hex.slice(1, 3)}&`.toUpperCase();
+export const colorAss = (hex: string) => `&H00${hex.slice(5, 7)}${hex.slice(3, 5)}${hex.slice(1, 3)}&`.toUpperCase();
 
 export const COLOR_CLAVE = '#ff5fa2';
 
