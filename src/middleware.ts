@@ -20,7 +20,8 @@ function seguir(request: NextRequest, cuenta?: string, version = 0) {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (PUBLIC_PATHS.has(pathname)) return seguir(request);
+  // Conector de Claude: /api/mcp revisa su propio token; el inicio de sesión (OAuth) es público.
+  if (PUBLIC_PATHS.has(pathname) || pathname === '/api/mcp' || pathname.startsWith('/api/oauth/') || pathname.startsWith('/.well-known/')) return seguir(request);
 
   const password = process.env.APP_PASSWORD;
   // Si todavía no se configuró la contraseña, no bloqueamos (primer arranque).
