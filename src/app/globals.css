@@ -629,3 +629,8 @@ h1, h2, h3 { font-family: 'Bricolage Grotesque', sans-serif; letter-spacing: -.0
   .hdr-cuentas .emo { display: none; }
   .hdr-salir { margin-left: 0; padding: 5px 9px; }
 }
+
+/* Copiar una referencia: opciones de qué se copia tal cual */
+.copiar-fila { display: flex; flex-wrap: wrap; gap: 6px; }
+.copiar-fila .opt { padding: 6px 11px; font-size: 12.5px; }
+.copiar-fila .opt:disabled { opacity: .5; cursor: not-allowed; }

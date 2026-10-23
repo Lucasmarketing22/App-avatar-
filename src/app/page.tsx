@@ -21,6 +21,7 @@ import RevisarVideo from '@/components/RevisarVideo';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 import Cuentas from '@/components/Cuentas';
 
+import { COPIA_IDS, COPIAS, pistaCopia, proporcionMasParecida, type CopiaId } from '@/lib/estudio/copiar';
 import { componerCambioAvatar, componerEscena, componerSesion, componerUnificado, describirCuerpo, medidasDe, pistaCuerpo, pistaFija, pistaVestuario, promptFijoSugerido, TOMAS_SESION, type Encuadre } from '@/lib/estudio/prompt';
 import { CATEGORIAS, type Selecciones } from '@/lib/estudio/piezas';
 import { GALERIAS } from '@/lib/estudio/galerias';
@@ -70,6 +71,31 @@ export default function Estudio() {
   const [subiendoEdit, setSubiendoEdit] = useState(false);
 
   const [aspect, setAspect] = useState('3:4');
+  // Copiar una referencia: de qué imagen (0 = ninguna) y qué se copia tal cual.
+  const [copiaDe, setCopiaDe] = useState(0);
+  const [copias, setCopias] = useState<CopiaId[]>(COPIA_IDS);
+  const [copiaFormato, setCopiaFormato] = useState(true);
+  useEffect(() => {
+    try {
+      const g = JSON.parse(localStorage.getItem('musa_copias') ?? 'null') as { copias?: string[]; formato?: boolean } | null;
+      if (g && Array.isArray(g.copias)) setCopias(COPIA_IDS.filter((id) => g.copias!.includes(id)));
+      if (g && typeof g.formato === 'boolean') setCopiaFormato(g.formato);
+    } catch { /* sin preferencias guardadas */ }
+  }, []);
+  function guardarCopias(c: CopiaId[], formato: boolean) {
+    setCopias(c); setCopiaFormato(formato);
+    try { localStorage.setItem('musa_copias', JSON.stringify({ copias: c, formato })); } catch { /* */ }
+  }
+  /** Pone la misma proporción que la foto a copiar (3:4, 9:16…). */
+  function igualarFormato(url: string) {
+    const img = new window.Image();
+    img.onload = () => { const a = proporcionMasParecida(img.naturalWidth, img.naturalHeight, ASPECTS); if (a) setAspect(a); };
+    img.src = url;
+  }
+  function elegirCopia(n: number) {
+    setCopiaDe(n);
+    if (n > 0 && copiaFormato && editImgs[n - 1]) igualarFormato(editImgs[n - 1]);
+  }
   const [cantidad, setCantidad] = useState(2);
   const [totalGen, setTotalGen] = useState(0); // cuántas fotos se están creando ahora
   const [phase, setPhase] = useState<Phase>('idle');
@@ -506,6 +532,19 @@ export default function Estudio() {
     }, tries < 20 ? 3000 : 6000);
   }
 
+  /** Pieza elegida en el panel que manda sobre una opción de "copiar" (o null). */
+  function piezaQueManda(id: CopiaId): string | null {
+    const def = COPIAS.find((c) => c.id === id);
+    for (const p of def?.piezas ?? []) {
+      if (p === 'vestido' && vestidoActual) return 'Vestido';
+      const g = GALERIAS.find((x) => x.key === p);
+      if (g && (galerias[p] ?? []).some((i) => i.id === galSel[p])) return g.titulo;
+      const c = CATEGORIAS.find((x) => x.key === p);
+      if (c && sel[c.key]) return c.titulo;
+    }
+    return null;
+  }
+
   /** Generar unificado (estilo Aria): junta personaje + piezas + referencias + prompt. */
   async function generarUnificado() {
     if (busy) return;
@@ -536,7 +575,10 @@ export default function Estudio() {
     const cuerpoHint = pistaCuerpo(medidas);
     const fijoHint = pistaFija(personaje.promptFijo, !medidas);
     const hints = [...faceHint, ...figuraHint, ...(cuerpoHint ? [cuerpoHint] : []), ...(fijoHint ? [fijoHint] : []), ...(ropaTexto ? [ropaTexto] : []), ...refsExtra.map((r) => r.hint)];
-    const texto = [editPrompt.trim(), extra.trim()].filter(Boolean).join('. ');
+    // Copiar una referencia: lo elegido se copia tal cual; lo que define una pieza elegida no.
+    const copia = copiaDe > 0 && copiaDe <= editImgs.length ? copiaDe : 0;
+    if (copia) hints.unshift(pistaCopia(copia, copias.filter((id) => !piezaQueManda(id))));
+    const texto = [editPrompt.trim() || (copia ? `Recreate image ${copia} with the person from the person reference images.` : ''), extra.trim()].filter(Boolean).join('. ');
     const prompt = componerUnificado({ texto, nRefs: editImgs.length, hints, selecciones: sel, figura: describirCuerpo(medidas) });
     lanzar(prompt, imageUrls, { aspect, modelo });
     // lanzar() borra los errores al arrancar: el aviso va después.
@@ -614,7 +656,12 @@ export default function Estudio() {
       setEditImgs((prev) => [...prev, ...nuevos].slice(0, 6));
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo subir la imagen.'); } finally { setSubiendoEdit(false); }
   }
-  function quitarEdit(url: string) { setEditImgs((prev) => prev.filter((u) => u !== url)); }
+  function quitarEdit(url: string) {
+    const i = editImgs.indexOf(url) + 1;
+    setEditImgs((prev) => prev.filter((u) => u !== url));
+    // Si se borra la foto a copiar (o una anterior), la numeración cambia: se vuelve a elegir.
+    if (copiaDe && i > 0 && i <= copiaDe) setCopiaDe(0);
+  }
 
   async function crearVideo(c: Creacion) {
     if (haciendoVideo) return;
@@ -988,6 +1035,35 @@ export default function Estudio() {
                   ) : null}
                 </div>
 
+                {editImgs.length ? (
+                  <div className="copiar-ref">
+                    <div className="aplbl" style={{ marginTop: 10 }}>¿Copiamos una de estas fotos?</div>
+                    <div className="copiar-fila">
+                      <button className={`opt ${copiaDe === 0 ? 'on' : ''}`} onClick={() => elegirCopia(0)}>No</button>
+                      {editImgs.map((u, i) => <button key={u} className={`opt ${copiaDe === i + 1 ? 'on' : ''}`} onClick={() => elegirCopia(i + 1)}>📸 Imagen {i + 1}</button>)}
+                    </div>
+                    {copiaDe ? (
+                      <>
+                        <p className="sub" style={{ fontSize: 12, margin: '8px 0 6px' }}>¿Qué copiamos tal cual de la imagen {copiaDe}? La cara siempre es la de tu modelo. Cuanto más marques, más igual sale.</p>
+                        <div className="copiar-fila">
+                          {COPIAS.map((c) => {
+                            const manda = piezaQueManda(c.id);
+                            const on = copias.includes(c.id);
+                            return manda
+                              ? <button key={c.id} className="opt" disabled title={`Lo define la pieza "${manda}" que elegiste arriba`}>{c.label} · lo define {manda}</button>
+                              : <button key={c.id} className={`opt ${on ? 'on' : ''}`} onClick={() => guardarCopias(on ? copias.filter((x) => x !== c.id) : [...copias, c.id], copiaFormato)}>{c.label}</button>;
+                          })}
+                          <button className={`opt ${copiaFormato ? 'on' : ''}`} onClick={() => { const f = !copiaFormato; guardarCopias(copias, f); if (f && editImgs[copiaDe - 1]) igualarFormato(editImgs[copiaDe - 1]); }}>📏 Formato ({aspect})</button>
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button className="btn-soft" onClick={() => { guardarCopias(COPIA_IDS, true); if (editImgs[copiaDe - 1]) igualarFormato(editImgs[copiaDe - 1]); }}>✅ Copiar todo</button>
+                          <button className="btn-soft" onClick={() => guardarCopias([], false)}>Nada</button>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <div className="aplbl">Modelo de imagen</div>
                 <select className="select" value={modelo} onChange={(e) => setModelo(e.target.value as ModeloId)} style={{ width: '100%' }}>
                   {MODELOS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -1003,7 +1079,7 @@ export default function Estudio() {
 
                 <div className="aplbl">Prompt</div>
                 <textarea className="textarea" style={{ height: 92 }} value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} placeholder="Describí lo que querés crear. Ej: la misma mujer, en bikini en la playa, pose sensual, foto realista. Podés nombrar las referencias como imagen 1, imagen 2…" />
-                <button className="btn-ghost" style={{ marginTop: 8, width: '100%' }} onClick={() => setEditPrompt('Recreá la imagen 1 tal cual (misma escena, fondo, pose, luz y encuadre). La chica debe ser la de la imagen 2 (misma cara e identidad).')}>📸 Clonar foto + cambiar cara</button>
+                <button className="btn-ghost" style={{ marginTop: 8, width: '100%' }} onClick={() => { setEditPrompt('Recreá la imagen 1 tal cual (misma escena, fondo, pose, luz y encuadre). La chica debe ser la de la imagen 2 (misma cara e identidad).'); if (editImgs.length) { guardarCopias(COPIA_IDS, true); setCopiaDe(1); igualarFormato(editImgs[0]); } }}>📸 Clonar foto + cambiar cara</button>
               </div>
               <div className="aria-pfoot">
                 <button className={`btn-grad shine ${busy ? 'busy' : ''}`} onClick={generarUnificado} disabled={!puedeCrear} style={{ width: '100%' }}>
