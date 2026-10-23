@@ -17,6 +17,9 @@ import path from 'node:path';
 
 import { colorAss, duracionEditada, limpiarAss, mapear, tiempoAss, type Palabra, type Tramo } from '@/lib/edicion/plan';
 
+/** Capas del estilo Pro que se pueden apagar. */
+export type Capas = { emojis: boolean; sonidos: boolean; movimiento: boolean; color: boolean };
+
 export type ChunkIA = { desde: number; hasta: number; es: string; clave?: string; emoji?: string };
 export type Cierre = {
   foto: string;
@@ -84,8 +87,11 @@ export function planPro(o: {
   /** Índice de la primera entrada extra en el comando de ffmpeg (la 0 es el video). */
   primeraEntrada?: number;
   cierre?: Cierre;
+  /** Capas que se pueden apagar (por defecto, todas prendidas). */
+  capas?: Partial<Capas>;
 }): PlanPro {
   const { palabras, tramos } = o;
+  const capas: Capas = { emojis: true, sonidos: true, movimiento: true, color: true, ...o.capas };
   // La primera palabra necesita aire (≥ 0,3 s): si la modelo habla desde el primer cuadro,
   // se congela ese cuadro un instante (en el celular el sonido tarda y se come el arranque).
   const primera = Math.max(palabras[0]?.s ?? 0, o.inicioVoz ?? 0);
@@ -109,7 +115,7 @@ export function planPro(o: {
     const t1 = sig ? Math.max(t0 + 0.25, mapa(palabras[sig.desde].s) - 0.03) : D;
     const es = c.es.trim().replace(/\s+/g, ' ');
     const clave = typeof c.clave === 'string' && es.toLowerCase().includes(c.clave.trim().toLowerCase()) ? c.clave.trim() : '';
-    const emoji = typeof c.emoji === 'string' && (EMOJIS as readonly string[]).includes(c.emoji) ? c.emoji : '';
+    const emoji = capas.emojis && typeof c.emoji === 'string' && (EMOJIS as readonly string[]).includes(c.emoji) ? c.emoji : '';
     return { t0, t1: Math.min(t1, D), es, clave, emoji };
   }).filter((c) => c.t1 - c.t0 > 0.1);
 
@@ -140,8 +146,9 @@ export function planPro(o: {
   });
 
   /* ----- Sonido ----- */
-  const sfx: Sfx[] = [{ archivo: 'whoosh-short.mp3', t: 0, db: -15 }];
-  caps.forEach((c) => { if (c.emoji) sfx.push({ archivo: 'pop.mp3', t: c.t0, db: -16 }); });
+  // Volúmenes pensados para que se escuchen con la voz y con la música que se agrega después.
+  const sfx: Sfx[] = [{ archivo: 'whoosh-short.mp3', t: 0, db: -9 }];
+  caps.forEach((c) => { if (c.emoji) sfx.push({ archivo: 'pop.mp3', t: c.t0, db: -10 }); });
 
   /* ----- Video: tramos con zoom, transiciones y color ----- */
   const partes: string[] = [];
@@ -155,14 +162,14 @@ export function planPro(o: {
     const ini = i === 0 ? 0 : acum; // el tramo 0 incluye el cuadro congelado
     const largo = i === 0 ? d + AIRE : d;
     const golpes = caps.filter((c) => c.emoji && c.t0 >= ini && c.t0 < ini + largo).map((c) => c.t0 - ini);
-    const golpe = golpes.map((g) => `+0.05*exp(-pow((t-${f3(g)})/0.12,2))`).join('');
-    const base = i === 0 ? `1+0.16*pow(max(0,1-t/0.5),2)` : i % 2 ? '1.08' : '1';
+    const golpe = !capas.movimiento ? '' : golpes.map((g) => `+0.05*exp(-pow((t-${f3(g)})/0.12,2))`).join('');
+    const base = !capas.movimiento ? '1' : i === 0 ? `1+0.16*pow(max(0,1-t/0.5),2)` : i % 2 ? '1.08' : '1';
     const z = `${base}+0.03*t/${f3(largo)}${golpe}`;
     let fx = '';
-    if (grande) {
+    if (grande && capas.movimiento) {
       fx += `,avgblur=sizeX=30:sizeY=1:enable='lt(t,0.09)',eq=brightness=0.10:enable='lt(t,0.05)'`;
       if (!glitchUsado) { fx += `,rgbashift=rh=-10:bh=10:enable='lt(t,0.1)'`; glitchUsado = true; }
-      sfx.push({ archivo: 'whoosh-short.mp3', t: Math.max(0, acum - 0.06), db: -16 });
+      sfx.push({ archivo: 'whoosh-short.mp3', t: Math.max(0, acum - 0.06), db: -10 });
     }
     const pausa = i === 0 && AIRE ? `,tpad=start_duration=${f3(AIRE)}:start_mode=clone` : '';
     const pausaA = i === 0 && AIRE ? `,adelay=${Math.round(AIRE * 1000)}|${Math.round(AIRE * 1000)}` : '';
@@ -201,27 +208,27 @@ export function planPro(o: {
       const anim = `\\an5\\pos(${W / 2},150)\\fscx40\\fscy40\\alpha&HFF&\\t(150,151,\\alpha&H00&)\\t(150,330,\\fscx115\\fscy115)\\t(330,460,\\fscx100\\fscy100)`;
       eventos.push(`Dialogue: 0,${tiempoAss(D)},${tiempoAss(T)},Marca,,0,0,0,,{${anim}\\1a&HFF&\\3c${color}\\3a&H30&\\bord22\\blur18}${m}`);
       eventos.push(`Dialogue: 1,${tiempoAss(D)},${tiempoAss(T)},Marca,,0,0,0,,{${anim}}${m}`);
-      sfx.push({ archivo: 'sparkle.mp3', t: D + 0.15, db: -17 });
+      sfx.push({ archivo: 'sparkle.mp3', t: D + 0.15, db: -11 });
     }
     (ci.beneficios ?? []).slice(0, 3).forEach((b, i) => {
       const y = 1300 + i * 112;
       const t0 = D + 0.55 + i * 0.28;
       eventos.push(`Dialogue: 1,${tiempoAss(t0)},${tiempoAss(T)},Bullet,,0,0,0,,{\\an4\\move(160,${y},225,${y},0,200)\\fad(140,0)}${limpiarAss(b)}`);
       emojis.push({ archivo: path.join(o.carpetaEmojis, 'check.png'), t0, t1: T, x: 165, y, tam: 84 });
-      sfx.push({ archivo: 'click-soft.mp3', t: t0, db: -16 });
+      sfx.push({ archivo: 'click-soft.mp3', t: t0, db: -10 });
     });
     if (ci.cta) {
       const t0 = D + 1.5;
       // Debajo de los beneficios.
       eventos.push(`Dialogue: 1,${tiempoAss(t0)},${tiempoAss(T)},Cta,,0,0,0,,{\\an5\\pos(${W / 2},1650)\\3c${color}\\fscx60\\fscy60\\t(0,140,\\fscx108\\fscy108)\\t(140,240,\\fscx100\\fscy100)}${limpiarAss(ci.cta)}`);
     }
-    sfx.push({ archivo: 'whoosh.mp3', t: Math.max(0, D - 0.08), db: -14 });
-    sfx.push({ archivo: 'chime.mp3', t: D + 1.55, db: -13 });
+    sfx.push({ archivo: 'whoosh.mp3', t: Math.max(0, D - 0.08), db: -8 });
+    sfx.push({ archivo: 'chime.mp3', t: D + 1.55, db: -7 });
   }
   partes.push(`${pares}concat=n=${tramos.length + (o.cierre ? 1 : 0)}:v=1:a=1[vc][ac]`);
 
   /* ----- Color, captions y emojis encima ----- */
-  partes.push(`[vc]eq=contrast=1.06:saturation=1.12,vignette=angle=0.4,ass='__ASS__':fontsdir='__FUENTES__'[vs0]`);
+  partes.push(`[vc]${capas.color ? 'eq=contrast=1.06:saturation=1.12,vignette=angle=0.4,' : ''}ass='__ASS__':fontsdir='__FUENTES__'[vs0]`);
   let ultimo = 'vs0';
   emojis.forEach((e, k) => {
     const idx = entrada(['-loop', '1', '-framerate', '30', '-t', f3(e.t1 - e.t0), '-i', e.archivo]);
@@ -234,7 +241,7 @@ export function planPro(o: {
 
   /* ----- Audio: voz tratada + efectos sutiles (nunca dos casi juntos) ----- */
   partes.push('[ac]highpass=f=80,acompressor=threshold=-20dB:ratio=3:attack=5:release=80,loudnorm=I=-16:TP=-1.5:LRA=7,aresample=48000[voz]');
-  const elegidos = sfx.sort((a, b) => a.t - b.t).filter((s, i, arr) => i === 0 || s.t - arr[i - 1].t > 0.3);
+  const elegidos = (capas.sonidos ? sfx : []).sort((a, b) => a.t - b.t).filter((s, i, arr) => i === 0 || s.t - arr[i - 1].t > 0.3);
   const mezcla = ['[voz]'];
   elegidos.forEach((s, k) => {
     const idx = entrada(['-i', path.join(o.carpetaSfx, s.archivo)]);

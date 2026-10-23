@@ -14,7 +14,7 @@ const nextConfig = {
       '/api/kie-callback': ['./node_modules/ffmpeg-static/ffmpeg'],
       '/api/replicate-callback': ['./node_modules/ffmpeg-static/ffmpeg'],
       // Edición automática: ffmpeg y las letras de los subtítulos.
-      '/api/editar': ['./node_modules/ffmpeg-static/ffmpeg', './assets/fuentes/**/*'],
+      '/api/editar': ['./node_modules/ffmpeg-static/ffmpeg', './assets/fuentes/**/*', './assets/emojis/**/*', './assets/sfx/**/*'],
     },
   },
   images: {
