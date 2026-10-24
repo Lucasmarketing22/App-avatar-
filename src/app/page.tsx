@@ -9,6 +9,7 @@ import Guia from '@/components/Guia';
 import Lienzo from '@/components/lienzo/Lienzo';
 import Editar from '@/components/Editar';
 import Mejorar from '@/components/Mejorar';
+import Recrear from '@/components/Recrear';
 import { HD_TOPAZ_ACTIVO } from '@/lib/mejorar';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
@@ -35,7 +36,7 @@ const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
-type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados' | 'escenas' | 'cuentas';
+type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados' | 'escenas' | 'recrear' | 'cuentas';
 /** Secciones escondidas del menú (Lucas no las usa). El código sigue: sacarlas de acá las vuelve a mostrar. */
 const OCULTAS: Vista[] = ['viral', 'hablados'];
 const visible = (v: Vista) => !OCULTAS.includes(v);
@@ -237,6 +238,9 @@ export default function Estudio() {
   const [escenasAbierto, setEscenasAbierto] = useState(false);
   const [escenasTrabajo, setEscenasTrabajo] = useState('');
   useEffect(() => { if (vista === 'escenas') setEscenasAbierto(true); }, [vista]);
+  const [recrearAbierto, setRecrearAbierto] = useState(false);
+  const [recrearTrabajo, setRecrearTrabajo] = useState('');
+  useEffect(() => { if (vista === 'recrear') setRecrearAbierto(true); }, [vista]);
 
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -931,6 +935,7 @@ export default function Estudio() {
         {visible('viral') ? <button className={`rail-ic ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><Icon name="viral" /><span>Viral</span></button> : null}
         {visible('hablados') ? <button className={`rail-ic ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><Icon name="voz" /><span>Hablados</span></button> : null}
         <button className={`rail-ic ${vista === 'escenas' ? 'on' : ''}`} onClick={() => setVista('escenas')}><Icon name="film" /><span>Escenas</span></button>
+        <button className={`rail-ic ${vista === 'recrear' ? 'on' : ''}`} onClick={() => setVista('recrear')}><Icon name="recrear" /><span>Recrear</span></button>
         <button className={`rail-ic ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><Icon name="motion" /><span>Motion</span></button>
         <button className={`rail-ic ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><Icon name="lienzo" /><span>Lienzo</span></button>
         {yo?.admin ? <button className={`rail-ic ${vista === 'cuentas' ? 'on' : ''}`} onClick={() => setVista('cuentas')}><Icon name="user" /><span>Cuentas</span></button> : null}
@@ -1335,6 +1340,8 @@ export default function Estudio() {
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🎙️ Hablados</h1><button className="btn-soft" onClick={() => setVista('escenas')} style={{ padding: '6px 12px', fontSize: 13 }}>🎬 Escenas con 2 personas</button><Guia id="hablados" /></div>
         ) : vista === 'escenas' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🎬 Escenas</h1></div>
+        ) : vista === 'recrear' ? (
+          <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🔁 Recrear</h1></div>
         ) : vista === 'lienzo' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 8 }}>🧩 Lienzo</h1><Guia id="lienzo" /></div>
         ) : vista === 'cuentas' ? (
@@ -1453,6 +1460,22 @@ export default function Estudio() {
             />
           </div>
         ) : null}
+        {recrearAbierto ? (
+          <div style={{ display: vista === 'recrear' ? 'block' : 'none' }}>
+            <Recrear
+              modelas={modelas}
+              activoId={personaje.id}
+              costo={costoDe}
+              estimar={estimarVideo}
+              claveFoto={claveFoto('seedream')}
+              onCreacion={(c) => setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: 'seedream', refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)])}
+              onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
+              onGuardar={(url, tipo) => setGuardar({ url, tipo })}
+              onTrabajo={setRecrearTrabajo}
+              onSaldo={cargarSaldo}
+            />
+          </div>
+        ) : null}
         {escenasAbierto ? (
           <div style={{ display: vista === 'escenas' ? 'block' : 'none' }}>
             <Escenas
@@ -1498,6 +1521,7 @@ export default function Estudio() {
       <nav className="tabbar">
         <button className={`tab ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><span className="ti"><Icon name="sparkles" /></span>Crear</button>
         <button className={`tab ${vista === 'escenas' ? 'on' : ''}`} onClick={() => setVista('escenas')}><span className="ti"><Icon name="film" /></span>Escenas</button>
+        <button className={`tab ${vista === 'recrear' ? 'on' : ''}`} onClick={() => setVista('recrear')}><span className="ti"><Icon name="recrear" /></span>Recrear</button>
         {visible('viral') ? <button className={`tab ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><span className="ti"><Icon name="viral" /></span>Viral</button> : null}
         {visible('hablados') ? <button className={`tab ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><span className="ti"><Icon name="voz" /></span>Hablados</button> : null}
         <button className={`tab ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><span className="ti"><Icon name="galeria" /></span>Galería</button>
@@ -1524,6 +1548,7 @@ export default function Estudio() {
           viralTrabajo,
           habladosTrabajo,
           escenasTrabajo,
+          recrearTrabajo,
         ].filter(Boolean);
         return trabajos.length ? (
           <div className="genfloat" role="status" aria-live="polite">
@@ -1873,6 +1898,7 @@ function Icon({ name }: { name?: string }) {
     shirt: <path d="M16 3l5 3-2 4-2-1v11H7V9L5 10 3 6l5-3 2 2a2 2 0 0 0 4 0z" />,
     scissors: <><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.1 15.9" /><path d="M14.5 14.5L20 20" /><path d="M8.1 8.1L12 12" /></>,
     pose: <><circle cx="12" cy="4.5" r="2" /><path d="M12 6.5v6" /><path d="M8 9.5l4-1 4 1" /><path d="M9 21l3-6 3 6" /></>,
+    recrear: <><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.7" /><path d="M20 4v4.7h-4.7" /><path d="M20 12a8 8 0 0 1-13.7 5.6L4 15.3" /><path d="M4 20v-4.7h4.7" /></>,
     film: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4" /></>,
     smile: <><circle cx="12" cy="12" r="9" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><path d="M9 9h.01M15 9h.01" /></>,
     sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>,

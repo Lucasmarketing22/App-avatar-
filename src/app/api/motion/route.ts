@@ -17,9 +17,9 @@ export const runtime = 'nodejs';
  * Devuelve taskId; se consulta con /api/status (el video se guarda en videos/).
  */
 const PROMPT_MOVER =
-  'The woman from the reference image performs exactly the same movements, gestures, timing and facial expressions as the person in the reference video. ' +
-  'Keep her face, identity, hairstyle, body shape and outfit exactly as in the reference image. ' +
-  'IDENTITY LOCK: her face must come ONLY from the reference image and stay identical in every frame (same face shape and width, eyes, nose, lips, freckles, hair color). ' +
+  'The person from the reference image performs exactly the same movements, gestures, timing and facial expressions as the person in the reference video. ' +
+  'Keep their face, identity, hairstyle, body shape and outfit exactly as in the reference image. ' +
+  'IDENTITY LOCK: their face must come ONLY from the reference image and stay identical in every frame (same face shape and width, eyes, nose, lips, freckles, hair color). ' +
   'From the reference video copy ONLY the motion, gestures and expressions — never the face, hair, skin or body of the person in the video. ' +
   'Keep the background, location and lighting of the reference image. ' +
   'Realistic, natural and fluid human motion, correct anatomy and hands, real skin texture, stable face without flicker or distortion. ' +
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
   const cuerpo = medidasDe(body?.cuerpo, body?.fijo).slice(0, 200);
   const extra = [
-    cuerpo ? `Her body must keep exactly these proportions the whole time (${describirCuerpo(cuerpo)}); never slimmer, flatter or with a wider waist. Her face stays exactly as in the reference image.` : '',
+    cuerpo ? `The body must keep exactly these proportions the whole time (${describirCuerpo(cuerpo)}); never slimmer, flatter or with a wider waist. The face stays exactly as in the reference image.` : '',
     (body?.fijo ?? '').trim() ? `Fixed traits (always): ${(body?.fijo ?? '').trim().slice(0, 800)}.` : '',
     (body?.prompt ?? '').trim(),
   ].filter(Boolean).join(' ');

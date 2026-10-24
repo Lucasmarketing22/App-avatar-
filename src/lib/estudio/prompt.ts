@@ -277,6 +277,26 @@ export function componerEscena(instrucciones: string, conCaras: boolean, cuerpo?
   ].filter(Boolean).join(' ');
 }
 
+/**
+ * Recrear: image 1 es la foto viral (o un cuadro del video viral). Se recrea
+ * esa misma foto con la persona de las fotos de referencia (sirve para mujer
+ * u hombre). En video, esa foto es el primer cuadro y después se copian los
+ * movimientos.
+ */
+export function componerRecrear(esVideo: boolean, conCaras: boolean, cuerpo?: string, fijo?: string, conFotoCuerpo = false): string {
+  return [
+    `Image 1 is ${esVideo ? 'a frame taken from a viral video' : 'a viral photo'}. Recreate EXACTLY this same photo: the same place, background, furniture, objects, lighting, light direction, colors, time of day, camera angle, lens, distance, framing and photographic look.`,
+    "Keep the person's exact body pose and position from image 1 (head tilt, arms, hands, where they look), the same facial expression and the same outfit, hairstyle and accessories.",
+    conCaras
+      ? `Replace ONLY the person with the person from the other reference images${conFotoCuerpo ? ' (except the last one)' : ''}: their face, identity, bone structure, face width, skin tone, freckles, eye color and hair color must be exactly theirs. Nothing of the original person's face may remain.`
+      : 'Keep the same person.',
+    conFotoCuerpo ? "The last reference image shows their body: keep exactly that body shape and proportions, and use it to replace the original person's body (same pose). Do NOT copy its clothing, pose or background." : '',
+    pistaCuerpo(medidasDe(cuerpo, fijo)),
+    pistaFija(fijo, !medidasDe(cuerpo, fijo)),
+    REALISMO,
+  ].filter(Boolean).join(' ');
+}
+
 /** Rol de cada imagen que entra a una caja "Foto IA" del lienzo. */
 export type RolImagen = 'captura' | 'base' | 'cara' | 'cuerpo' | 'vestuario' | 'escena' | 'peinado' | 'pose' | 'imagen';
 
