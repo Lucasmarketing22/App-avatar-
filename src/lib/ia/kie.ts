@@ -182,6 +182,8 @@ export function claveDeCosto(model?: string, param?: string): string | undefined
     const input = (typeof p.input === 'string' ? JSON.parse(p.input) : p.input) as Record<string, unknown> | undefined;
     const v = input?.mode ?? input?.resolution ?? input?.quality;
     if (typeof v === 'string') calidad = v;
+    // Con video de referencia (nuevos ángulos) Kie cobra distinto: va aparte para no mezclar los precios.
+    if (Array.isArray(input?.reference_video_urls) && input.reference_video_urls.length) calidad += '+video';
   } catch { /* sin calidad */ }
   return `${model}|${calidad}`;
 }

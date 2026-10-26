@@ -1483,6 +1483,7 @@ export default function Estudio() {
               saldo={saldo}
               onVideo={(url) => setVideos((prev) => [{ id: url, url, ts: Date.now() }, ...prev.filter((x) => x.url !== url)])}
               mult={mult}
+              galeria={videos.slice(0, 8).map((x) => x.url)}
               onTrabajo={setEscenasTrabajo}
               onPublicar={(url, tipo) => setPublicar({ url, tipo })}
               onGuardar={(url, tipo) => setGuardar({ url, tipo })}
