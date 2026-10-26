@@ -33,11 +33,44 @@ export async function GET() {
   return NextResponse.json({ replicate: replicateListo() });
 }
 
+/**
+ * Nuevos ángulos: el mismo video (mismas personas, palabras y tiempos) vuelto a
+ * filmar desde otros ángulos. El video va como referencia ("video 1") con un
+ * prompt corto de cortes con tiempos (skill GenHQ Infinite Angle).
+ * Kie cobra un precio por segundo más bajo sobre (segundos del video + segundos
+ * nuevos); se aparta como si fuera el precio normal y al terminar se cobra lo real.
+ */
+async function nuevosAngulos(request: Request, b: { video?: string; texto?: string; durVideo?: number }) {
+  if (!esUrl(b.video)) return NextResponse.json({ error: 'Falta el video.' }, { status: 400 });
+  const durVideo = Number(b.durVideo);
+  if (!(durVideo >= 2 && durVideo <= 30)) return NextResponse.json({ error: 'El video tiene que durar de 2 a 30 segundos.' }, { status: 400 });
+  const texto = typeof b.texto === 'string' ? b.texto.trim().slice(0, 6000) : '';
+  if (!texto) return NextResponse.json({ error: 'Falta el prompt de los nuevos ángulos.' }, { status: 400 });
+  // Un segundo más que el original, para que no se corte el final.
+  const dur = Math.min(30, Math.max(4, Math.ceil(durVideo) + 1));
+  const prompt = [
+    'REFERENCE VIDEO: video 1 = the original footage. Keep its people, words, lip sync, actions and timing; only the camera angles change.',
+    texto.replace(/@\s*video\s*1\b/gi, 'video 1'),
+  ].join('\n\n');
+  const result = await pedirTarea(request, 'bytedance/seedance-2-5', {
+    prompt,
+    reference_video_urls: [b.video],
+    generate_audio: true,
+    resolution: '720p',
+    aspect_ratio: 'adaptive',
+    duration: dur,
+  }, { tipo: 'video', prompt: texto, dur: Math.ceil(durVideo) + dur });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+  return NextResponse.json({ taskId: result.taskId });
+}
+
 export async function POST(request: Request) {
   const b = (await request.json().catch(() => null)) as {
     accion?: string; borrador?: string; refs?: { url?: string; rol?: string }[]; texto?: string;
-    dur?: number; calidad?: string; formato?: string;
+    dur?: number; calidad?: string; formato?: string; video?: string; durVideo?: number;
   } | null;
+
+  if (b?.accion === 'angulos') return nuevosAngulos(request, b);
 
   const dur = Math.round(Number(b?.dur));
   if (!(dur >= 4 && dur <= 30)) return NextResponse.json({ error: 'La duración tiene que ser de 4 a 30 segundos.' }, { status: 400 });

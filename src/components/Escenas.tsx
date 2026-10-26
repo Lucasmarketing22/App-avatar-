@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
 import { esperarTarea, subirImagen } from '@/lib/cliente/video';
+import Angulos from '@/components/Angulos';
 import ConfirmarVideo, { type Estimado } from '@/components/ConfirmarVideo';
 
 type Props = {
@@ -17,6 +18,8 @@ type Props = {
   onVolver?: () => void;
   /** Precio de la cuenta: créditos de Kie × esto (1 para el administrador). */
   mult?: number;
+  /** Videos recientes de la galería (para Nuevos ángulos). */
+  galeria?: string[];
 };
 
 type Rol = 'a' | 'b' | 'c' | 'lugar' | 'ropa' | 'objeto';
@@ -80,7 +83,7 @@ async function esperarLargo(taskId: string, sigue: () => boolean) {
 }
 
 export default function Escenas(props: Props) {
-  const { estimar, saldo, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo, onVolver, mult = 1 } = props;
+  const { estimar, saldo, onVideo, onTrabajo, onPublicar, onGuardar, onSaldo, onVolver, mult = 1, galeria = [] } = props;
   const [e, setE] = useState<Estado>(VACIO);
   const eRef = useRef(e); eRef.current = e;
   const set = (p: Partial<Estado>) => setE((x) => ({ ...x, ...p }));
@@ -312,6 +315,7 @@ export default function Escenas(props: Props) {
       </div>
 
       {error ? <p className="errbox" style={{ margin: '12px 0' }}>{error}</p> : null}
+      <Angulos propio={e.resultado || undefined} galeria={galeria} estimar={estimar} mult={mult} onVideo={onVideo} onSaldo={onSaldo} onGuardar={onGuardar} onPublicar={onPublicar} />
       <button className="btn-ghost" style={{ width: '100%', marginTop: 12 }} onClick={empezarOtra}>🔁 Empezar otra escena</button>
       {confirmar && e.refs[0] ? (
         <ConfirmarVideo
