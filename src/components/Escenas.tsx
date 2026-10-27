@@ -50,7 +50,7 @@ const VACIO: Estado = {
   refs: [], texto: '', dur: 15, formato: '9:16', calidad: 'borrador', videoTask: '', videoEsFinal: false, resultado: '', resultadoCalidad: 'borrador', borrador: null,
 };
 const CLAVE = 'musa-escenas-v1';
-const DURS = [8, 10, 15, 20, 30];
+const DURS = [4, 5, 6, 8, 10, 15, 20, 30];
 const SIETE_DIAS = 7 * 24 * 60 * 60 * 1000;
 const fmt = (n: number) => Math.round(n).toLocaleString('es-AR');
 const usd = (n: number) => `≈ US$ ${(n * 0.005).toFixed(2).replace('.', ',')}`;
