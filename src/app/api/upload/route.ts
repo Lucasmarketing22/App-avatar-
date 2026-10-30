@@ -6,7 +6,7 @@ import { GALERIA_KEYS } from '@/lib/estudio/galerias';
 
 export const runtime = 'nodejs';
 
-const CARPETAS = ['personaje', 'vestidos', 'refs', ...GALERIA_KEYS];
+const CARPETAS = ['personaje', 'vestidos', 'refs', 'marcas', ...GALERIA_KEYS];
 
 const TYPES: Record<string, string> = {
   'image/png': 'png',
@@ -40,12 +40,15 @@ export async function POST(request: Request) {
   let tipo = file.type;
   let extFinal = ext;
   try {
-    const chica = await sharp(Buffer.from(bytes))
-      .rotate()
-      .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 92 })
-      .toBuffer();
-    if (chica.length < bytes.length) { bytes = new Uint8Array(chica); tipo = 'image/jpeg'; extFinal = 'jpg'; }
+    const img = sharp(Buffer.from(bytes)).rotate().resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true });
+    // Con transparencia (logos en PNG) queda en PNG: en JPG el fondo se vuelve negro.
+    if ((await sharp(Buffer.from(bytes)).metadata()).hasAlpha) {
+      const chica = await img.png().toBuffer();
+      if (chica.length < bytes.length) { bytes = new Uint8Array(chica); tipo = 'image/png'; extFinal = 'png'; }
+    } else {
+      const chica = await img.jpeg({ quality: 92 }).toBuffer();
+      if (chica.length < bytes.length) { bytes = new Uint8Array(chica); tipo = 'image/jpeg'; extFinal = 'jpg'; }
+    }
   } catch { /* usamos la original */ }
 
   const { url, error } = await uploadPublic(`${folder}/${crypto.randomUUID()}.${extFinal}`, bytes, tipo);

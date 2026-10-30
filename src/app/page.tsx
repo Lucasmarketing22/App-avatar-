@@ -10,6 +10,7 @@ import Lienzo from '@/components/lienzo/Lienzo';
 import Editar from '@/components/Editar';
 import Mejorar from '@/components/Mejorar';
 import Recrear from '@/components/Recrear';
+import Clientes from '@/components/Clientes';
 import { HD_TOPAZ_ACTIVO } from '@/lib/mejorar';
 import Publicar from '@/components/Publicar';
 import Viral from '@/components/Viral';
@@ -36,7 +37,7 @@ const SIN_MODELO: Personaje = { id: '', nombre: '', refs: [] };
 type Item = { id: string; url: string; nombre?: string };
 type Creacion = { id: string; url: string; ts: number; prompt?: string; modelo?: string; refs?: string[]; aspect?: string; credits?: number };
 type Phase = 'idle' | 'creating' | 'polling' | 'done' | 'error';
-type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados' | 'escenas' | 'recrear' | 'cuentas';
+type Vista = 'crear' | 'galeria' | 'voz' | 'motion' | 'lienzo' | 'viral' | 'hablados' | 'escenas' | 'recrear' | 'clientes' | 'cuentas';
 /** Secciones escondidas del menú (Lucas no las usa). El código sigue: sacarlas de acá las vuelve a mostrar. */
 const OCULTAS: Vista[] = ['viral', 'hablados'];
 const visible = (v: Vista) => !OCULTAS.includes(v);
@@ -241,6 +242,9 @@ export default function Estudio() {
   const [recrearAbierto, setRecrearAbierto] = useState(false);
   const [recrearTrabajo, setRecrearTrabajo] = useState('');
   useEffect(() => { if (vista === 'recrear') setRecrearAbierto(true); }, [vista]);
+  const [clientesAbierto, setClientesAbierto] = useState(false);
+  const [clientesTrabajo, setClientesTrabajo] = useState('');
+  useEffect(() => { if (vista === 'clientes') setClientesAbierto(true); }, [vista]);
 
   const upTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -936,6 +940,7 @@ export default function Estudio() {
         {visible('hablados') ? <button className={`rail-ic ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><Icon name="voz" /><span>Hablados</span></button> : null}
         <button className={`rail-ic ${vista === 'escenas' ? 'on' : ''}`} onClick={() => setVista('escenas')}><Icon name="film" /><span>Escenas</span></button>
         <button className={`rail-ic ${vista === 'recrear' ? 'on' : ''}`} onClick={() => setVista('recrear')}><Icon name="recrear" /><span>Recrear</span></button>
+        <button className={`rail-ic ${vista === 'clientes' ? 'on' : ''}`} onClick={() => setVista('clientes')}><Icon name="marca" /><span>Clientes</span></button>
         <button className={`rail-ic ${vista === 'motion' ? 'on' : ''}`} onClick={() => setVista('motion')}><Icon name="motion" /><span>Motion</span></button>
         <button className={`rail-ic ${vista === 'lienzo' ? 'on' : ''}`} onClick={() => setVista('lienzo')}><Icon name="lienzo" /><span>Lienzo</span></button>
         {yo?.admin ? <button className={`rail-ic ${vista === 'cuentas' ? 'on' : ''}`} onClick={() => setVista('cuentas')}><Icon name="user" /><span>Cuentas</span></button> : null}
@@ -1342,6 +1347,8 @@ export default function Estudio() {
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🎬 Escenas</h1></div>
         ) : vista === 'recrear' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🔁 Recrear</h1></div>
+        ) : vista === 'clientes' ? (
+          <div className="h1-row"><h1 className="h1" style={{ marginBottom: 6 }}>🏷️ Clientes</h1></div>
         ) : vista === 'lienzo' ? (
           <div className="h1-row"><h1 className="h1" style={{ marginBottom: 8 }}>🧩 Lienzo</h1><Guia id="lienzo" /></div>
         ) : vista === 'cuentas' ? (
@@ -1476,6 +1483,18 @@ export default function Estudio() {
             />
           </div>
         ) : null}
+        {clientesAbierto ? (
+          <div style={{ display: vista === 'clientes' ? 'block' : 'none' }}>
+            <Clientes
+              costoFoto={costoDe(claveFoto('nanopro'))}
+              onCreacion={(c) => setCreaciones((prev) => [{ id: c.url, url: c.url, ts: Date.now(), prompt: c.prompt, modelo: 'nanopro', refs: c.refs, aspect: c.aspect, credits: c.credits }, ...prev.filter((x) => x.url !== c.url)])}
+              onPublicar={(url, tipo) => setPublicar({ url, tipo })}
+              onGuardar={(url, tipo) => setGuardar({ url, tipo })}
+              onTrabajo={setClientesTrabajo}
+              onSaldo={cargarSaldo}
+            />
+          </div>
+        ) : null}
         {escenasAbierto ? (
           <div style={{ display: vista === 'escenas' ? 'block' : 'none' }}>
             <Escenas
@@ -1523,6 +1542,7 @@ export default function Estudio() {
         <button className={`tab ${vista === 'crear' ? 'on' : ''}`} onClick={() => setVista('crear')}><span className="ti"><Icon name="sparkles" /></span>Crear</button>
         <button className={`tab ${vista === 'escenas' ? 'on' : ''}`} onClick={() => setVista('escenas')}><span className="ti"><Icon name="film" /></span>Escenas</button>
         <button className={`tab ${vista === 'recrear' ? 'on' : ''}`} onClick={() => setVista('recrear')}><span className="ti"><Icon name="recrear" /></span>Recrear</button>
+        <button className={`tab ${vista === 'clientes' ? 'on' : ''}`} onClick={() => setVista('clientes')}><span className="ti"><Icon name="marca" /></span>Clientes</button>
         {visible('viral') ? <button className={`tab ${vista === 'viral' ? 'on' : ''}`} onClick={() => setVista('viral')}><span className="ti"><Icon name="viral" /></span>Viral</button> : null}
         {visible('hablados') ? <button className={`tab ${vista === 'hablados' ? 'on' : ''}`} onClick={() => setVista('hablados')}><span className="ti"><Icon name="voz" /></span>Hablados</button> : null}
         <button className={`tab ${vista === 'galeria' ? 'on' : ''}`} onClick={() => setVista('galeria')}><span className="ti"><Icon name="galeria" /></span>Galería</button>
@@ -1550,6 +1570,7 @@ export default function Estudio() {
           habladosTrabajo,
           escenasTrabajo,
           recrearTrabajo,
+          clientesTrabajo,
         ].filter(Boolean);
         return trabajos.length ? (
           <div className="genfloat" role="status" aria-live="polite">
@@ -1909,6 +1930,7 @@ function Icon({ name }: { name?: string }) {
     viral: <><path d="M12 3c.5 3.5 4.5 5 4.5 9.5A4.5 4.5 0 0 1 12 17a4.5 4.5 0 0 1-4.5-4.5c0-1.8.8-3 1.8-4 .2 1.5 1 2.3 2 2.6C10.9 8.5 11 5.5 12 3z" /><path d="M8 21h8" /></>,
     lienzo: <><rect x="3" y="4" width="6" height="5" rx="1.2" /><rect x="15" y="15" width="6" height="5" rx="1.2" /><rect x="15" y="4" width="6" height="5" rx="1.2" /><path d="M9 6.5h6M9 6.5c3 0 3 11 6 11" /></>,
     motion: <><circle cx="14" cy="4.5" r="2" /><path d="M14 6.5l-1.5 6 3 3.5v5" /><path d="M12.5 12.5l-3 2.5-1.5 5" /><path d="M9 9l4-1.5 3 3 3-1" /><path d="M3.5 8.5c1.2-1.4 1.2-3.6 0-5M6 10.5c1.8-2.2 1.8-5.8 0-8" /></>,
+    marca: <><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.5" /></>,
     chip: <><rect x="6" y="6" width="12" height="12" rx="2" /><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2" /></>,
   };
   return <svg className="ico" viewBox="0 0 24 24" aria-hidden="true">{p[name ?? 'image'] ?? p.image}</svg>;
