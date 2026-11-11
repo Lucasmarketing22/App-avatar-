@@ -102,7 +102,8 @@ export async function POST(request: Request) {
     const o = await opciones(url, dur);
     if (!o.borrador) return NextResponse.json({ error: 'Solo los borradores de Escenas se pueden pasar a 1080p. Este video no se puede mejorar.' }, { status: 400 });
     if (!o.vigente) return NextResponse.json({ error: 'Pasaron más de 7 días desde el borrador: Seedance ya no lo acepta.' }, { status: 400 });
-    const r = await pedirTarea(request, 'bytedance/seedance-2-5-draft', { draft_task_id: o.id, resolution: '1080p' }, { tipo: 'video', prompt: 'Borrador pasado a 1080p (Seedance)', dur: o.durBorrador });
+    // Kie exige output_format (mp4 o mov) además de draft_task_id y resolution (kie.ai/seedance-2-5).
+    const r = await pedirTarea(request, 'bytedance/seedance-2-5-draft', { draft_task_id: o.id, resolution: '1080p', output_format: 'mp4' }, { tipo: 'video', prompt: 'Borrador pasado a 1080p (Seedance)', dur: o.durBorrador });
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     return NextResponse.json({ taskId: r.taskId });
   }
