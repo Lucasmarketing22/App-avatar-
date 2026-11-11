@@ -79,7 +79,7 @@ export async function POST(request: Request) {
   if (b?.accion === 'final') {
     const borrador = typeof b.borrador === 'string' ? b.borrador.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) : '';
     if (!borrador) return NextResponse.json({ error: 'Falta el borrador a pasar a 1080p.' }, { status: 400 });
-    const result = await pedirTarea(request, 'bytedance/seedance-2-5-draft', { draft_task_id: borrador, resolution: '1080p' }, { tipo: 'video', prompt: 'Escena: borrador pasado a 1080p', dur });
+    const result = await pedirTarea(request, 'bytedance/seedance-2-5-draft', { draft_task_id: borrador, resolution: '1080p', output_format: 'mp4' }, { tipo: 'video', prompt: 'Escena: borrador pasado a 1080p', dur });
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json({ taskId: result.taskId });
   }
